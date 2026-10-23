@@ -1,8 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { EnvoiASortir, JobDispatch, ResoudreAdaptateur } from '@nudge/core';
-import { envois, type Db } from '@nudge/database';
+import type {
+  DestinationAdapterResolver,
+  DispatchJob,
+  EnvoiASortir,
+  ResultatEnvoi,
+} from '@nudge/core';
+import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
 import { and, eq, sql } from 'drizzle-orm';
-import { DB, RESOUDRE_ADAPTATEUR } from './jetons.js';
+import { DB, DESTINATION_ADAPTER_RESOLVER } from './tokens.js';
 
 /** Échec transitoire : le job est relancé par BullMQ (backoff exponentiel). */
 export class EchecTransitoire extends Error {
@@ -15,10 +20,11 @@ export class DispatchProcessor {
 
   constructor(
     @Inject(DB) private readonly db: Db,
-    @Inject(RESOUDRE_ADAPTATEUR) private readonly resoudreAdaptateur: ResoudreAdaptateur,
+    @Inject(DESTINATION_ADAPTER_RESOLVER)
+    private readonly resolveDestinationAdapter: DestinationAdapterResolver,
   ) {}
 
-  async traiter({ envoiId }: JobDispatch): Promise<void> {
+  async handle({ envoiId }: DispatchJob): Promise<void> {
     const envoi = await this.db.query.envois.findFirst({
       where: eq(envois.id, envoiId),
       with: {
@@ -48,18 +54,11 @@ export class DispatchProcessor {
             ? { ...retour.auteur, confiance: retour.confianceAuteur }
             : null,
         contexte: retour.contexte,
-        recuLe: retour.creeLe,
+        recuLe: retour.createdAt,
       },
     };
 
-    const adaptateur = this.resoudreAdaptateur({
-      id: destination.id,
-      projetId: destination.projetId,
-      nom: destination.nom,
-      type: destination.type,
-      config: destination.config,
-    });
-    const resultat = await adaptateur.send(aSortir);
+    const resultat = await this.send(toDestinationConfiguree(destination), aSortir);
     const enAttente = and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
     const tentatives = sql`${envois.tentatives} + 1`;
 
@@ -91,5 +90,21 @@ export class DispatchProcessor {
         derniereErreur: `${resultat.classe}: ${resultat.message}`,
       })
       .where(enAttente);
+  }
+
+  /** Une exception de l'adaptateur (réseau, bug) est traitée comme un échec transitoire. */
+  private async send(
+    destination: ReturnType<typeof toDestinationConfiguree>,
+    envoi: EnvoiASortir,
+  ): Promise<ResultatEnvoi> {
+    try {
+      return await this.resolveDestinationAdapter(destination).send(envoi);
+    } catch (erreur) {
+      return {
+        statut: 'echec',
+        classe: 'transient',
+        message: erreur instanceof Error ? erreur.message : String(erreur),
+      };
+    }
   }
 }

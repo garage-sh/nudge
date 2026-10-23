@@ -1,6 +1,6 @@
 import type {
-  AdaptateurDestination,
   ClasseEchec,
+  DestinationAdapter,
   EnvoiASortir,
   ResultatEnvoi,
   SanteDestination,
@@ -10,43 +10,47 @@ import type {
  * Destination de test branchée sur le port : elle enregistre les Envois et
  * peut simuler des échecs transient, auth et permanent.
  */
-export class FakeDestination implements AdaptateurDestination {
+export class FakeDestination implements DestinationAdapter {
   /** Les Envois livrés, dans l'ordre. */
   readonly envois: EnvoiASortir[] = [];
   /** Tous les appels à `send`, livrés ou non. */
-  readonly tentatives: EnvoiASortir[] = [];
+  readonly attempts: EnvoiASortir[] = [];
   /** Nombre d'appels à `healthCheck`. */
-  sondes = 0;
-  private resultats: ResultatEnvoi[] = [];
-  private sante: SanteDestination[] = [];
+  healthChecks = 0;
+  private sends: (ResultatEnvoi | Error)[] = [];
+  private health: SanteDestination[] = [];
 
-  /** Les prochains `send` rendent ces résultats, dans l'ordre ; ensuite, livraison. */
-  scripterEnvois(...resultats: ResultatEnvoi[]): void {
-    this.resultats.push(...resultats);
+  /**
+   * Les prochains `send` rendent ces résultats, dans l'ordre (une `Error` est
+   * levée telle quelle) ; ensuite, livraison.
+   */
+  scriptSends(...results: (ResultatEnvoi | Error)[]): void {
+    this.sends.push(...results);
   }
 
   /** Les prochains `healthCheck` rendent ces résultats ; ensuite, joignable. */
-  scripterSante(...sante: SanteDestination[]): void {
-    this.sante.push(...sante);
+  scriptHealth(...health: SanteDestination[]): void {
+    this.health.push(...health);
   }
 
   async send(envoi: EnvoiASortir): Promise<ResultatEnvoi> {
-    this.tentatives.push(envoi);
-    const resultat = this.resultats.shift() ?? {
+    this.attempts.push(envoi);
+    const result = this.sends.shift() ?? {
       statut: 'livre',
       lienExterne: `https://destination.test/envois/${envoi.envoiId}`,
     };
-    if (resultat.statut === 'livre') this.envois.push(envoi);
-    return resultat;
+    if (result instanceof Error) throw result;
+    if (result.statut === 'livre') this.envois.push(envoi);
+    return result;
   }
 
   async healthCheck(): Promise<SanteDestination> {
-    this.sondes += 1;
-    return this.sante.shift() ?? { joignable: true };
+    this.healthChecks += 1;
+    return this.health.shift() ?? { joignable: true };
   }
 }
 
-/** Raccourci : `fake.scripterEnvois(echec('transient'))`. */
+/** Raccourci : `fake.scriptSends(echec('transient'))`. */
 export const echec = (classe: ClasseEchec, message = `échec ${classe} simulé`): ResultatEnvoi => ({
   statut: 'echec',
   classe,

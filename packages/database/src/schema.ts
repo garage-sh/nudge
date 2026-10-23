@@ -1,4 +1,4 @@
-import type { ReponsesTriage } from '@nudge/core';
+import type { TriageAnswers } from '@nudge/core';
 import {
   CONFIANCES_AUTEUR,
   ETATS_DESTINATION,
@@ -32,9 +32,9 @@ export const confianceAuteurEnum = pgEnum('confiance_auteur', CONFIANCES_AUTEUR)
 export const etatDestinationEnum = pgEnum('etat_destination', ETATS_DESTINATION);
 export const statutEnvoiEnum = pgEnum('statut_envoi', STATUTS_ENVOI);
 
-const horodatages = {
-  creeLe: timestamp('cree_le', { withTimezone: true }).notNull().defaultNow(),
-  modifieLe: timestamp('modifie_le', { withTimezone: true })
+const timestamps = {
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
@@ -47,7 +47,7 @@ export const projets = pgTable('projets', {
   clePublique: text('cle_publique').notNull().unique(),
   /** SHA-256 de la clé secrète : la clé elle-même n'est jamais stockée. */
   empreinteCleSecrete: text('empreinte_cle_secrete').notNull().unique(),
-  ...horodatages,
+  ...timestamps,
 });
 
 export const retours = pgTable(
@@ -65,9 +65,9 @@ export const retours = pgTable(
     auteur: jsonb('auteur').$type<Auteur>(),
     confianceAuteur: confianceAuteurEnum('confiance_auteur'),
     contexte: jsonb('contexte').$type<Contexte>().notNull().default({}),
-    ...horodatages,
+    ...timestamps,
   },
-  (t) => [index('retours_projet_cree_le_idx').on(t.projetId, t.creeLe)],
+  (t) => [index('retours_projet_created_at_idx').on(t.projetId, t.createdAt)],
 );
 
 export const verdicts = pgTable('verdicts', {
@@ -81,8 +81,8 @@ export const verdicts = pgTable('verdicts', {
   indesirable: boolean('indesirable').notNull(),
   manipulation: boolean('manipulation').notNull(),
   incertain: boolean('incertain').notNull(),
-  reponsesBrutes: jsonb('reponses_brutes').$type<ReponsesTriage>(),
-  ...horodatages,
+  reponsesBrutes: jsonb('reponses_brutes').$type<TriageAnswers>(),
+  ...timestamps,
 });
 
 export const destinations = pgTable('destinations', {
@@ -91,12 +91,12 @@ export const destinations = pgTable('destinations', {
     .notNull()
     .references(() => projets.id, { onDelete: 'cascade' }),
   nom: text('nom').notNull(),
-  /** Clé de l'adaptateur : `webhook`, `discord`, `linear`… */
+  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
   type: text('type').notNull(),
-  /** Configuration non secrète de l'adaptateur. */
+  /** Configuration non secrète de l'adapter. */
   config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
   etat: etatDestinationEnum('etat').notNull().default('active'),
-  ...horodatages,
+  ...timestamps,
 });
 
 export const envois = pgTable(
@@ -113,7 +113,7 @@ export const envois = pgTable(
     lienExterne: text('lien_externe'),
     tentatives: integer('tentatives').notNull().default(0),
     derniereErreur: text('derniere_erreur'),
-    ...horodatages,
+    ...timestamps,
   },
   // Idempotence : un Envoi par couple (Retour, Destination).
   (t) => [unique('envois_retour_destination_uniq').on(t.retourId, t.destinationId)],

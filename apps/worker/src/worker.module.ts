@@ -6,21 +6,22 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import {
-  OPTIONS_JOB_PAR_DEFAUT,
-  QUEUE_DISPATCH as NOM_QUEUE_DISPATCH,
-  QUEUE_TRIAGE as NOM_QUEUE_TRIAGE,
-  type JobDispatch,
-  type JobTriage,
+  jobOptions,
+  DISPATCH_QUEUE,
+  TRIAGE_QUEUE,
+  DEFAULT_QUEUE_PREFIX,
+  type DispatchJob,
+  type TriageJob,
 } from '@nudge/core';
-import { connecterDb, type ConnexionDb } from '@nudge/database';
+import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { DispatchProcessor } from './dispatch.processor.js';
-import { DB, JUGE, OPTIONS, QUEUE_DISPATCH, RESOUDRE_ADAPTATEUR } from './jetons.js';
-import type { OptionsWorker } from './options.js';
+import { DB, JUGE, OPTIONS, DISPATCH_QUEUE_TOKEN, DESTINATION_ADAPTER_RESOLVER } from './tokens.js';
+import type { WorkerOptions } from './options.js';
 import { TriageProcessor } from './triage.processor.js';
 
-const CONNEXION_DB = Symbol('CONNEXION_DB');
+const DB_CONNECTION = Symbol('DB_CONNECTION');
 const REDIS = Symbol('REDIS');
 
 @Module({})
@@ -28,35 +29,35 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
   private workers: Worker[] = [];
 
   constructor(
-    @Inject(OPTIONS) private readonly options: OptionsWorker,
-    @Inject(CONNEXION_DB) private readonly connexion: ConnexionDb,
+    @Inject(OPTIONS) private readonly options: WorkerOptions,
+    @Inject(DB_CONNECTION) private readonly connexion: DbConnection,
     @Inject(REDIS) private readonly redis: Redis,
-    @Inject(QUEUE_DISPATCH) private readonly queueDispatch: Queue,
+    @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
   ) {}
 
-  static forRoot(options: OptionsWorker): DynamicModule {
-    const prefix = options.prefixeQueues ?? 'nudge';
+  static forRoot(options: WorkerOptions): DynamicModule {
+    const prefix = options.queuePrefix ?? DEFAULT_QUEUE_PREFIX;
     return {
       module: WorkerModule,
       providers: [
         { provide: OPTIONS, useValue: options },
         { provide: JUGE, useValue: options.juge },
-        { provide: RESOUDRE_ADAPTATEUR, useValue: options.resoudreAdaptateur },
-        { provide: CONNEXION_DB, useFactory: () => connecterDb(options.databaseUrl) },
-        { provide: DB, useFactory: (c: ConnexionDb) => c.db, inject: [CONNEXION_DB] },
+        { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
+        { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
+        { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
         },
         {
-          provide: QUEUE_DISPATCH,
+          provide: DISPATCH_QUEUE_TOKEN,
           useFactory: (redis: Redis) =>
-            new Queue(NOM_QUEUE_DISPATCH, {
+            new Queue(DISPATCH_QUEUE, {
               connection: redis,
               prefix,
-              defaultJobOptions: OPTIONS_JOB_PAR_DEFAUT,
+              defaultJobOptions: jobOptions(options.retryPolicy),
             }),
           inject: [REDIS],
         },
@@ -67,13 +68,13 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
   }
 
   onApplicationBootstrap(): void {
-    const prefix = this.options.prefixeQueues ?? 'nudge';
+    const prefix = this.options.queuePrefix ?? DEFAULT_QUEUE_PREFIX;
     this.workers = [
-      new Worker<JobTriage>(NOM_QUEUE_TRIAGE, (job) => this.triage.traiter(job.data), {
+      new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
         connection: this.redis,
         prefix,
       }),
-      new Worker<JobDispatch>(NOM_QUEUE_DISPATCH, (job) => this.dispatch.traiter(job.data), {
+      new Worker<DispatchJob>(DISPATCH_QUEUE, (job) => this.dispatch.handle(job.data), {
         connection: this.redis,
         prefix,
       }),
@@ -82,8 +83,8 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
 
   async onApplicationShutdown(): Promise<void> {
     await Promise.all(this.workers.map((worker) => worker.close()));
-    await this.queueDispatch.close();
+    await this.dispatchQueue.close();
     await this.redis.quit();
-    await this.connexion.fermer();
+    await this.connexion.close();
   }
 }

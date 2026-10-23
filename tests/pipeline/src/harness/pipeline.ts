@@ -1,23 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import { creerApi } from '@nudge/api';
+import { createApi } from '@nudge/api';
 import type { DestinationConfiguree } from '@nudge/core';
 import {
-  connecterDb,
-  creerDestination,
-  creerProjet,
-  lireRetour,
-  migrer,
+  connectDb,
+  createDestination,
+  createProjet,
+  readRetour,
+  runMigrations,
   type Projet,
   type RetourLu,
 } from '@nudge/database';
 import type { RetourEntrant } from '@nudge/shared';
-import { creerWorker } from '@nudge/worker';
+import { createWorker } from '@nudge/worker';
 import { Client } from 'pg';
 import { inject } from 'vitest';
 import { FakeDestination } from './fake-destination.js';
 import { FakeJuge } from './fake-juge.js';
 
-export interface OptionsPipeline {
+export interface PipelineOptions {
   /** `null` : worker en mode dégradé, sans Juge. Par défaut, un `FakeJuge`. */
   readonly juge?: FakeJuge | null;
 }
@@ -28,26 +28,26 @@ export interface Pipeline {
   /** Le Juge branché sur le worker (lève si le pipeline tourne sans Juge). */
   readonly juge: FakeJuge;
   /** Le Projet est créé directement en base (seed) ; ses clés sont rendues en clair. */
-  creerProjet(donnees: {
+  createProjet(donnees: {
     nom: string;
     description?: string | null;
   }): Promise<{ projet: Projet; clePublique: string; cleSecrete: string }>;
   /** Une Destination du Projet, servie par une `FakeDestination` qui lui est propre. */
-  creerDestination(
+  createDestination(
     projetId: string,
     donnees?: { nom?: string; config?: Record<string, unknown> },
   ): Promise<{ destination: DestinationConfiguree; fake: FakeDestination }>;
   /** POST /v1/retours avec la clé secrète du Projet. */
-  posterRetour(cleSecrete: string, corps: RetourEntrant | unknown): Promise<Response>;
+  postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
-  lireRetour(id: string): Promise<RetourLu | null>;
+  readRetour(id: string): Promise<RetourLu | null>;
   /** Attend que le Retour satisfasse `condition` (5 s par défaut) et le rend. */
-  attendreRetour(
+  waitForRetour(
     id: string,
     condition: (retour: RetourLu) => boolean,
     delaiMs?: number,
   ): Promise<RetourLu>;
-  arreter(): Promise<void>;
+  stop(): Promise<void>;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface Pipeline {
  * (erreur non rattrapée côté `pg`). On réessaie un DROP simple tant que la base
  * est encore « en cours d'utilisation » (55006).
  */
-async function supprimerBase(admin: Client, nomBase: string): Promise<void> {
+async function dropDatabase(admin: Client, nomBase: string): Promise<void> {
   for (let essai = 0; essai < 40; essai += 1) {
     try {
       await admin.query(`DROP DATABASE IF EXISTS "${nomBase}"`);
@@ -73,7 +73,7 @@ async function supprimerBase(admin: Client, nomBase: string): Promise<void> {
  * Démarre un pipeline réel et isolé : une base Postgres neuve migrée, un
  * préfixe de queues propre, l'api (écoutant sur un port libre) et le worker.
  */
-export async function demarrerPipeline(options: OptionsPipeline = {}): Promise<Pipeline> {
+export async function startPipeline(options: PipelineOptions = {}): Promise<Pipeline> {
   const suffixe = randomUUID().replaceAll('-', '');
   const nomBase = `nudge_${suffixe}`;
   const urlAdmin = inject('postgresUrl');
@@ -84,11 +84,11 @@ export async function demarrerPipeline(options: OptionsPipeline = {}): Promise<P
   await admin.query(`CREATE DATABASE "${nomBase}"`);
   const databaseUrl = new URL(urlAdmin);
   databaseUrl.pathname = `/${nomBase}`;
-  await migrer(databaseUrl.toString());
+  await runMigrations(databaseUrl.toString());
 
   const juge = options.juge === undefined ? new FakeJuge() : options.juge;
   const fakes = new Map<string, FakeDestination>();
-  const fakePour = (destinationId: string) => {
+  const fakeFor = (destinationId: string) => {
     let fake = fakes.get(destinationId);
     if (!fake) {
       fake = new FakeDestination();
@@ -100,18 +100,20 @@ export async function demarrerPipeline(options: OptionsPipeline = {}): Promise<P
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,
-    prefixeQueues: `nudge-test-${suffixe}`,
+    queuePrefix: `nudge-test-${suffixe}`,
+    // Retries rapides : les tests d'échecs transitoires restent courts.
+    retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
   };
-  const worker = await creerWorker({
+  const worker = await createWorker({
     ...infra,
     juge,
-    resoudreAdaptateur: (destination) => fakePour(destination.id),
+    resolveDestinationAdapter: (destination) => fakeFor(destination.id),
   });
-  const api = await creerApi(infra);
+  const api = await createApi(infra);
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
-  const { db, fermer } = connecterDb(databaseUrl.toString());
+  const { db, close } = connectDb(databaseUrl.toString());
 
   const pipeline: Pipeline = {
     url,
@@ -119,28 +121,28 @@ export async function demarrerPipeline(options: OptionsPipeline = {}): Promise<P
       if (!juge) throw new Error('Ce pipeline tourne sans Juge');
       return juge;
     },
-    creerProjet: (donnees) => creerProjet(db, donnees),
-    async creerDestination(projetId, donnees = {}) {
-      const destination = await creerDestination(db, {
+    createProjet: (donnees) => createProjet(db, donnees),
+    async createDestination(projetId, donnees = {}) {
+      const destination = await createDestination(db, {
         projetId,
         nom: donnees.nom ?? 'Destination de test',
         type: 'fake',
         config: donnees.config ?? {},
       });
-      return { destination, fake: fakePour(destination.id) };
+      return { destination, fake: fakeFor(destination.id) };
     },
-    posterRetour: (cleSecrete, corps) =>
+    postRetour: (cleSecrete, corps) =>
       fetch(`${url}/v1/retours`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${cleSecrete}` },
         body: JSON.stringify(corps),
       }),
-    lireRetour: (id) => lireRetour(db, id),
-    async attendreRetour(id, condition, delaiMs = 5000) {
+    readRetour: (id) => readRetour(db, id),
+    async waitForRetour(id, condition, delaiMs = 5000) {
       const limite = Date.now() + delaiMs;
       let dernier: RetourLu | null = null;
       while (Date.now() < limite) {
-        dernier = await lireRetour(db, id);
+        dernier = await readRetour(db, id);
         if (dernier && condition(dernier)) return dernier;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -148,11 +150,11 @@ export async function demarrerPipeline(options: OptionsPipeline = {}): Promise<P
         `Retour ${id} : condition non atteinte en ${delaiMs} ms. Dernier état lu : ${JSON.stringify(dernier, null, 2)}`,
       );
     },
-    async arreter() {
+    async stop() {
       await api.close();
       await worker.close();
-      await fermer();
-      await supprimerBase(admin, nomBase);
+      await close();
+      await dropDatabase(admin, nomBase);
       await admin.end();
     },
   };

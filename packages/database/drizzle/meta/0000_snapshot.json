@@ -1,5 +1,5 @@
 {
-  "id": "a174419e-7cf4-43e3-b5b4-c9cb7bdc8c5b",
+  "id": "76403185-b5d8-4082-ab9b-4b9b0251b963",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -48,15 +48,15 @@
           "notNull": true,
           "default": "'active'"
         },
-        "cree_le": {
-          "name": "cree_le",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "modifie_le": {
-          "name": "modifie_le",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -135,15 +135,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cree_le": {
-          "name": "cree_le",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "modifie_le": {
-          "name": "modifie_le",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -229,15 +229,15 @@
           "primaryKey": false,
           "notNull": true
         },
-        "cree_le": {
-          "name": "cree_le",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "modifie_le": {
-          "name": "modifie_le",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -332,15 +332,15 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "cree_le": {
-          "name": "cree_le",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "modifie_le": {
-          "name": "modifie_le",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -348,8 +348,8 @@
         }
       },
       "indexes": {
-        "retours_projet_cree_le_idx": {
-          "name": "retours_projet_cree_le_idx",
+        "retours_projet_created_at_idx": {
+          "name": "retours_projet_created_at_idx",
           "columns": [
             {
               "expression": "projet_id",
@@ -358,7 +358,7 @@
               "nulls": "last"
             },
             {
-              "expression": "cree_le",
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -446,15 +446,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cree_le": {
-          "name": "cree_le",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "modifie_le": {
-          "name": "modifie_le",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,

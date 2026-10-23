@@ -8,8 +8,8 @@ export default mergeConfig(
     test: {
       name: '@nudge/pipeline-tests',
       // Un conteneur Postgres et un conteneur Redis pour toute la suite ;
-      // chaque `demarrerPipeline()` s'isole dans sa propre base et son propre préfixe de queues.
-      globalSetup: ['./src/harness/conteneurs.ts'],
+      // chaque `startPipeline()` s'isole dans sa propre base et son propre préfixe de queues.
+      globalSetup: ['./src/harness/containers.ts'],
       testTimeout: 30_000,
       hookTimeout: 120_000,
     },

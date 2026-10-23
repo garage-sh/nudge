@@ -1,4 +1,4 @@
 import 'reflect-metadata';
 
-export type { OptionsWorker } from './options.js';
-export { creerWorker } from './worker.js';
+export type { WorkerOptions } from './options.js';
+export { createWorker } from './worker.js';

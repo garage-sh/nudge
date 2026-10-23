@@ -1,12 +1,12 @@
 import type { Auteur, ConfianceAuteur, Contexte, Gravite, Source, TypeRetour } from '@nudge/shared';
 
 /**
- * Port Destination : contrat de chaque adaptateur (webhook, Discord, Linear…).
- * Un adaptateur est construit pour UNE Destination, avec sa configuration
- * déchiffrée, par un `ResoudreAdaptateur`.
+ * Port Destination : contrat de chaque adapter (webhook, Discord, Linear…).
+ * Un adapter est construit pour UNE Destination, avec sa configuration
+ * déchiffrée, par un `DestinationAdapterResolver`.
  */
 
-/** Ce qu'un adaptateur reçoit d'un Retour Trié. Le texte est brut : chaque adaptateur l'encode pour sa cible. */
+/** Ce qu'un adapter reçoit d'un Retour Trié. Le texte est brut : chaque adapter l'encode pour sa cible. */
 export interface RetourADispatcher {
   readonly id: string;
   readonly texte: string;
@@ -41,7 +41,7 @@ export type SanteDestination =
   | { readonly joignable: true }
   | { readonly joignable: false; readonly classe: ClasseEchec; readonly message: string };
 
-export interface AdaptateurDestination {
+export interface DestinationAdapter {
   send(envoi: EnvoiASortir): Promise<ResultatEnvoi>;
   healthCheck(): Promise<SanteDestination>;
 }
@@ -51,9 +51,9 @@ export interface DestinationConfiguree {
   readonly id: string;
   readonly projetId: string;
   readonly nom: string;
-  /** Clé de l'adaptateur : `webhook`, `discord`, `linear`… */
+  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
   readonly type: string;
   readonly config: Readonly<Record<string, unknown>>;
 }
 
-export type ResoudreAdaptateur = (destination: DestinationConfiguree) => AdaptateurDestination;
+export type DestinationAdapterResolver = (destination: DestinationConfiguree) => DestinationAdapter;

@@ -4,12 +4,12 @@ import * as schema from './schema.js';
 
 export type Db = NodePgDatabase<typeof schema>;
 
-export interface ConnexionDb {
+export interface DbConnection {
   readonly db: Db;
-  fermer(): Promise<void>;
+  close(): Promise<void>;
 }
 
-export function connecterDb(databaseUrl: string): ConnexionDb {
+export function connectDb(databaseUrl: string): DbConnection {
   const pool = new Pool({ connectionString: databaseUrl });
-  return { db: drizzle(pool, { schema }), fermer: () => pool.end() };
+  return { db: drizzle(pool, { schema }), close: () => pool.end() };
 }

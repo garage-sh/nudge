@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { demarrerPipeline, type Pipeline } from './harness/index.js';
+import { startPipeline, type Pipeline } from './harness/index.js';
 
 describe('Ingestion par clé secrète', () => {
   let pipeline: Pipeline;
   let cleSecrete: string;
 
   beforeAll(async () => {
-    pipeline = await demarrerPipeline();
-    ({ cleSecrete } = await pipeline.creerProjet({ nom: 'Ingestion' }));
+    pipeline = await startPipeline();
+    ({ cleSecrete } = await pipeline.createProjet({ nom: 'Ingestion' }));
   });
 
   afterAll(async () => {
-    await pipeline?.arreter();
+    await pipeline?.stop();
   });
 
   it('refuse un appel sans clé secrète ou avec une clé inconnue', async () => {
@@ -20,7 +20,7 @@ describe('Ingestion par clé secrète', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ texte: 'Bonjour' }),
     });
-    const cleInconnue = await pipeline.posterRetour('nk_sec_inconnue', { texte: 'Bonjour' });
+    const cleInconnue = await pipeline.postRetour('nk_sec_inconnue', { texte: 'Bonjour' });
 
     expect(sansCle.status).toBe(401);
     expect(cleInconnue.status).toBe(401);
@@ -42,15 +42,15 @@ describe('Ingestion par clé secrète', () => {
       },
     ],
   ])('refuse %s', async (_cas, corps) => {
-    const reponse = await pipeline.posterRetour(cleSecrete, corps);
+    const reponse = await pipeline.postRetour(cleSecrete, corps);
 
     expect(reponse.status).toBe(400);
     expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
   });
 
-  it('retire les caractères de contrôle et marque l’Auteur comme attesté', async () => {
-    const reponse = await pipeline.posterRetour(cleSecrete, {
-      texte: 'Ligne 1\u0000\u0007\nLigne 2\u001b',
+  it('stocke le texte tel quel, sans ses caractères de contrôle, et marque l’Auteur comme attesté', async () => {
+    const reponse = await pipeline.postRetour(cleSecrete, {
+      texte: '  Ligne 1\u0000\u0007\nLigne 2\u001b\u009b',
       type: 'suggestion',
       auteur: { id: 'u-42', email: 'ada@exemple.test', nom: 'Ada\u0008' },
       contexte: {
@@ -62,9 +62,9 @@ describe('Ingestion par clé secrète', () => {
 
     expect(reponse.status).toBe(202);
     const { id } = (await reponse.json()) as { id: string };
-    expect(await pipeline.lireRetour(id)).toMatchObject({
+    expect(await pipeline.readRetour(id)).toMatchObject({
       source: 'api',
-      texte: 'Ligne 1\nLigne 2',
+      texte: '  Ligne 1\nLigne 2',
       typeDeclare: 'suggestion',
       auteur: { id: 'u-42', email: 'ada@exemple.test', nom: 'Ada' },
       confianceAuteur: 'attestee',

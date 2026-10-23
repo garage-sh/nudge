@@ -1,4 +1,4 @@
-import type { Juge, Question, Questions, Reponse, Reponses, RequeteJuge } from '@nudge/judge';
+import type { Answer, Answers, Juge, Question, Questions, RequeteJuge } from '@nudge/judge';
 import { ErreurJugeTransitoire } from '@nudge/judge';
 
 /**
@@ -15,75 +15,78 @@ export type Script = Readonly<Record<string, string | number>>;
  */
 export class FakeJuge implements Juge {
   /** Toutes les requêtes reçues, dans l'ordre. */
-  readonly requetes: RequeteJuge[] = [];
-  private script: Script = {};
-  private confiance = 0.9;
-  private echecsRestants = 0;
-  private retenue: Promise<void> | null = null;
+  readonly requests: RequeteJuge[] = [];
+  private current: Script = {};
+  private confidence = 0.9;
+  private remainingFailures = 0;
+  private held: Promise<void> | null = null;
 
-  /** Fixe les réponses des prochaines requêtes. `confiance` : masse du choix retenu (0.9 par défaut). */
-  scripter(script: Script, options: { confiance?: number } = {}): void {
-    this.script = script;
-    this.confiance = options.confiance ?? 0.9;
+  /**
+   * Fixe les réponses des requêtes suivantes. `confidence` : masse donnée à
+   * l'option retenue des Choice et Score (0.9 par défaut).
+   */
+  script(script: Script, options: { confidence?: number } = {}): void {
+    this.current = script;
+    this.confidence = options.confidence ?? 0.9;
   }
 
-  /** Les `fois` prochaines requêtes échouent avec une `ErreurJugeTransitoire`. */
-  echouer(fois = 1): void {
-    this.echecsRestants = fois;
+  /** Les `times` prochaines requêtes échouent avec une `ErreurJugeTransitoire`. */
+  fail(times = 1): void {
+    this.remainingFailures = times;
   }
 
-  /** Bloque les requêtes jusqu'à l'appel de la fonction rendue (observer l'état Reçu). */
-  retenir(): () => void {
-    let liberer!: () => void;
-    this.retenue = new Promise<void>((resolve) => {
-      liberer = resolve;
+  /** Bloque les requêtes jusqu'à l'appel de la fonction rendue (pour observer l'état Reçu). */
+  hold(): () => void {
+    let release!: () => void;
+    this.held = new Promise<void>((resolve) => {
+      release = resolve;
     });
     return () => {
-      this.retenue = null;
-      liberer();
+      this.held = null;
+      release();
     };
   }
 
-  async juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Reponses<Qs>> {
-    this.requetes.push(requete);
-    if (this.retenue) await this.retenue;
-    if (this.echecsRestants > 0) {
-      this.echecsRestants -= 1;
+  async juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Answers<Qs>> {
+    this.requests.push(requete);
+    if (this.held) await this.held;
+    if (this.remainingFailures > 0) {
+      this.remainingFailures -= 1;
       throw new ErreurJugeTransitoire('FakeJuge : échec scripté');
     }
-    const reponses = Object.fromEntries(
-      Object.entries(requete.questions).map(([cle, question]) => [
-        cle,
-        this.repondre(question, this.script[cle]),
+    const answers = Object.fromEntries(
+      Object.entries(requete.questions).map(([key, question]) => [
+        key,
+        this.answer(question, this.current[key]),
       ]),
     );
-    return reponses as Reponses<Qs>;
+    return answers as Answers<Qs>;
   }
 
-  private repondre(question: Question, valeur: string | number | undefined): Reponse<Question> {
+  private answer(question: Question, scripted: string | number | undefined): Answer<Question> {
     if (question.kind === 'noul') {
-      return { kind: 'noul', probabilite: typeof valeur === 'number' ? valeur : 0 };
+      return { kind: 'noul', probability: typeof scripted === 'number' ? scripted : 0 };
     }
     const options: readonly string[] =
-      question.kind === 'choice' ? question.choix : question.niveaux;
-    const retenue = typeof valeur === 'string' ? valeur : options[0]!;
-    if (!options.includes(retenue)) {
-      throw new Error(`FakeJuge : « ${retenue} » n'est pas une option de « ${question.question} »`);
+      question.kind === 'choice' ? question.choices : question.levels;
+    const chosen = typeof scripted === 'string' ? scripted : options[0]!;
+    if (!options.includes(chosen)) {
+      throw new Error(`FakeJuge : « ${chosen} » n'est pas une option de « ${question.question} »`);
     }
-    const reste = options.length > 1 ? (1 - this.confiance) / (options.length - 1) : 0;
+    const rest = options.length > 1 ? (1 - this.confidence) / (options.length - 1) : 0;
     const distribution = Object.fromEntries(
-      options.map((option) => [option, option === retenue ? this.confiance : reste]),
+      options.map((option) => [option, option === chosen ? this.confidence : rest]),
     );
     if (question.kind === 'choice') {
-      return { kind: 'choice', choix: retenue, distribution, confiance: this.confiance };
+      return { kind: 'choice', choice: chosen, distribution, confidence: this.confidence };
     }
-    const rang = options.indexOf(retenue);
+    const rank = options.indexOf(chosen);
     return {
       kind: 'score',
-      niveau: retenue,
-      valeur: options.length > 1 ? rang / (options.length - 1) : 0,
+      level: chosen,
+      value: options.length > 1 ? rank / (options.length - 1) : 0,
       distribution,
-      confiance: this.confiance,
+      confidence: this.confidence,
     };
   }
 }

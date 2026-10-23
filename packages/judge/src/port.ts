@@ -1,70 +1,72 @@
 /**
  * Port Juge (ADR « triage via port System One ») : le Triage pose des questions
  * typées Noul / Choice / Score sur un state, et chaque fournisseur compatible
- * System One (Jev, pplx-decider…) en est un adaptateur.
+ * System One (Jev, pplx-decider…) en est un adapter.
  *
- * Le port ne connaît pas le domaine : il ne sait rien des Retours.
+ * Le port ne connaît pas le domaine : il ne sait rien des Retours. Les
+ * primitives System One (questions, réponses et leurs champs) gardent le
+ * vocabulaire anglais des fournisseurs ; seul le Juge porte un nom du domaine.
  */
 
 /** Une condition est-elle vraie ? Réponse : probabilité de « oui ». */
-export interface QuestionNoul {
+export interface NoulQuestion {
   readonly kind: 'noul';
   readonly question: string;
   readonly criteria?: string;
 }
 
 /** Une option parmi un ensemble fermé. */
-export interface QuestionChoice<C extends string = string> {
+export interface ChoiceQuestion<C extends string = string> {
   readonly kind: 'choice';
   readonly question: string;
-  readonly choix: readonly [C, ...C[]];
+  readonly choices: readonly [C, ...C[]];
   readonly criteria?: string;
 }
 
 /** Une position sur des niveaux ordonnés, du plus bas au plus haut. */
-export interface QuestionScore<N extends string = string> {
+export interface ScoreQuestion<N extends string = string> {
   readonly kind: 'score';
   readonly question: string;
-  readonly niveaux: readonly [N, ...N[]];
+  readonly levels: readonly [N, ...N[]];
   readonly criteria?: string;
 }
 
-export type Question = QuestionNoul | QuestionChoice | QuestionScore;
+export type Question = NoulQuestion | ChoiceQuestion | ScoreQuestion;
 export type Questions = Readonly<Record<string, Question>>;
 
-export interface ReponseNoul {
+export interface NoulAnswer {
   readonly kind: 'noul';
   /** Probabilité de « oui », entre 0 et 1. */
-  readonly probabilite: number;
+  readonly probability: number;
 }
 
-export interface ReponseChoice<C extends string = string> {
+export interface ChoiceAnswer<C extends string = string> {
   readonly kind: 'choice';
   /** L'option la plus probable. */
-  readonly choix: C;
+  readonly choice: C;
   readonly distribution: Readonly<Record<C, number>>;
   /** Concentration de la distribution, entre 0 et 1. */
-  readonly confiance: number;
+  readonly confidence: number;
 }
 
-export interface ReponseScore<N extends string = string> {
+export interface ScoreAnswer<N extends string = string> {
   readonly kind: 'score';
   /** Le niveau le plus probable. */
-  readonly niveau: N;
+  readonly level: N;
   /** Position pondérée sur l'échelle, de 0 (premier niveau) à 1 (dernier). */
-  readonly valeur: number;
+  readonly value: number;
   readonly distribution: Readonly<Record<N, number>>;
-  readonly confiance: number;
+  readonly confidence: number;
 }
 
-export type Reponse<Q extends Question> =
-  Q extends QuestionChoice<infer C>
-    ? ReponseChoice<C>
-    : Q extends QuestionScore<infer N>
-      ? ReponseScore<N>
-      : ReponseNoul;
+export type Answer<Q extends Question> =
+  Q extends ChoiceQuestion<infer C>
+    ? ChoiceAnswer<C>
+    : Q extends ScoreQuestion<infer N>
+      ? ScoreAnswer<N>
+      : NoulAnswer;
 
-export type Reponses<Qs extends Questions> = { readonly [K in keyof Qs]: Reponse<Qs[K]> };
+export type Answers<Qs extends Questions> = { readonly [K in keyof Qs]: Answer<Qs[K]> };
 
 /** Données sur lesquelles le Juge raisonne. Le contenu de l'Auteur n'apparaît QUE ici. */
 export type StateJuge = Readonly<Record<string, unknown>>;
@@ -78,7 +80,7 @@ export interface RequeteJuge<Qs extends Questions = Questions> {
 }
 
 export interface Juge {
-  juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Reponses<Qs>>;
+  juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Answers<Qs>>;
 }
 
 /** Erreur passagère du Juge (indisponible, timeout) : l'appelant retente plus tard. */
@@ -86,7 +88,7 @@ export class ErreurJugeTransitoire extends Error {
   override readonly name = 'ErreurJugeTransitoire';
 }
 
-export const noul = (question: string, criteria?: string): QuestionNoul => ({
+export const noul = (question: string, criteria?: string): NoulQuestion => ({
   kind: 'noul',
   question,
   ...(criteria === undefined ? {} : { criteria }),
@@ -94,22 +96,22 @@ export const noul = (question: string, criteria?: string): QuestionNoul => ({
 
 export const choice = <const C extends string>(
   question: string,
-  choix: readonly [C, ...C[]],
+  choices: readonly [C, ...C[]],
   criteria?: string,
-): QuestionChoice<C> => ({
+): ChoiceQuestion<C> => ({
   kind: 'choice',
   question,
-  choix,
+  choices,
   ...(criteria === undefined ? {} : { criteria }),
 });
 
 export const score = <const N extends string>(
   question: string,
-  niveaux: readonly [N, ...N[]],
+  levels: readonly [N, ...N[]],
   criteria?: string,
-): QuestionScore<N> => ({
+): ScoreQuestion<N> => ({
   kind: 'score',
   question,
-  niveaux,
+  levels,
   ...(criteria === undefined ? {} : { criteria }),
 });

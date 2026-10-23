@@ -1,3 +1,3 @@
 import 'reflect-metadata';
 
-export { creerApi, type OptionsApi } from './api.js';
+export { createApi, type ApiOptions } from './api.js';

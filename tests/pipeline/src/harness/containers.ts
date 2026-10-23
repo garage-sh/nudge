@@ -15,7 +15,7 @@ declare module 'vitest' {
  * sans `DOCKER_HOST`, on le prend au contexte actif. Le socket monté dans le
  * conteneur Ryuk est celui de la VM, pas celui du poste.
  */
-function configurerDocker(): void {
+function configureDocker(): void {
   if (process.env.DOCKER_HOST) return;
   try {
     const hote = execFileSync(
@@ -36,7 +36,7 @@ function configurerDocker(): void {
  * démarré s'y isole (base dédiée, préfixe de queues dédié).
  */
 export default async function setup(project: TestProject) {
-  configurerDocker();
+  configureDocker();
   const [postgres, redis]: [StartedPostgreSqlContainer, StartedRedisContainer] = await Promise.all([
     new PostgreSqlContainer('postgres:17-alpine').start(),
     new RedisContainer('redis:7-alpine').start(),

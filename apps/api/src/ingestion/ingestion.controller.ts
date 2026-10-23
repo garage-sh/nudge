@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { schemaRetourEntrant } from '@nudge/shared';
-import { CleSecreteGuard, type RequeteAuthentifiee } from './cle-secrete.guard.js';
+import { CleSecreteGuard, type AuthenticatedRequest } from './cle-secrete.guard.js';
 import { IngestionService } from './ingestion.service.js';
 
 @Controller('v1/retours')
@@ -19,7 +19,7 @@ export class IngestionController {
   @Post()
   @HttpCode(202)
   @UseGuards(CleSecreteGuard)
-  async poster(@Req() requete: RequeteAuthentifiee, @Body() corps: unknown) {
+  async poster(@Req() requete: AuthenticatedRequest, @Body() corps: unknown) {
     const resultat = schemaRetourEntrant.safeParse(corps);
     if (!resultat.success) {
       throw new BadRequestException({
@@ -30,6 +30,6 @@ export class IngestionController {
         })),
       });
     }
-    return this.ingestion.recevoir(requete.projet.id, 'api', resultat.data);
+    return this.ingestion.receive(requete.projet.id, 'api', resultat.data);
   }
 }

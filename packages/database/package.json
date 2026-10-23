@@ -21,7 +21,7 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "db:generate": "NODE_OPTIONS=--conditions=@nudge/source drizzle-kit generate",
-    "db:migrate": "tsx --conditions=@nudge/source src/scripts/migrer.ts",
+    "db:migrate": "tsx --conditions=@nudge/source src/scripts/migrate.ts",
     "db:seed": "tsx --conditions=@nudge/source src/scripts/seed.ts"
   },
   "dependencies": {

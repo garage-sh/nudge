@@ -1,20 +1,20 @@
-import type { DestinationConfiguree, ResoudreAdaptateur } from '@nudge/core';
+import type { DestinationConfiguree, DestinationAdapterResolver } from '@nudge/core';
 
 /**
  * Registre des adaptateurs de Destination de l'Instance, indexé par type
- * (`webhook`, `discord`…). Chaque ticket d'adaptateur y ajoute son entrée.
+ * (`webhook`, `discord`…). Chaque ticket d'adapter y ajoute son entrée.
  */
-export const ADAPTATEURS: Readonly<Record<string, ResoudreAdaptateur>> = {};
+export const DESTINATION_ADAPTERS: Readonly<Record<string, DestinationAdapterResolver>> = {};
 
-export class TypeDestinationInconnu extends Error {
-  override readonly name = 'TypeDestinationInconnu';
+export class UnknownDestinationTypeError extends Error {
+  override readonly name = 'UnknownDestinationTypeError';
   constructor(readonly destination: DestinationConfiguree) {
-    super(`Aucun adaptateur pour le type de Destination « ${destination.type} »`);
+    super(`Aucun adapter pour le type de Destination « ${destination.type} »`);
   }
 }
 
-export const resoudreAdaptateur: ResoudreAdaptateur = (destination) => {
-  const fabrique = ADAPTATEURS[destination.type];
-  if (!fabrique) throw new TypeDestinationInconnu(destination);
-  return fabrique(destination);
+export const resolveDestinationAdapter: DestinationAdapterResolver = (destination) => {
+  const factory = DESTINATION_ADAPTERS[destination.type];
+  if (!factory) throw new UnknownDestinationTypeError(destination);
+  return factory(destination);
 };

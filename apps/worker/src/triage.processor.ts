@@ -1,16 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  construireStateTriage,
-  questionsTriage,
-  rendreVerdict,
-  type JobDispatch,
-  type JobTriage,
+  buildTriageState,
+  triageQuestions,
+  renderVerdict,
+  type DispatchJob,
+  type TriageJob,
 } from '@nudge/core';
 import { destinations, envois, retours, verdicts, type Db } from '@nudge/database';
 import type { Juge } from '@nudge/judge';
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
-import { DB, JUGE, QUEUE_DISPATCH } from './jetons.js';
+import { DB, JUGE, DISPATCH_QUEUE_TOKEN } from './tokens.js';
 
 /**
  * Triage puis création des Envois. Chaque transition est persistée et
@@ -23,10 +23,10 @@ export class TriageProcessor {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(JUGE) private readonly juge: Juge | null,
-    @Inject(QUEUE_DISPATCH) private readonly queueDispatch: Queue<JobDispatch>,
+    @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
   ) {}
 
-  async traiter({ retourId }: JobTriage): Promise<void> {
+  async handle({ retourId }: TriageJob): Promise<void> {
     const retour = await this.db.query.retours.findFirst({
       where: eq(retours.id, retourId),
       with: { projet: true },
@@ -39,7 +39,7 @@ export class TriageProcessor {
     if (retour.etat === 'recu') {
       await this.trier(retour);
     }
-    const etat = (await this.lireEtat(retourId)) ?? retour.etat;
+    const etat = (await this.readEtat(retourId)) ?? retour.etat;
     if (etat === 'trie' || etat === 'dispatche') {
       await this.dispatcher(retourId, retour.projetId);
     }
@@ -55,16 +55,16 @@ export class TriageProcessor {
     // Une erreur du Juge remonte : BullMQ retente avec backoff, le Retour reste Reçu.
     const reponses = this.juge
       ? await this.juge.juger({
-          state: construireStateTriage({
+          state: buildTriageState({
             texte: retour.texte,
             typeDeclare: retour.typeDeclare,
             contexte: retour.contexte,
             descriptionProjet: retour.projet.description,
           }),
-          questions: questionsTriage,
+          questions: triageQuestions,
         })
       : null;
-    const verdict = rendreVerdict(reponses, retour.typeDeclare);
+    const verdict = renderVerdict(reponses, retour.typeDeclare);
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -109,12 +109,12 @@ export class TriageProcessor {
     });
 
     // Après le commit : le job de dispatch lit un Envoi qui existe. jobId = id de l'Envoi.
-    await this.queueDispatch.addBulk(
+    await this.dispatchQueue.addBulk(
       aEnvoyer.map(({ id }) => ({ name: 'dispatch', data: { envoiId: id }, opts: { jobId: id } })),
     );
   }
 
-  private async lireEtat(retourId: string) {
+  private async readEtat(retourId: string) {
     const [ligne] = await this.db
       .select({ etat: retours.etat })
       .from(retours)
