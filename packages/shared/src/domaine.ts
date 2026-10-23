@@ -23,3 +23,11 @@ export type EtatDestination = (typeof ETATS_DESTINATION)[number];
 
 export const STATUTS_ENVOI = ['en_attente', 'livre', 'echec', 'retenu'] as const;
 export type StatutEnvoi = (typeof STATUTS_ENVOI)[number];
+
+/**
+ * Fournisseurs de Juge qu'une Instance peut choisir : Jev par l'API TypeSafe,
+ * pplx-decider par l'API Decisions d'OpenRouter, ou tout serveur auto-hébergé de
+ * l'API Decisions (pplx-decider).
+ */
+export const FOURNISSEURS_JUGE = ['typesafe', 'openrouter', 'auto_heberge'] as const;
+export type FournisseurJuge = (typeof FOURNISSEURS_JUGE)[number];

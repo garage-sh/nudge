@@ -1,4 +1,12 @@
-import type { Answer, Answers, Juge, Question, Questions, RequeteJuge } from '@nudge/judge';
+import type {
+  Answer,
+  Answers,
+  Juge,
+  OptionsJugement,
+  Question,
+  Questions,
+  RequeteJuge,
+} from '@nudge/judge';
 import { ErreurJugeTransitoire } from '@nudge/judge';
 
 /**
@@ -16,6 +24,8 @@ export type Script = Readonly<Record<string, string | number>>;
 export class FakeJuge implements Juge {
   /** Toutes les requêtes reçues, dans l'ordre. */
   readonly requests: RequeteJuge[] = [];
+  /** Les requêtes que l'appelant a annulées (signal) pendant qu'elles étaient retenues. */
+  readonly annulations: RequeteJuge[] = [];
   private current: Script = {};
   private confidence = 0.9;
   private remainingFailures = 0;
@@ -47,9 +57,12 @@ export class FakeJuge implements Juge {
     };
   }
 
-  async juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Answers<Qs>> {
+  async juger<Qs extends Questions>(
+    requete: RequeteJuge<Qs>,
+    { signal }: OptionsJugement = {},
+  ): Promise<Answers<Qs>> {
     this.requests.push(requete);
-    if (this.held) await this.held;
+    if (this.held) await this.attendre(this.held, requete, signal);
     if (this.remainingFailures > 0) {
       this.remainingFailures -= 1;
       throw new ErreurJugeTransitoire('FakeJuge : échec scripté');
@@ -61,6 +74,23 @@ export class FakeJuge implements Juge {
       ]),
     );
     return answers as Answers<Qs>;
+  }
+
+  /** Retenue jusqu'à la libération, ou rejetée dès que l'appelant annule. */
+  private attendre(held: Promise<void>, requete: RequeteJuge, signal?: AbortSignal): Promise<void> {
+    if (!signal) return held;
+    return new Promise<void>((resolve, reject) => {
+      const annuler = () => {
+        this.annulations.push(requete);
+        reject(new ErreurJugeTransitoire('FakeJuge : requête annulée'));
+      };
+      if (signal.aborted) return annuler();
+      signal.addEventListener('abort', annuler, { once: true });
+      void held.then(() => {
+        signal.removeEventListener('abort', annuler);
+        resolve();
+      });
+    });
   }
 
   private answer(question: Question, scripted: string | number | undefined): Answer<Question> {

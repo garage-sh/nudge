@@ -86,21 +86,26 @@ export class TriageProcessor {
     });
   }
 
-  /** Un Juge qui ne répond pas dans le délai est traité comme indisponible : erreur transitoire. */
+  /**
+   * Un Juge qui ne répond pas dans le délai est traité comme indisponible : erreur
+   * transitoire, et l'appel en cours est annulé plutôt que laissé courir.
+   */
   private async jugerAvecDelai(
     juge: Juge,
     requete: RequeteJuge<typeof triageQuestions>,
   ): Promise<TriageAnswers> {
     const delaiMs = this.options.delaiJugeMs ?? DELAI_JUGE_PAR_DEFAUT_MS;
+    const annulation = new AbortController();
     let minuteur: NodeJS.Timeout | undefined;
     const expiration = new Promise<never>((_, reject) => {
-      minuteur = setTimeout(
-        () => reject(new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`)),
-        delaiMs,
-      );
+      minuteur = setTimeout(() => {
+        const erreur = new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`);
+        annulation.abort(erreur);
+        reject(erreur);
+      }, delaiMs);
     });
     try {
-      return await Promise.race([juge.juger(requete), expiration]);
+      return await Promise.race([juge.juger(requete, { signal: annulation.signal }), expiration]);
     } finally {
       clearTimeout(minuteur);
     }

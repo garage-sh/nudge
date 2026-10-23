@@ -21,6 +21,9 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
   },
+  "dependencies": {
+    "@nudge/shared": "workspace:*"
+  },
   "devDependencies": {
     "@nudge/tsup-config": "workspace:*",
     "@nudge/typescript-config": "workspace:*",

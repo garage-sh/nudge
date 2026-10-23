@@ -279,6 +279,8 @@ describe('Juge indisponible ou lent', () => {
 
     await attendreRequetes(texte, 2);
     expect(await pipeline.readRetour(id)).toMatchObject({ etat: 'recu', verdict: null });
+    // L'appel abandonné est annulé chez le Juge, pas laissé courir en parallèle du retry.
+    expect(pipeline.juge.annulations.some((r) => r.state.texte === texte)).toBe(true);
 
     release();
     const retour = await pipeline.waitForRetour(id, (r) => r.etat === 'dispatche');

@@ -1562,6 +1562,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nudge/judge@workspace:packages/judge"
   dependencies:
+    "@nudge/shared": "workspace:*"
     "@nudge/tsup-config": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
     "@types/node": "npm:^24.10.0"

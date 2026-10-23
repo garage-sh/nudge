@@ -8,11 +8,17 @@
  * vocabulaire anglais des fournisseurs ; seul le Juge porte un nom du domaine.
  */
 
+/** Ce qui compte comme « oui » et comme « non ». */
+export interface NoulCriteria {
+  readonly true: string;
+  readonly false: string;
+}
+
 /** Une condition est-elle vraie ? Réponse : probabilité de « oui ». */
 export interface NoulQuestion {
   readonly kind: 'noul';
   readonly question: string;
-  readonly criteria?: string;
+  readonly criteria?: NoulCriteria;
 }
 
 /** Une option parmi un ensemble fermé. */
@@ -20,7 +26,8 @@ export interface ChoiceQuestion<C extends string = string> {
   readonly kind: 'choice';
   readonly question: string;
   readonly choices: readonly [C, ...C[]];
-  readonly criteria?: string;
+  /** Quand chaque option s'applique ; une option sans description vaut par son nom. */
+  readonly descriptions?: Readonly<Partial<Record<C, string>>>;
 }
 
 /** Une position sur des niveaux ordonnés, du plus bas au plus haut. */
@@ -28,7 +35,8 @@ export interface ScoreQuestion<N extends string = string> {
   readonly kind: 'score';
   readonly question: string;
   readonly levels: readonly [N, ...N[]];
-  readonly criteria?: string;
+  /** La situation concrète que décrit chaque niveau ; un niveau sans description vaut par son nom. */
+  readonly descriptions?: Readonly<Partial<Record<N, string>>>;
 }
 
 export type Question = NoulQuestion | ChoiceQuestion | ScoreQuestion;
@@ -79,16 +87,46 @@ export interface RequeteJuge<Qs extends Questions = Questions> {
   readonly questions: Qs;
 }
 
-export interface Juge {
-  juger<Qs extends Questions>(requete: RequeteJuge<Qs>): Promise<Answers<Qs>>;
+export interface OptionsJugement {
+  /** Annule l'appel en cours (délai dépassé côté appelant). */
+  readonly signal?: AbortSignal;
 }
 
-/** Erreur passagère du Juge (indisponible, timeout) : l'appelant retente plus tard. */
+export interface Juge {
+  juger<Qs extends Questions>(
+    requete: RequeteJuge<Qs>,
+    options?: OptionsJugement,
+  ): Promise<Answers<Qs>>;
+}
+
+/** Erreur passagère du Juge (indisponible, timeout, limite de débit) : l'appelant retente plus tard. */
 export class ErreurJugeTransitoire extends Error {
   override readonly name = 'ErreurJugeTransitoire';
 }
 
-export const noul = (question: string, criteria?: string): NoulQuestion => ({
+/**
+ * Pourquoi un Juge refuse durablement, sans qu'un nouvel essai identique y change rien :
+ * - `auth` : clé refusée, droits ou crédits insuffisants — la configuration de l'Instance est en cause ;
+ * - `requete` : requête rejetée (schéma, taille, modèle inconnu) ;
+ * - `reponse` : réponse illisible ou qui ne correspond pas aux questions posées.
+ */
+export type MotifRefusJuge = 'auth' | 'requete' | 'reponse';
+
+/** Refus durable du Juge : retenter la même requête ne suffit pas. */
+export class ErreurJugeRefusee extends Error {
+  override readonly name = 'ErreurJugeRefusee';
+
+  constructor(
+    readonly motif: MotifRefusJuge,
+    message: string,
+    /** Statut HTTP de la réponse du fournisseur, s'il y en a une. */
+    readonly statut?: number,
+  ) {
+    super(message);
+  }
+}
+
+export const noul = (question: string, criteria?: NoulCriteria): NoulQuestion => ({
   kind: 'noul',
   question,
   ...(criteria === undefined ? {} : { criteria }),
@@ -97,21 +135,21 @@ export const noul = (question: string, criteria?: string): NoulQuestion => ({
 export const choice = <const C extends string>(
   question: string,
   choices: readonly [C, ...C[]],
-  criteria?: string,
+  descriptions?: Readonly<Partial<Record<C, string>>>,
 ): ChoiceQuestion<C> => ({
   kind: 'choice',
   question,
   choices,
-  ...(criteria === undefined ? {} : { criteria }),
+  ...(descriptions === undefined ? {} : { descriptions }),
 });
 
 export const score = <const N extends string>(
   question: string,
   levels: readonly [N, ...N[]],
-  criteria?: string,
+  descriptions?: Readonly<Partial<Record<N, string>>>,
 ): ScoreQuestion<N> => ({
   kind: 'score',
   question,
   levels,
-  ...(criteria === undefined ? {} : { criteria }),
+  ...(descriptions === undefined ? {} : { descriptions }),
 });
