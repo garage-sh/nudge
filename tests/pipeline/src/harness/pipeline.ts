@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { createApi } from '@nudge/api';
-import type { DestinationConfiguree } from '@nudge/core';
+import { createApi, RevueService } from '@nudge/api';
+import type { ActionRevue, DestinationConfiguree, ResultatRevue, SeuilsTriage } from '@nudge/core';
 import {
   connectDb,
   createDestination,
   createProjet,
   readRetour,
+  retours,
   runMigrations,
   type Projet,
   type RetourLu,
@@ -21,6 +22,12 @@ import { FakeJuge } from './fake-juge.js';
 export interface PipelineOptions {
   /** `null` : worker en mode dégradé, sans Juge. Par défaut, un `FakeJuge`. */
   readonly juge?: FakeJuge | null;
+  /** Seuils de la politique de Verdict du worker ; ceux par défaut sinon. */
+  readonly seuilsTriage?: SeuilsTriage;
+  /** Délai de réponse du Juge avant abandon et retry ; celui du worker sinon. */
+  readonly delaiJugeMs?: number;
+  /** Balayage des Retours restés Reçu ; celui du worker (5 min) sinon. */
+  readonly balayage?: { readonly delaiMs: number; readonly intervalleMs: number };
 }
 
 export interface Pipeline {
@@ -45,8 +52,18 @@ export interface Pipeline {
    * setup, les suivants se connectent avec ses identifiants (`MEMBRE_PAR_DEFAUT`).
    */
   signIn(): Promise<DashboardClient>;
+  /**
+   * Enregistre un Retour Reçu sans le mettre en queue, comme si la mise en queue
+   * avait échoué après l'insertion. Rend son id.
+   */
+  insererRetourSansTriage(projetId: string, donnees: { texte: string }): Promise<string>;
   /** POST /v1/retours avec la clé secrète du Projet. */
   postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
+  /**
+   * Transition de revue (valider, rejeter, réhabiliter) telle que le dashboard la
+   * déclenchera (#9) : par le `RevueService` de l'api.
+   */
+  revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
   readRetour(id: string): Promise<RetourLu | null>;
   /** Attend que le Retour satisfasse `condition` (5 s par défaut) et le rend. */
@@ -122,6 +139,9 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const worker = await createWorker({
     ...infra,
     juge,
+    ...(options.seuilsTriage ? { seuilsTriage: options.seuilsTriage } : {}),
+    ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
+    ...(options.balayage ? { balayage: options.balayage } : {}),
     resolveDestinationAdapter: (destination) => fakeFor(destination.id),
   });
   const api = await createApi({ ...infra, sessionCookieSecure: false });
@@ -156,12 +176,21 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       }
       return client;
     },
+    async insererRetourSansTriage(projetId, { texte }) {
+      const [retour] = await db
+        .insert(retours)
+        .values({ projetId, source: 'api', texte })
+        .returning({ id: retours.id });
+      if (!retour) throw new Error('Retour non enregistré');
+      return retour.id;
+    },
     postRetour: (cleSecrete, corps) =>
       fetch(`${url}/v1/retours`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${cleSecrete}` },
         body: JSON.stringify(corps),
       }),
+    revoir: (retourId, action) => api.get(RevueService).revoir(retourId, action),
     readRetour: (id) => readRetour(db, id),
     async waitForRetour(id, condition, delaiMs = 5000) {
       const limite = Date.now() + delaiMs;

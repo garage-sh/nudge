@@ -1,16 +1,23 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildTriageState,
+  etatApresTriage,
   triageQuestions,
   renderVerdict,
+  SEUILS_TRIAGE_PAR_DEFAUT,
+  TRIAGE_INSTRUCTIONS,
   type DispatchJob,
+  type TriageAnswers,
   type TriageJob,
 } from '@nudge/core';
 import { destinations, envois, retours, verdicts, type Db } from '@nudge/database';
-import type { Juge } from '@nudge/judge';
+import { ErreurJugeTransitoire, type Juge, type RequeteJuge } from '@nudge/judge';
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
-import { DB, JUGE, DISPATCH_QUEUE_TOKEN } from './tokens.js';
+import type { WorkerOptions } from './options.js';
+import { DB, JUGE, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
+
+const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
 
 /**
  * Triage puis création des Envois. Chaque transition est persistée et
@@ -24,6 +31,7 @@ export class TriageProcessor {
     @Inject(DB) private readonly db: Db,
     @Inject(JUGE) private readonly juge: Juge | null,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
+    @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
 
   async handle({ retourId }: TriageJob): Promise<void> {
@@ -54,7 +62,8 @@ export class TriageProcessor {
   }): Promise<void> {
     // Une erreur du Juge remonte : BullMQ retente avec backoff, le Retour reste Reçu.
     const reponses = this.juge
-      ? await this.juge.juger({
+      ? await this.jugerAvecDelai(this.juge, {
+          instructions: TRIAGE_INSTRUCTIONS,
           state: buildTriageState({
             texte: retour.texte,
             typeDeclare: retour.typeDeclare,
@@ -64,7 +73,11 @@ export class TriageProcessor {
           questions: triageQuestions,
         })
       : null;
-    const verdict = renderVerdict(reponses, retour.typeDeclare);
+    const verdict = renderVerdict(
+      reponses,
+      retour.typeDeclare,
+      this.options.seuilsTriage ?? SEUILS_TRIAGE_PAR_DEFAUT,
+    );
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -73,9 +86,29 @@ export class TriageProcessor {
         .onConflictDoNothing({ target: verdicts.retourId });
       await tx
         .update(retours)
-        .set({ etat: 'trie' })
+        .set({ etat: etatApresTriage(verdict) })
         .where(and(eq(retours.id, retour.id), eq(retours.etat, 'recu')));
     });
+  }
+
+  /** Un Juge qui ne répond pas dans le délai est traité comme indisponible : erreur transitoire. */
+  private async jugerAvecDelai(
+    juge: Juge,
+    requete: RequeteJuge<typeof triageQuestions>,
+  ): Promise<TriageAnswers> {
+    const delaiMs = this.options.delaiJugeMs ?? DELAI_JUGE_PAR_DEFAUT_MS;
+    let minuteur: NodeJS.Timeout | undefined;
+    const expiration = new Promise<never>((_, reject) => {
+      minuteur = setTimeout(
+        () => reject(new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`)),
+        delaiMs,
+      );
+    });
+    try {
+      return await Promise.race([juge.juger(requete), expiration]);
+    } finally {
+      clearTimeout(minuteur);
+    }
   }
 
   /** Un Envoi par Destination du Projet ; le Retour passe Dispatché dès qu'il en a un. */

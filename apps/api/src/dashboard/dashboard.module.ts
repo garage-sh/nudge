@@ -18,6 +18,7 @@ import { ProjetsController } from './projets/projets.controller.js';
 import { ProjetsService } from './projets/projets.service.js';
 import { RetoursController } from './retours/retours.controller.js';
 import { RetoursService } from './retours/retours.service.js';
+import { RevueService } from './retours/revue.service.js';
 import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
@@ -51,6 +52,7 @@ export class DashboardModule implements NestModule {
         InvitationsService,
         ProjetsService,
         RetoursService,
+        RevueService,
         SessionGuard,
         AuthThrottleGuard,
       ],

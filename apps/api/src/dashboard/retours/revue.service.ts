@@ -1,0 +1,44 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { ActionRevue, ResultatRevue, TriageJob } from '@nudge/core';
+import { revoirRetour, type Db } from '@nudge/database';
+import type { Queue } from 'bullmq';
+import { DB, TRIAGE_QUEUE_TOKEN } from '../../infra/tokens.js';
+import { isUuid } from '../../validation.js';
+
+/**
+ * Transitions de revue d'un Retour, déclenchées par un Membre : valider ou rejeter un
+ * Retour En revue, réhabiliter un Retour Écarté comme Indésirable.
+ */
+@Injectable()
+export class RevueService {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue<TriageJob>,
+  ) {}
+
+  /** En revue → Trié, puis Dispatché si un Filtre le retient. */
+  valider(retourId: string): Promise<ResultatRevue> {
+    return this.revoir(retourId, 'valider');
+  }
+
+  /** En revue → Écarté. */
+  rejeter(retourId: string): Promise<ResultatRevue> {
+    return this.revoir(retourId, 'rejeter');
+  }
+
+  /** Écarté (Indésirable) → Trié, puis Dispatché si un Filtre le retient. */
+  rehabiliter(retourId: string): Promise<ResultatRevue> {
+    return this.revoir(retourId, 'rehabiliter');
+  }
+
+  async revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue> {
+    if (!isUuid(retourId)) return { statut: 'introuvable' };
+    const resultat = await revoirRetour(this.db, retourId, action);
+    if (resultat.statut === 'applique' && resultat.etat === 'trie') {
+      // Le job de triage dispatche un Retour Trié. Un Retour ne redevient Trié qu'une
+      // fois : un jobId propre à la revue suffit à ne pas l'enfiler deux fois.
+      await this.triageQueue.add('triage', { retourId }, { jobId: `${retourId}-revue` });
+    }
+    return resultat;
+  }
+}

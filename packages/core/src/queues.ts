@@ -5,6 +5,9 @@
 
 export const TRIAGE_QUEUE = 'triage';
 export const DISPATCH_QUEUE = 'dispatch';
+/** Tâches planifiées du worker (jobs répétables) : balayage des Retours restés Reçu… */
+export const MAINTENANCE_QUEUE = 'maintenance';
+export const BALAYAGE_RECUS_JOB = 'balayage-recus';
 
 /** Préfixe des clés BullMQ par défaut ; l'api et le worker doivent partager le même. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';

@@ -1,5 +1,5 @@
 import type { LogLevel } from '@nestjs/common';
-import type { DestinationAdapterResolver, RetryPolicy } from '@nudge/core';
+import type { DestinationAdapterResolver, RetryPolicy, SeuilsTriage } from '@nudge/core';
 import type { Juge } from '@nudge/judge';
 
 export interface WorkerOptions {
@@ -11,6 +11,21 @@ export interface WorkerOptions {
   readonly retryPolicy?: RetryPolicy;
   /** `null` : mode dégradé sans Juge. */
   readonly juge: Juge | null;
+  /** Délai au-delà duquel une requête au Juge est abandonnée et retentée (30 s par défaut). */
+  readonly delaiJugeMs?: number;
+  /** Seuils de la politique de Verdict ; `SEUILS_TRIAGE_PAR_DEFAUT` à défaut. */
+  readonly seuilsTriage?: SeuilsTriage;
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
+  /** Balayage des Retours restés Reçu (D18) ; 5 min de délai, toutes les minutes, à défaut. */
+  readonly balayage?: OptionsBalayage;
   readonly logger?: false | LogLevel[];
 }
+
+export interface OptionsBalayage {
+  /** Âge au-delà duquel un Retour encore Reçu est remis au Triage. */
+  readonly delaiMs: number;
+  /** Période du balayage. */
+  readonly intervalleMs: number;
+}
+
+export const BALAYAGE_PAR_DEFAUT: OptionsBalayage = { delaiMs: 5 * 60_000, intervalleMs: 60_000 };
