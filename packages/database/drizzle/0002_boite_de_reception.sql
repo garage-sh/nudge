@@ -1,0 +1,1 @@
+CREATE INDEX "retours_created_at_id_idx" ON "retours" USING btree ("created_at","id");

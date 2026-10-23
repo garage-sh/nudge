@@ -4,6 +4,8 @@ import { Invitation } from './screens/Invitation.js';
 import { Membres } from './screens/Membres.js';
 import { Projet } from './screens/Projet.js';
 import { Projets } from './screens/Projets.js';
+import { Retour } from './screens/Retour.js';
+import { Retours } from './screens/Retours.js';
 import { Setup } from './screens/Setup.js';
 import { Layout } from './layout/Layout.js';
 import { RequireSession } from './session/RequireSession.js';
@@ -20,7 +22,9 @@ export function AppRoutes() {
       <Route path="/invitation/:jeton" element={<Invitation />} />
       <Route element={<RequireSession />}>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/projets" replace />} />
+          <Route index element={<Navigate to="/retours" replace />} />
+          <Route path="retours" element={<Retours />} />
+          <Route path="retours/:id" element={<Retour />} />
           <Route path="projets" element={<Projets />} />
           <Route path="projets/:id" element={<Projet />} />
           <Route path="membres" element={<Membres />} />

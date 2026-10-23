@@ -16,6 +16,8 @@ import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
 import { ProjetsController } from './projets/projets.controller.js';
 import { ProjetsService } from './projets/projets.service.js';
+import { RetoursController } from './retours/retours.controller.js';
+import { RetoursService } from './retours/retours.service.js';
 import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
@@ -23,7 +25,13 @@ export interface DashboardOptions {
 }
 
 /** Contrôleurs de l'API du dashboard : tous passent par `ClientHeaderMiddleware`. */
-const CONTROLLERS = [SetupController, SessionController, InvitationsController, ProjetsController];
+const CONTROLLERS = [
+  SetupController,
+  SessionController,
+  InvitationsController,
+  ProjetsController,
+  RetoursController,
+];
 
 /**
  * API du dashboard, sous `/api/…`, authentifiée par session de Membre.
@@ -42,6 +50,7 @@ export class DashboardModule implements NestModule {
         SessionsService,
         InvitationsService,
         ProjetsService,
+        RetoursService,
         SessionGuard,
         AuthThrottleGuard,
       ],

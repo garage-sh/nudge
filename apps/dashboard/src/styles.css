@@ -280,3 +280,105 @@ button.danger {
   gap: 0.5rem;
   margin: 0.5rem 0;
 }
+
+/* Boîte de réception et détail d'un Retour */
+.filtres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 0.45rem 0.6rem;
+  width: 100%;
+}
+
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ligne-retour .apercu {
+  color: var(--texte);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ligne-retour .apercu:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 0.35rem 0 0;
+  color: var(--discret);
+  font-size: 0.85rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--bordure);
+  color: var(--texte);
+  font-size: 0.8rem;
+}
+
+.badge-attention {
+  background: var(--avertissement-fond);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+button.plus {
+  margin-top: 1rem;
+}
+
+.texte-retour {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.proprietes {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.proprietes div {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  gap: 0.75rem;
+}
+
+.proprietes dt {
+  color: var(--discret);
+}
+
+.proprietes dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lien-brut {
+  overflow-wrap: anywhere;
+}

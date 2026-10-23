@@ -15,6 +15,13 @@
       "when": 1792796475103,
       "tag": "0001_membres_et_origines",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792797640308,
+      "tag": "0002_boite_de_reception",
+      "breakpoints": true
     }
   ]
 }

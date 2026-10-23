@@ -105,7 +105,11 @@ export const retours = pgTable(
     contexte: jsonb('contexte').$type<Contexte>().notNull().default({}),
     ...timestamps,
   },
-  (t) => [index('retours_projet_created_at_idx').on(t.projetId, t.createdAt)],
+  (t) => [
+    index('retours_projet_created_at_idx').on(t.projetId, t.createdAt),
+    // Boîte de réception : tous Projets confondus, du plus récent au plus ancien.
+    index('retours_created_at_id_idx').on(t.createdAt, t.id),
+  ],
 );
 
 export const verdicts = pgTable('verdicts', {

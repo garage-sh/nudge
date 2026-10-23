@@ -7,6 +7,7 @@ const MESSAGES: Record<string, string> = {
   email_deja_utilise: 'Un Membre utilise déjà cet email.',
   invitation_invalide: 'Ce lien d’invitation est invalide, expiré ou déjà utilisé.',
   projet_introuvable: 'Ce Projet n’existe pas.',
+  retour_introuvable: 'Ce Retour n’existe pas.',
   session_requise: 'Votre session a expiré : reconnectez-vous.',
 };
 
@@ -104,5 +105,27 @@ export function ConfirmAction({
         Annuler
       </button>
     </div>
+  );
+}
+
+const estHttp = (valeur: string): boolean => {
+  try {
+    const { protocol } = new URL(valeur);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Une URL venue de l'extérieur (contexte d'un Retour, lien d'un Envoi) : un lien
+ * seulement en http(s), sinon du texte — un `javascript:` ne devient jamais cliquable.
+ */
+export function LienExterne({ href }: { href: string }) {
+  if (!estHttp(href)) return <span className="lien-brut">{href}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="lien-brut">
+      {href}
+    </a>
   );
 }

@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import {
+  ETATS_RETOUR,
+  GRAVITES,
+  SOURCES,
+  TYPES_RETOUR,
+  type ConfianceAuteur,
+  type EtatDestination,
+  type EtatRetour,
+  type Gravite,
+  type Source,
+  type StatutEnvoi,
+  type TypeRetour,
+} from './domaine.js';
+import type { Contexte } from './retour-entrant.js';
 
 /**
  * Contrat de l'API du dashboard (`/api/…`) : corps acceptés (schémas zod, validés
@@ -14,6 +28,10 @@ export const LIMITES_DASHBOARD = {
   descriptionProjet: 2000,
   origines: 50,
   origine: 2048,
+  retoursParPage: 50,
+  retoursParPageMax: 100,
+  /** Caractères du texte d'un Retour repris dans la boîte de réception. */
+  apercuRetour: 280,
 } as const;
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(LIMITES_DASHBOARD.email));
@@ -143,4 +161,102 @@ export interface ProjetAvecCleSecrete {
   readonly projet: ProjetVu;
   /** Lisible une seule fois : l'Instance n'en garde que l'empreinte. */
   readonly cleSecrete: string;
+}
+
+/**
+ * Filtres et pagination de la boîte de réception (`GET /api/retours?…`).
+ * Type et Gravité portent sur le Verdict : un Retour pas encore trié n'y répond pas.
+ */
+export const schemaFiltresRetours = z.strictObject({
+  projet: z.uuid().optional(),
+  type: z.enum(TYPES_RETOUR).optional(),
+  gravite: z.enum(GRAVITES).optional(),
+  etat: z.enum(ETATS_RETOUR).optional(),
+  source: z.enum(SOURCES).optional(),
+  /** Le `suivant` de la page précédente. */
+  curseur: z.string().max(200).optional(),
+  limite: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(LIMITES_DASHBOARD.retoursParPageMax)
+    .default(LIMITES_DASHBOARD.retoursParPage),
+});
+export type FiltresRetours = z.input<typeof schemaFiltresRetours>;
+
+export interface ProjetRefVu {
+  readonly id: string;
+  readonly nom: string;
+}
+
+export interface VerdictVu {
+  readonly typeRetenu: TypeRetour;
+  /** `null` en mode dégradé, sans Juge. */
+  readonly gravite: Gravite | null;
+  readonly indesirable: boolean;
+  readonly manipulation: boolean;
+  readonly incertain: boolean;
+}
+
+/** Une ligne de la boîte de réception. */
+export interface RetourResumeVu {
+  readonly id: string;
+  readonly projet: ProjetRefVu;
+  readonly etat: EtatRetour;
+  readonly source: Source;
+  /** Début du texte, brut : à afficher comme du texte, jamais comme du HTML. */
+  readonly apercu: string;
+  readonly typeDeclare: TypeRetour | null;
+  /** `null` tant que le Retour n'est pas trié. */
+  readonly verdict: VerdictVu | null;
+  readonly createdAt: string;
+}
+
+/** Une page de la boîte de réception, du plus récent au plus ancien. */
+export interface PageRetours {
+  readonly retours: readonly RetourResumeVu[];
+  /** Curseur de la page suivante, `null` sur la dernière. */
+  readonly suivant: string | null;
+}
+
+export interface AuteurVu {
+  readonly id: string | null;
+  readonly email: string | null;
+  readonly nom: string | null;
+  /** Déclarée par le navigateur, ou attestée par la clé secrète. */
+  readonly confiance: ConfianceAuteur;
+}
+
+export interface EnvoiVu {
+  readonly id: string;
+  readonly destination: {
+    readonly id: string;
+    readonly nom: string;
+    readonly type: string;
+    readonly etat: EtatDestination;
+  };
+  readonly statut: StatutEnvoi;
+  /** Lien vers l'objet créé chez la Destination (issue, message), une fois livré. */
+  readonly lienExterne: string | null;
+  readonly tentatives: number;
+  readonly derniereErreur: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** Le détail d'un Retour (`GET /api/retours/:id`). */
+export interface RetourDetailVu {
+  readonly id: string;
+  readonly projet: ProjetRefVu;
+  readonly etat: EtatRetour;
+  readonly source: Source;
+  /** Texte brut de l'Auteur : à afficher comme du texte, jamais comme du HTML. */
+  readonly texte: string;
+  readonly typeDeclare: TypeRetour | null;
+  /** `null` : Auteur anonyme. */
+  readonly auteur: AuteurVu | null;
+  readonly contexte: Contexte;
+  readonly verdict: VerdictVu | null;
+  readonly envois: readonly EnvoiVu[];
+  readonly createdAt: string;
 }
