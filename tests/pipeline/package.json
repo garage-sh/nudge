@@ -1,0 +1,33 @@
+{
+  "name": "@nudge/pipeline-tests",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Seam 1 : tests du pipeline (api + worker réels, Postgres et Redis via testcontainers, FakeJuge, FakeDestination).",
+  "exports": {
+    ".": "./src/harness/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@nudge/api": "workspace:*",
+    "@nudge/core": "workspace:*",
+    "@nudge/database": "workspace:*",
+    "@nudge/judge": "workspace:*",
+    "@nudge/shared": "workspace:*",
+    "@nudge/typescript-config": "workspace:*",
+    "@nudge/worker": "workspace:*",
+    "@testcontainers/postgresql": "^11.14.0",
+    "@testcontainers/redis": "^11.14.0",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.0",
+    "eslint": "^9.39.0",
+    "pg": "^8.16.0",
+    "testcontainers": "^11.14.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

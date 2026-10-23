@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    // ES2022 activerait la sémantique `define` des champs de classe, qui
+    // écrase les propriétés injectées par Nest.
+    "useDefineForClassFields": false,
+    "declaration": false
+  }
+}

@@ -1,0 +1,35 @@
+# Dépendances
+node_modules
+
+# Yarn Berry : on ne versionne que ce qui doit l'être.
+# https://yarnpkg.com/getting-started/qa#which-files-should-be-gitignored
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# Sorties de build et caches
+dist
+build
+coverage
+.turbo
+*.tsbuildinfo
+.vite
+
+# Environnements locaux
+.env
+.env.*
+!.env.example
+
+# Données locales (Captures sur disque, volumes de dev)
+.data/
+
+# Divers
+.DS_Store
+*.log
+.idea
+.vscode/*
+!.vscode/extensions.json

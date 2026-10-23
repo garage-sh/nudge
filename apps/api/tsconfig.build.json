@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  // Le build vise les `dist/` des packages, jamais leurs sources.
+  "compilerOptions": { "customConditions": [], "declaration": true },
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "@nudge/typescript-config/nest.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"]
+}

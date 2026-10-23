@@ -1,0 +1,4 @@
+{
+  "extends": "@nudge/typescript-config/base.json",
+  "include": ["src"]
+}
