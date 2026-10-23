@@ -11,6 +11,7 @@ async function main() {
   const app = await createApi({
     databaseUrl: requireEnv('DATABASE_URL'),
     redisUrl: requireEnv('REDIS_URL'),
+    sessionCookieSecure: process.env.NUDGE_COOKIE_SECURE !== 'false',
   });
   app.enableShutdownHooks();
   await app.listen(Number(process.env.NUDGE_API_PORT ?? 3000));

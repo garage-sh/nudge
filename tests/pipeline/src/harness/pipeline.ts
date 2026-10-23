@@ -14,6 +14,7 @@ import type { RetourEntrant } from '@nudge/shared';
 import { createWorker } from '@nudge/worker';
 import { Client } from 'pg';
 import { inject } from 'vitest';
+import { DashboardClient } from './dashboard-client.js';
 import { FakeDestination } from './fake-destination.js';
 import { FakeJuge } from './fake-juge.js';
 
@@ -37,6 +38,13 @@ export interface Pipeline {
     projetId: string,
     donnees?: { nom?: string; config?: Record<string, unknown> },
   ): Promise<{ destination: DestinationConfiguree; fake: FakeDestination }>;
+  /** Un navigateur anonyme sur l'API du dashboard (il garde son cookie de session). */
+  dashboard(): DashboardClient;
+  /**
+   * Un navigateur connecté : le premier appel crée le premier Membre par le
+   * setup, les suivants se connectent avec ses identifiants (`MEMBRE_PAR_DEFAUT`).
+   */
+  signIn(): Promise<DashboardClient>;
   /** POST /v1/retours avec la clé secrète du Projet. */
   postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
@@ -49,6 +57,12 @@ export interface Pipeline {
   ): Promise<RetourLu>;
   stop(): Promise<void>;
 }
+
+/** Identifiants du Membre que `signIn()` crée au setup. */
+export const MEMBRE_PAR_DEFAUT = {
+  email: 'premier@nudge.test',
+  motDePasse: 'mot-de-passe-du-premier-membre',
+} as const;
 
 /**
  * `pool.end()` rend la main avant que les sockets soient fermées : un
@@ -110,7 +124,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     juge,
     resolveDestinationAdapter: (destination) => fakeFor(destination.id),
   });
-  const api = await createApi(infra);
+  const api = await createApi({ ...infra, sessionCookieSecure: false });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
   const { db, close } = connectDb(databaseUrl.toString());
@@ -130,6 +144,17 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         config: donnees.config ?? {},
       });
       return { destination, fake: fakeFor(destination.id) };
+    },
+    dashboard: () => new DashboardClient(url),
+    async signIn() {
+      const client = new DashboardClient(url);
+      const setup = await client.post('/api/setup', MEMBRE_PAR_DEFAUT);
+      if (setup.status === 201) return client;
+      const connexion = await client.post('/api/session', MEMBRE_PAR_DEFAUT);
+      if (connexion.status !== 200) {
+        throw new Error(`signIn : connexion refusée (${connexion.status})`);
+      }
+      return client;
     },
     postRetour: (cleSecrete, corps) =>
       fetch(`${url}/v1/retours`, {

@@ -1,0 +1,282 @@
+:root {
+  --fond: #f6f5f2;
+  --surface: #ffffff;
+  --texte: #1d1c1a;
+  --discret: #6b6862;
+  --bordure: #e2dfd8;
+  --accent: #2f5d50;
+  --accent-texte: #ffffff;
+  --danger: #a3372b;
+  --alerte-fond: #fbeae7;
+  --avertissement-fond: #fdf4dc;
+  --rayon: 8px;
+  color-scheme: light;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--texte);
+  background: var(--fond);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #161615;
+    --surface: #1f1f1d;
+    --texte: #ecebe7;
+    --discret: #a29f98;
+    --bordure: #34332f;
+    --accent: #7fb8a6;
+    --accent-texte: #10201b;
+    --danger: #e58a7e;
+    --alerte-fond: #3a1f1b;
+    --avertissement-fond: #3a321b;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fond);
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0.25rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.marque {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+/* Cadre des écrans connectés */
+.entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--bordure);
+}
+
+.entete nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+
+.entete nav a {
+  color: var(--discret);
+  text-decoration: none;
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.entete nav a.active {
+  color: var(--texte);
+  border-bottom-color: var(--accent);
+}
+
+.compte {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--discret);
+}
+
+.contenu {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Pages publiques (setup, connexion, invitation) */
+.publique {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.carte {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 2rem;
+}
+
+/* Blocs */
+.encadre {
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.liste {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.liste li {
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 0.75rem 1rem;
+}
+
+.liste li p {
+  margin: 0.25rem 0 0;
+}
+
+.discret,
+.aide {
+  color: var(--discret);
+}
+
+.aide {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.alerte {
+  background: var(--alerte-fond);
+  color: var(--danger);
+  border-radius: var(--rayon);
+  padding: 0.5rem 0.75rem;
+}
+
+.avertissement {
+  background: var(--avertissement-fond);
+  border-radius: var(--rayon);
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.avertissement p {
+  margin: 0 0 0.5rem;
+}
+
+/* Formulaires */
+.formulaire {
+  display: grid;
+  gap: 1rem;
+}
+
+.formulaire button[type='submit'] {
+  justify-self: start;
+}
+
+.champ {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.champ label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--rayon);
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-texte);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+button.secondaire {
+  background: transparent;
+  color: var(--texte);
+  border-color: var(--bordure);
+}
+
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--surface);
+}
+
+.copiable {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.copiable code {
+  flex: 1;
+  overflow-wrap: anywhere;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.confirmation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}

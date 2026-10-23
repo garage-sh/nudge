@@ -6,11 +6,12 @@ export interface ProjetKeys {
   readonly cleSecrete: string;
 }
 
+export const generateClePublique = (): string => `nk_pub_${randomBytes(18).toString('base64url')}`;
+
+export const generateCleSecrete = (): string => `nk_sec_${randomBytes(32).toString('base64url')}`;
+
 export function generateProjetKeys(): ProjetKeys {
-  return {
-    clePublique: `nk_pub_${randomBytes(18).toString('base64url')}`,
-    cleSecrete: `nk_sec_${randomBytes(32).toString('base64url')}`,
-  };
+  return { clePublique: generateClePublique(), cleSecrete: generateCleSecrete() };
 }
 
 /** La clé secrète n'est jamais stockée en clair : on stocke et on cherche son empreinte. */

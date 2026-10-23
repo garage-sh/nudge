@@ -1,8 +1,16 @@
-/** Squelette : les écrans du dashboard arrivent avec #3. */
+import { QueryClientProvider } from '@tanstack/react-query';
+import { useState } from 'react';
+import { BrowserRouter } from 'react-router';
+import { createQueryClient } from './api/query-client.js';
+import { AppRoutes } from './routes.js';
+
 export function App() {
+  const [client] = useState(createQueryClient);
   return (
-    <main>
-      <h1>nudge</h1>
-    </main>
+    <QueryClientProvider client={client}>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

@@ -1,8 +1,9 @@
 import { hashCleSecrete, generateProjetKeys, type DestinationConfiguree } from '@nudge/core';
 import type { Db } from './client.js';
-import { destinations, projets } from './schema.js';
+import { destinations, membres, projets } from './schema.js';
 
 export type Projet = typeof projets.$inferSelect;
+export type Membre = typeof membres.$inferSelect;
 export type DestinationRow = typeof destinations.$inferSelect;
 
 /** Une Destination lue en base, telle que la reçoit un `DestinationAdapterResolver`. */
@@ -19,7 +20,7 @@ export function toDestinationConfiguree(destination: DestinationRow): Destinatio
 /** Crée un Projet et rend ses clés ; la clé secrète n'est lisible qu'ici. */
 export async function createProjet(
   db: Db,
-  donnees: { nom: string; description?: string | null },
+  donnees: { nom: string; description?: string | null; originesAutorisees?: readonly string[] },
 ): Promise<{ projet: Projet; clePublique: string; cleSecrete: string }> {
   const { clePublique, cleSecrete } = generateProjetKeys();
   const [projet] = await db
@@ -27,6 +28,7 @@ export async function createProjet(
     .values({
       nom: donnees.nom,
       description: donnees.description ?? null,
+      originesAutorisees: [...(donnees.originesAutorisees ?? [])],
       clePublique,
       empreinteCleSecrete: hashCleSecrete(cleSecrete),
     })

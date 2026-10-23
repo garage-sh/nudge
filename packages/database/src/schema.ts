@@ -47,7 +47,45 @@ export const projets = pgTable('projets', {
   clePublique: text('cle_publique').notNull().unique(),
   /** SHA-256 de la clé secrète : la clé elle-même n'est jamais stockée. */
   empreinteCleSecrete: text('empreinte_cle_secrete').notNull().unique(),
+  /** Origines (`https://exemple.com`) d'où la clé publique est acceptée, normalisées. */
+  originesAutorisees: text('origines_autorisees').array().notNull().default([]),
   ...timestamps,
+});
+
+export const membres = pgTable('membres', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** En minuscules : l'unicité ne dépend pas de la casse saisie. */
+  email: text('email').notNull().unique(),
+  /** Empreinte argon2id au format PHC ; le mot de passe n'est jamais stocké. */
+  empreinteMotDePasse: text('empreinte_mot_de_passe').notNull(),
+  ...timestamps,
+});
+
+/** Session du dashboard : le cookie porte le jeton, la base n'en garde que l'empreinte SHA-256. */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    membreId: uuid('membre_id')
+      .notNull()
+      .references(() => membres.id, { onDelete: 'cascade' }),
+    empreinteJeton: text('empreinte_jeton').notNull().unique(),
+    expireLe: timestamp('expire_le', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('sessions_membre_idx').on(t.membreId)],
+);
+
+/** Lien d'invitation à usage unique ; seule l'empreinte SHA-256 du jeton est stockée. */
+export const invitations = pgTable('invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  empreinteJeton: text('empreinte_jeton').notNull().unique(),
+  creeePar: uuid('creee_par').references(() => membres.id, { onDelete: 'set null' }),
+  expireLe: timestamp('expire_le', { withTimezone: true }).notNull(),
+  /** Renseigné quand l'invitation a servi : elle ne sert qu'une fois. */
+  accepteeLe: timestamp('acceptee_le', { withTimezone: true }),
+  membreId: uuid('membre_id').references(() => membres.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const retours = pgTable(
