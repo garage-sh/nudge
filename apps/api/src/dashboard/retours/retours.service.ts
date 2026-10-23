@@ -3,6 +3,7 @@ import { projets, retours, verdicts, type Db } from '@nudge/database';
 import {
   LIMITES_DASHBOARD,
   schemaFiltresRetours,
+  type ApiErrorBody,
   type PageRetours,
   type RetourDetailVu,
   type RetourResumeVu,
@@ -11,8 +12,9 @@ import {
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DB } from '../../infra/tokens.js';
+import { isUuid } from '../../validation.js';
 
-type Filtres = z.output<typeof schemaFiltresRetours>;
+type FiltresRetours = z.output<typeof schemaFiltresRetours>;
 
 /**
  * Position d'un Retour dans la boîte de réception : son instant de création à la
@@ -25,7 +27,6 @@ interface Position {
 }
 
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const encodeCurseur = (position: Position): string =>
   Buffer.from(JSON.stringify([position.instant, position.id])).toString('base64url');
@@ -39,7 +40,7 @@ function decodeCurseur(curseur: string): Position {
         typeof instant === 'string' &&
         INSTANT.test(instant) &&
         typeof id === 'string' &&
-        UUID.test(id)
+        isUuid(id)
       ) {
         return { instant, id };
       }
@@ -47,10 +48,11 @@ function decodeCurseur(curseur: string): Position {
   } catch {
     // Rendu en 400 ci-dessous.
   }
-  throw new BadRequestException({
+  const refus: ApiErrorBody = {
     erreur: 'requete_invalide',
     details: [{ chemin: 'curseur', message: 'Curseur invalide' }],
-  });
+  };
+  throw new BadRequestException(refus);
 }
 
 /** Retours de tous les Projets, tels qu'un Membre les lit (pas de rôles en v1). */
@@ -59,13 +61,16 @@ export class RetoursService {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   /** Une page de la boîte de réception, du plus récent au plus ancien. */
-  async list(filtres: Filtres): Promise<PageRetours> {
+  async list(filtres: FiltresRetours): Promise<PageRetours> {
     const conditions: SQL[] = [];
     if (filtres.projet) conditions.push(eq(retours.projetId, filtres.projet));
     if (filtres.etat) conditions.push(eq(retours.etat, filtres.etat));
     if (filtres.source) conditions.push(eq(retours.source, filtres.source));
     if (filtres.type) conditions.push(eq(verdicts.typeRetenu, filtres.type));
     if (filtres.gravite) conditions.push(eq(verdicts.gravite, filtres.gravite));
+    if (filtres.incertain !== undefined) {
+      conditions.push(eq(verdicts.incertain, filtres.incertain));
+    }
     if (filtres.curseur) {
       const apres = decodeCurseur(filtres.curseur);
       conditions.push(
@@ -109,6 +114,7 @@ export class RetoursService {
         source: ligne.source,
         apercu: ligne.apercu,
         typeDeclare: ligne.typeDeclare,
+        // Sans Verdict, la jointure à gauche rend ses colonnes nulles : `verdictId` en décide.
         verdict: ligne.verdictId ? toVerdictVu(ligne as VerdictColonnes) : null,
         createdAt: ligne.createdAt.toISOString(),
       })),
@@ -121,7 +127,7 @@ export class RetoursService {
 
   /** Le détail d'un Retour : texte, Auteur, contexte, Verdict et Envois (du plus ancien au plus récent). */
   async read(id: string): Promise<RetourDetailVu> {
-    if (!UUID.test(id)) throw retourIntrouvable();
+    if (!isUuid(id)) throw retourIntrouvable();
     const retour = await this.db.query.retours.findFirst({
       where: eq(retours.id, id),
       with: {

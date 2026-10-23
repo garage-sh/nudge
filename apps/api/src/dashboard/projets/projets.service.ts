@@ -4,8 +4,7 @@ import { createProjet, projets, type Db, type Projet } from '@nudge/database';
 import type { ProjetAvecCleSecrete, ProjetVu } from '@nudge/shared';
 import { asc, eq } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from '../../validation.js';
 
 /** Un Projet tel qu'un Membre le voit : jamais l'empreinte de la clé secrète. */
 export const toProjetVu = (projet: Projet): ProjetVu => ({
@@ -34,7 +33,7 @@ export class ProjetsService {
   }
 
   async read(id: string): Promise<ProjetVu> {
-    if (!UUID.test(id)) throw projetIntrouvable();
+    if (!isUuid(id)) throw projetIntrouvable();
     const [projet] = await this.db.select().from(projets).where(eq(projets.id, id)).limit(1);
     if (!projet) throw projetIntrouvable();
     return toProjetVu(projet);
@@ -71,7 +70,7 @@ export class ProjetsService {
     id: string,
     valeurs: Partial<typeof projets.$inferInsert>,
   ): Promise<ProjetVu> {
-    if (!UUID.test(id)) throw projetIntrouvable();
+    if (!isUuid(id)) throw projetIntrouvable();
     // Un PATCH vide touche quand même `updated_at` : drizzle refuse un SET sans colonne.
     const [projet] = await this.db
       .update(projets)

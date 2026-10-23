@@ -10,7 +10,7 @@ import { RetoursService } from './retours.service.js';
 export class RetoursController {
   constructor(private readonly retours: RetoursService) {}
 
-  /** Filtres : `projet`, `type`, `gravite`, `etat`, `source` ; pagination : `curseur`, `limite`. */
+  /** Filtres : `projet`, `type`, `gravite`, `etat`, `source`, `incertain` ; pagination : `curseur`, `limite`. */
   @Get()
   lister(@Query() requete: unknown): Promise<PageRetours> {
     return this.retours.list(parseBody(schemaFiltresRetours, requete));

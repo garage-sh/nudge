@@ -74,6 +74,8 @@ describe('Boîte de réception des Retours', () => {
     expect(await ids('?etat=dispatche')).toEqual([]);
     expect(await ids('?source=api')).toEqual([question, suggestion, bug]);
     expect(await ids('?source=widget')).toEqual([]);
+    expect(await ids('?incertain=false')).toEqual([question, suggestion, bug]);
+    expect(await ids('?incertain=true')).toEqual([]);
   });
 
   it('pagine par curseur, sans perdre ni répéter de Retour', async () => {
@@ -104,6 +106,7 @@ describe('Boîte de réception des Retours', () => {
     ['une limite démesurée', '?limite=1000'],
     ['un curseur forgé', '?curseur=pas-un-curseur'],
     ['un filtre inconnu', '?priorite=haute'],
+    ['un marqueur Incertain qui n’est pas un booléen', '?incertain=peut-etre'],
   ])('refuse %s', async (_cas, requete) => {
     expect(await membre.get(`/api/retours${requete}`)).toMatchObject({
       status: 400,
@@ -232,5 +235,11 @@ describe('Boîte de réception sans Juge', () => {
     expect(liste.body.retours).toMatchObject([
       { id, verdict: { typeRetenu: 'question', gravite: null, incertain: true } },
     ]);
+    expect(
+      (await membre.get<PageRetours>('/api/retours?incertain=true')).body.retours,
+    ).toMatchObject([{ id }]);
+    expect((await membre.get<PageRetours>('/api/retours?incertain=false')).body.retours).toEqual(
+      [],
+    );
   });
 });

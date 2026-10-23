@@ -165,7 +165,7 @@ export interface ProjetAvecCleSecrete {
 
 /**
  * Filtres et pagination de la boîte de réception (`GET /api/retours?…`).
- * Type et Gravité portent sur le Verdict : un Retour pas encore trié n'y répond pas.
+ * Type, Gravité et Incertain portent sur le Verdict : un Retour pas encore trié n'y répond pas.
  */
 export const schemaFiltresRetours = z.strictObject({
   projet: z.uuid().optional(),
@@ -173,6 +173,11 @@ export const schemaFiltresRetours = z.strictObject({
   gravite: z.enum(GRAVITES).optional(),
   etat: z.enum(ETATS_RETOUR).optional(),
   source: z.enum(SOURCES).optional(),
+  /** `true` : seulement les Verdicts Incertains, à vérifier en priorité. */
+  incertain: z
+    .enum(['true', 'false'])
+    .transform((valeur) => valeur === 'true')
+    .optional(),
   /** Le `suivant` de la page précédente. */
   curseur: z.string().max(200).optional(),
   limite: z.coerce
@@ -182,8 +187,6 @@ export const schemaFiltresRetours = z.strictObject({
     .max(LIMITES_DASHBOARD.retoursParPageMax)
     .default(LIMITES_DASHBOARD.retoursParPage),
 });
-export type FiltresRetours = z.input<typeof schemaFiltresRetours>;
-
 export interface ProjetRefVu {
   readonly id: string;
   readonly nom: string;
@@ -227,14 +230,17 @@ export interface AuteurVu {
   readonly confiance: ConfianceAuteur;
 }
 
+export interface DestinationRefVu {
+  readonly id: string;
+  readonly nom: string;
+  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
+  readonly type: string;
+  readonly etat: EtatDestination;
+}
+
 export interface EnvoiVu {
   readonly id: string;
-  readonly destination: {
-    readonly id: string;
-    readonly nom: string;
-    readonly type: string;
-    readonly etat: EtatDestination;
-  };
+  readonly destination: DestinationRefVu;
   readonly statut: StatutEnvoi;
   /** Lien vers l'objet créé chez la Destination (issue, message), une fois livré. */
   readonly lienExterne: string | null;

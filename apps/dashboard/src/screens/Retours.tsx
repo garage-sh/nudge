@@ -1,7 +1,12 @@
 import { ETATS_RETOUR, GRAVITES, SOURCES, TYPES_RETOUR, type RetourResumeVu } from '@nudge/shared';
 import { Link, useSearchParams } from 'react-router';
 import { useProjets } from '../api/projets.js';
-import { FILTRES_RETOURS, useRetours, type FiltresBoite } from '../api/retours.js';
+import {
+  FILTRES_RETOURS,
+  useRetours,
+  type FiltresRetours,
+  type NomFiltre,
+} from '../api/retours.js';
 import {
   formatDate,
   LIBELLES_ETAT,
@@ -15,13 +20,13 @@ import { BadgeIncertain } from './retour-badges.js';
 /** Boîte de réception : les Retours de tous les Projets ; les filtres vivent dans l'URL. */
 export function Retours() {
   const [parametres, setParametres] = useSearchParams();
-  const filtres: FiltresBoite = Object.fromEntries(
+  const filtres: FiltresRetours = Object.fromEntries(
     FILTRES_RETOURS.flatMap((nom) => {
       const valeur = parametres.get(nom);
       return valeur ? [[nom, valeur]] : [];
     }),
   );
-  const filtrer = (nom: (typeof FILTRES_RETOURS)[number], valeur: string) => {
+  const filtrer = (nom: NomFiltre, valeur: string) => {
     const suivants = new URLSearchParams(parametres);
     if (valeur) suivants.set(nom, valeur);
     else suivants.delete(nom);
@@ -66,8 +71,8 @@ function Filtres({
   filtres,
   filtrer,
 }: {
-  filtres: FiltresBoite;
-  filtrer: (nom: (typeof FILTRES_RETOURS)[number], valeur: string) => void;
+  filtres: FiltresRetours;
+  filtrer: (nom: NomFiltre, valeur: string) => void;
 }) {
   const projets = useProjets();
   const options = (valeurs: readonly string[], libelles: Record<string, string>) =>
@@ -82,6 +87,14 @@ function Filtres({
     { nom: 'gravite', libelle: 'Gravité', options: options(GRAVITES, LIBELLES_GRAVITE) },
     { nom: 'etat', libelle: 'État', options: options(ETATS_RETOUR, LIBELLES_ETAT) },
     { nom: 'source', libelle: 'Source', options: options(SOURCES, LIBELLES_SOURCE) },
+    {
+      nom: 'incertain',
+      libelle: 'Verdict',
+      options: [
+        { valeur: 'true', libelle: 'Incertains seulement' },
+        { valeur: 'false', libelle: 'Sans les Incertains' },
+      ],
+    },
   ] as const;
   return (
     <div className="filtres" role="group" aria-label="Filtres">

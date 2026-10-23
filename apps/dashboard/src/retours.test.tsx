@@ -81,7 +81,8 @@ describe('Boîte de réception', () => {
     expect(recu.textContent).toMatch(/Non trié/);
   });
 
-  it('filtre par Projet, Type, Gravité, état et Source', async () => {
+  it('filtre par Projet, Type, Gravité, état, Source et Verdict Incertain', async () => {
+    const base = 'GET /api/retours?projet=projet-1&type=bug&gravite=bloquante&etat=dispatche';
     const api = fakeApi({
       'GET /api/session': CONNECTE,
       'GET /api/projets': PROJETS,
@@ -89,10 +90,9 @@ describe('Boîte de réception', () => {
       'GET /api/retours?projet=projet-1': page([RETOUR]),
       'GET /api/retours?projet=projet-1&type=bug': page([RETOUR]),
       'GET /api/retours?projet=projet-1&type=bug&gravite=bloquante': page([RETOUR]),
-      'GET /api/retours?projet=projet-1&type=bug&gravite=bloquante&etat=dispatche': page([RETOUR]),
-      'GET /api/retours?projet=projet-1&type=bug&gravite=bloquante&etat=dispatche&source=api': page(
-        [],
-      ),
+      [base]: page([RETOUR]),
+      [`${base}&source=api`]: page([RETOUR]),
+      [`${base}&source=api&incertain=true`]: page([]),
     });
     renderDashboard('/retours');
     await screen.findByText('Le paiement plante');
@@ -102,11 +102,10 @@ describe('Boîte de réception', () => {
     await userEvent.selectOptions(screen.getByLabelText('Gravité'), 'Bloquante');
     await userEvent.selectOptions(screen.getByLabelText('État'), 'Dispatché');
     await userEvent.selectOptions(screen.getByLabelText('Source'), 'API');
+    await userEvent.selectOptions(screen.getByLabelText('Verdict'), 'Incertains seulement');
 
     expect(await screen.findByText(/Aucun Retour ne correspond/)).toBeTruthy();
-    expect(api.appels.map((a) => a.route)).toContain(
-      'GET /api/retours?projet=projet-1&type=bug&gravite=bloquante&etat=dispatche&source=api',
-    );
+    expect(api.appels.map((a) => a.route)).toContain(`${base}&source=api&incertain=true`);
   });
 
   it('charge la page suivante à la demande', async () => {

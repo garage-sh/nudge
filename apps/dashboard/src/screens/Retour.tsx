@@ -25,7 +25,7 @@ export function Retour() {
   const retour = useRetour(id);
   if (retour.isPending) return <Loading />;
   if (retour.isError) return <ErrorMessage erreur={retour.error} />;
-  const r = retour.data;
+  const detail = retour.data;
   return (
     <article className="retour">
       <p className="discret">
@@ -33,28 +33,28 @@ export function Retour() {
       </p>
       <h1>Retour</h1>
       <p className="meta">
-        <Link to={`/projets/${r.projet.id}`}>{r.projet.nom}</Link>
-        <span>{LIBELLES_ETAT[r.etat]}</span>
-        <span>{LIBELLES_SOURCE[r.source]}</span>
-        <time dateTime={r.createdAt}>{formatDate(r.createdAt)}</time>
+        <Link to={`/projets/${detail.projet.id}`}>{detail.projet.nom}</Link>
+        <span>{LIBELLES_ETAT[detail.etat]}</span>
+        <span>{LIBELLES_SOURCE[detail.source]}</span>
+        <time dateTime={detail.createdAt}>{formatDate(detail.createdAt)}</time>
       </p>
       <p className="texte-retour" aria-label="Texte du Retour">
-        {r.texte}
+        {detail.texte}
       </p>
-      {r.typeDeclare ? (
-        <p className="discret">Type déclaré par l’Auteur : {LIBELLES_TYPE[r.typeDeclare]}</p>
+      {detail.typeDeclare ? (
+        <p className="discret">Type déclaré par l’Auteur : {LIBELLES_TYPE[detail.typeDeclare]}</p>
       ) : null}
       <Section id="verdict" titre="Verdict">
-        <Verdict verdict={r.verdict} />
+        <Verdict verdict={detail.verdict} />
       </Section>
       <Section id="auteur" titre="Auteur">
-        <Auteur auteur={r.auteur} />
+        <Auteur auteur={detail.auteur} />
       </Section>
       <Section id="contexte" titre="Contexte">
-        <ContexteRetour contexte={r.contexte} />
+        <ContexteRetour contexte={detail.contexte} />
       </Section>
       <Section id="envois" titre="Envois">
-        <Envois envois={r.envois} />
+        <Envois envois={detail.envois} />
       </Section>
     </article>
   );
