@@ -1,6 +1,6 @@
 import type { Connexion, EtatSetup, MembreVu, NouveauMembre, SessionVue } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, isSessionPerdue } from './client.js';
+import { api, isSessionLost } from './client.js';
 
 export const CLE_SESSION = ['session'] as const;
 const CLE_SETUP = ['setup'] as const;
@@ -13,7 +13,7 @@ export function useSession() {
       try {
         return (await api.get<SessionVue>('/api/session')).membre;
       } catch (erreur) {
-        if (isSessionPerdue(erreur)) return null;
+        if (isSessionLost(erreur)) return null;
         throw erreur;
       }
     },

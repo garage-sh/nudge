@@ -6,7 +6,7 @@ import {
   type ProjetVu,
 } from '@nudge/shared';
 import { SessionGuard } from '../auth/session.guard.js';
-import { parseBody } from '../validation.js';
+import { parseBody } from '../../validation.js';
 import { ProjetsService } from './projets.service.js';
 
 @Controller('api/projets')

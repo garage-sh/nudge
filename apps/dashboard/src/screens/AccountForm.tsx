@@ -1,9 +1,9 @@
 import { LIMITES_DASHBOARD } from '@nudge/shared';
 import { useState, type FormEvent } from 'react';
-import { Champ, MessageErreur } from '../mise-en-page/ui.js';
+import { Field, ErrorMessage } from '../layout/ui.js';
 
 /** Email + mot de passe : connexion, ou création d'un compte (setup, invitation). */
-export function FormulaireCompte({
+export function AccountForm({
   action,
   nouveauCompte,
   enCours,
@@ -24,7 +24,7 @@ export function FormulaireCompte({
   };
   return (
     <form onSubmit={soumettre} className="formulaire">
-      <Champ
+      <Field
         libelle="Email"
         type="email"
         autoComplete={nouveauCompte ? 'email' : 'username'}
@@ -32,7 +32,7 @@ export function FormulaireCompte({
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <Champ
+      <Field
         libelle="Mot de passe"
         type="password"
         autoComplete={nouveauCompte ? 'new-password' : 'current-password'}
@@ -42,7 +42,7 @@ export function FormulaireCompte({
         value={motDePasse}
         onChange={(e) => setMotDePasse(e.target.value)}
       />
-      <MessageErreur erreur={erreur} />
+      <ErrorMessage erreur={erreur} />
       <button type="submit" disabled={enCours}>
         {action}
       </button>

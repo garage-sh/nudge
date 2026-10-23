@@ -1,9 +1,9 @@
 import { Navigate, useLocation } from 'react-router';
 import { useConnexion, useEtatSetup, useSession } from '../api/session.js';
-import { PagePublique } from '../mise-en-page/Layout.js';
-import { Chargement } from '../mise-en-page/ui.js';
+import { PublicPage } from '../layout/Layout.js';
+import { Loading } from '../layout/ui.js';
 import type { DepuisState } from '../session/RequireSession.js';
-import { FormulaireCompte } from './FormulaireCompte.js';
+import { AccountForm } from './AccountForm.js';
 
 export function Connexion() {
   const session = useSession();
@@ -12,17 +12,17 @@ export function Connexion() {
   const depuis = (useLocation().state as DepuisState | null)?.depuis ?? '/projets';
 
   if (session.data) return <Navigate to={depuis} replace />;
-  if (session.isPending || etat.isPending) return <Chargement />;
+  if (session.isPending || etat.isPending) return <Loading />;
   if (etat.data?.requis) return <Navigate to="/setup" replace />;
   return (
-    <PagePublique titre="Connexion">
-      <FormulaireCompte
+    <PublicPage titre="Connexion">
+      <AccountForm
         action="Se connecter"
         nouveauCompte={false}
         enCours={connexion.isPending}
         erreur={connexion.error}
         onSubmit={(identifiants) => connexion.mutate(identifiants)}
       />
-    </PagePublique>
+    </PublicPage>
   );
 }

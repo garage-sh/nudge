@@ -1,13 +1,13 @@
-import type { ErreurApiCorps } from '@nudge/shared';
+import type { ApiErrorBody } from '@nudge/shared';
 
 /** Erreur rendue par l'API du dashboard : statut HTTP et code stable (`session_requise`…). */
-export class ErreurApi extends Error {
+export class ApiError extends Error {
   constructor(
     readonly status: number,
-    readonly corps: ErreurApiCorps,
+    readonly corps: ApiErrorBody,
   ) {
     super(`${status} ${corps.erreur}`);
-    this.name = 'ErreurApi';
+    this.name = 'ApiError';
   }
 
   get code(): string {
@@ -16,27 +16,31 @@ export class ErreurApi extends Error {
 }
 
 /** Une 401 de l'API : la session est absente, expirée ou révoquée. */
-export const isSessionPerdue = (erreur: unknown): boolean =>
-  erreur instanceof ErreurApi && erreur.status === 401;
+export const isSessionLost = (erreur: unknown): boolean =>
+  erreur instanceof ApiError && erreur.status === 401;
 
 type Methode = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 /**
  * Appel à l'API du dashboard (`/api/…`, même origine : le cookie de session
- * httpOnly part tout seul). Rend le corps JSON, ou lève une `ErreurApi`.
+ * httpOnly part tout seul). Rend le corps JSON, ou lève une `ApiError`.
  */
 export async function apiFetch<T>(methode: Methode, chemin: string, corps?: unknown): Promise<T> {
   const reponse = await fetch(chemin, {
     method: methode,
     credentials: 'same-origin',
-    headers: corps === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: {
+      // Exigé par l'api sur toute écriture (défense CSRF) ; posé partout par simplicité.
+      'x-nudge-client': 'dashboard',
+      ...(corps === undefined ? {} : { 'content-type': 'application/json' }),
+    },
     body: corps === undefined ? undefined : JSON.stringify(corps),
   });
   const texte = await reponse.text();
   const json: unknown = texte ? JSON.parse(texte) : null;
   if (!reponse.ok) {
-    const code = (json as Partial<ErreurApiCorps> | null)?.erreur;
-    throw new ErreurApi(reponse.status, {
+    const code = (json as Partial<ApiErrorBody> | null)?.erreur;
+    throw new ApiError(reponse.status, {
       ...(json as object),
       erreur: typeof code === 'string' ? code : 'erreur_inconnue',
     });

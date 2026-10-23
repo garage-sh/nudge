@@ -43,7 +43,8 @@ export class DashboardClient {
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<ReponseDashboard<T>> {
-    const headers: Record<string, string> = {};
+    // Le dashboard signe chacune de ses requêtes : l'api refuse une écriture sans cet en-tête.
+    const headers: Record<string, string> = { 'x-nudge-client': 'dashboard' };
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (this.session) headers.cookie = `${COOKIE_SESSION}=${this.session}`;
     const reponse = await fetch(`${this.baseUrl}${path}`, {

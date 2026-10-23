@@ -10,7 +10,7 @@ import type { Request } from 'express';
 import { readSessionCookie } from './session-cookie.js';
 import { SessionsService } from './sessions.service.js';
 
-export type RequeteMembre = Request & { membre: MembreVu };
+export type MembreRequest = Request & { membre: MembreVu };
 
 /**
  * Exige une session de Membre (cookie `nudge_session`) : 401 `session_requise` sinon.
@@ -21,7 +21,7 @@ export class SessionGuard implements CanActivate {
   constructor(private readonly sessions: SessionsService) {}
 
   async canActivate(contexte: ExecutionContext): Promise<boolean> {
-    const requete = contexte.switchToHttp().getRequest<RequeteMembre>();
+    const requete = contexte.switchToHttp().getRequest<MembreRequest>();
     const jeton = readSessionCookie(requete);
     const membre = jeton ? await this.sessions.resolve(jeton) : null;
     if (!membre) throw new UnauthorizedException({ erreur: 'session_requise' });
@@ -33,5 +33,5 @@ export class SessionGuard implements CanActivate {
 /** Le Membre connecté, posé par `SessionGuard`. */
 export const MembreCourant = createParamDecorator(
   (_: unknown, contexte: ExecutionContext): MembreVu =>
-    contexte.switchToHttp().getRequest<RequeteMembre>().membre,
+    contexte.switchToHttp().getRequest<MembreRequest>().membre,
 );

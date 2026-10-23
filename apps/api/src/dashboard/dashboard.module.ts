@@ -1,5 +1,11 @@
-import { Module, type DynamicModule } from '@nestjs/common';
+import {
+  Module,
+  type DynamicModule,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
 import { SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
+import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
 import { MembresService } from './auth/membres.service.js';
@@ -10,21 +16,26 @@ import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
 import { ProjetsController } from './projets/projets.controller.js';
 import { ProjetsService } from './projets/projets.service.js';
+import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
   readonly sessionCookie: SessionCookieOptions;
 }
 
+/** Contrôleurs de l'API du dashboard : tous passent par `ClientHeaderMiddleware`. */
+const CONTROLLERS = [SetupController, SessionController, InvitationsController, ProjetsController];
+
 /**
  * API du dashboard, sous `/api/…`, authentifiée par session de Membre.
- * Un écran qui a besoin d'un endpoint ajoute ici son contrôleur, gardé par `SessionGuard`.
+ * Un écran qui a besoin d'un endpoint ajoute son contrôleur à `CONTROLLERS`, gardé
+ * par `SessionGuard`, et ses services aux `providers`.
  */
 @Module({})
-export class DashboardModule {
+export class DashboardModule implements NestModule {
   static forRoot(options: DashboardOptions): DynamicModule {
     return {
       module: DashboardModule,
-      controllers: [SetupController, SessionController, InvitationsController, ProjetsController],
+      controllers: CONTROLLERS,
       providers: [
         { provide: SESSION_COOKIE_OPTIONS, useValue: options.sessionCookie },
         MembresService,
@@ -32,7 +43,12 @@ export class DashboardModule {
         InvitationsService,
         ProjetsService,
         SessionGuard,
+        AuthThrottleGuard,
       ],
     };
+  }
+
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ClientHeaderMiddleware).forRoutes(...CONTROLLERS);
   }
 }

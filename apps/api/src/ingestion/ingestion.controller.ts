@@ -1,13 +1,6 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  HttpCode,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
 import { schemaRetourEntrant } from '@nudge/shared';
+import { parseBody } from '../validation.js';
 import { CleSecreteGuard, type AuthenticatedRequest } from './cle-secrete.guard.js';
 import { IngestionService } from './ingestion.service.js';
 
@@ -20,16 +13,7 @@ export class IngestionController {
   @HttpCode(202)
   @UseGuards(CleSecreteGuard)
   async poster(@Req() requete: AuthenticatedRequest, @Body() corps: unknown) {
-    const resultat = schemaRetourEntrant.safeParse(corps);
-    if (!resultat.success) {
-      throw new BadRequestException({
-        erreur: 'retour_invalide',
-        details: resultat.error.issues.map((issue) => ({
-          chemin: issue.path.join('.'),
-          message: issue.message,
-        })),
-      });
-    }
-    return this.ingestion.receive(requete.projet.id, 'api', resultat.data);
+    const retour = parseBody(schemaRetourEntrant, corps, 'retour_invalide');
+    return this.ingestion.receive(requete.projet.id, 'api', retour);
   }
 }

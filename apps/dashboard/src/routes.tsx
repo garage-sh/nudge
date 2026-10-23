@@ -1,11 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router';
-import { Connexion } from './ecrans/Connexion.js';
-import { Invitation } from './ecrans/Invitation.js';
-import { Membres } from './ecrans/Membres.js';
-import { Projet } from './ecrans/Projet.js';
-import { Projets } from './ecrans/Projets.js';
-import { Setup } from './ecrans/Setup.js';
-import { Layout } from './mise-en-page/Layout.js';
+import { Connexion } from './screens/Connexion.js';
+import { Invitation } from './screens/Invitation.js';
+import { Membres } from './screens/Membres.js';
+import { Projet } from './screens/Projet.js';
+import { Projets } from './screens/Projets.js';
+import { Setup } from './screens/Setup.js';
+import { Layout } from './layout/Layout.js';
 import { RequireSession } from './session/RequireSession.js';
 
 /**

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useCreationProjet, useProjets } from '../api/projets.js';
-import { Chargement, Champ, MessageErreur } from '../mise-en-page/ui.js';
+import { Loading, Field, ErrorMessage } from '../layout/ui.js';
 import type { CleSecreteState } from './Projet.js';
 
 export function Projets() {
@@ -9,8 +9,8 @@ export function Projets() {
   return (
     <section>
       <h1>Projets</h1>
-      {projets.isPending ? <Chargement /> : null}
-      <MessageErreur erreur={projets.error} />
+      {projets.isPending ? <Loading /> : null}
+      <ErrorMessage erreur={projets.error} />
       {projets.data?.length === 0 ? (
         <p className="discret">Aucun Projet pour l’instant : créez le premier ci-dessous.</p>
       ) : null}
@@ -47,13 +47,13 @@ function NouveauProjet() {
   return (
     <form onSubmit={soumettre} className="formulaire encadre">
       <h2>Nouveau Projet</h2>
-      <Champ
+      <Field
         libelle="Nom du Projet"
         required
         value={nom}
         onChange={(e) => setNom(e.target.value)}
       />
-      <MessageErreur erreur={creation.error} />
+      <ErrorMessage erreur={creation.error} />
       <button type="submit" disabled={creation.isPending}>
         Créer le Projet
       </button>

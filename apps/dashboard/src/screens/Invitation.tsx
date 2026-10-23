@@ -1,9 +1,9 @@
 import { Link, Navigate, useParams } from 'react-router';
 import { useInvitation } from '../api/invitations.js';
 import { useAcceptationInvitation } from '../api/session.js';
-import { PagePublique } from '../mise-en-page/Layout.js';
-import { Chargement, MessageErreur } from '../mise-en-page/ui.js';
-import { FormulaireCompte } from './FormulaireCompte.js';
+import { PublicPage } from '../layout/Layout.js';
+import { Loading, ErrorMessage } from '../layout/ui.js';
+import { AccountForm } from './AccountForm.js';
 
 /** Page du lien d'invitation : la personne invitée crée son compte de Membre. */
 export function Invitation() {
@@ -12,27 +12,27 @@ export function Invitation() {
   const acceptation = useAcceptationInvitation(jeton);
 
   if (acceptation.isSuccess) return <Navigate to="/projets" replace />;
-  if (invitation.isPending) return <Chargement />;
+  if (invitation.isPending) return <Loading />;
   if (invitation.isError) {
     return (
-      <PagePublique titre="Invitation">
-        <MessageErreur erreur={invitation.error} />
+      <PublicPage titre="Invitation">
+        <ErrorMessage erreur={invitation.error} />
         <p>
           Demandez un nouveau lien à un Membre, ou <Link to="/connexion">connectez-vous</Link>.
         </p>
-      </PagePublique>
+      </PublicPage>
     );
   }
   return (
-    <PagePublique titre="Rejoindre l’Instance">
+    <PublicPage titre="Rejoindre l’Instance">
       <p>Vous êtes invité à rejoindre cette Instance nudge. Créez votre compte de Membre.</p>
-      <FormulaireCompte
+      <AccountForm
         action="Créer mon compte"
         nouveauCompte
         enCours={acceptation.isPending}
         erreur={acceptation.error}
         onSubmit={(identifiants) => acceptation.mutate(identifiants)}
       />
-    </PagePublique>
+    </PublicPage>
   );
 }

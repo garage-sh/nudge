@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
 import {
   schemaNouveauMembre,
   type InvitationCreee,
@@ -7,10 +7,9 @@ import {
   type SessionVue,
 } from '@nudge/shared';
 import type { Response } from 'express';
-import { SESSION_COOKIE_OPTIONS } from '../../infra/tokens.js';
-import { parseBody } from '../validation.js';
+import { AuthThrottleGuard } from './auth-throttle.guard.js';
+import { parseBody } from '../../validation.js';
 import { InvitationsService } from './invitations.service.js';
-import { writeSessionCookie, type SessionCookieOptions } from './session-cookie.js';
 import { MembreCourant, SessionGuard } from './session.guard.js';
 import { SessionsService } from './sessions.service.js';
 
@@ -19,7 +18,6 @@ export class InvitationsController {
   constructor(
     private readonly invitations: InvitationsService,
     private readonly sessions: SessionsService,
-    @Inject(SESSION_COOKIE_OPTIONS) private readonly cookie: SessionCookieOptions,
   ) {}
 
   /** Un Membre génère un lien d'invitation ; le jeton n'est lisible qu'ici. */
@@ -37,6 +35,7 @@ export class InvitationsController {
 
   /** Publique : la personne invitée crée son compte et repart connectée. */
   @Post(':jeton/acceptation')
+  @UseGuards(AuthThrottleGuard)
   async accepter(
     @Param('jeton') jeton: string,
     @Body() corps: unknown,
@@ -44,7 +43,7 @@ export class InvitationsController {
   ): Promise<SessionVue> {
     const { email, motDePasse } = parseBody(schemaNouveauMembre, corps);
     const membre = await this.invitations.accept(jeton, email, motDePasse);
-    writeSessionCookie(reponse, await this.sessions.open(membre.id), this.cookie);
+    await this.sessions.start(reponse, membre);
     return { membre };
   }
 }

@@ -100,7 +100,7 @@ export const schemaModificationProjet = z.strictObject({
 export type ModificationProjet = z.input<typeof schemaModificationProjet>;
 
 /** Corps d'erreur de l'api : un code stable, et le détail des champs refusés le cas échéant. */
-export interface ErreurApiCorps {
+export interface ApiErrorBody {
   readonly erreur: string;
   readonly details?: readonly { readonly chemin: string; readonly message: string }[];
 }

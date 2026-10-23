@@ -1,9 +1,8 @@
 import { hashCleSecrete, generateProjetKeys, type DestinationConfiguree } from '@nudge/core';
 import type { Db } from './client.js';
-import { destinations, membres, projets } from './schema.js';
+import { destinations, projets } from './schema.js';
 
 export type Projet = typeof projets.$inferSelect;
-export type Membre = typeof membres.$inferSelect;
 export type DestinationRow = typeof destinations.$inferSelect;
 
 /** Une Destination lue en base, telle que la reçoit un `DestinationAdapterResolver`. */

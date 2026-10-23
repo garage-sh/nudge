@@ -7,13 +7,7 @@ import {
   useRegenerationClePublique,
   useRegenerationCleSecrete,
 } from '../api/projets.js';
-import {
-  ActionConfirmee,
-  Chargement,
-  Champ,
-  MessageErreur,
-  ValeurCopiable,
-} from '../mise-en-page/ui.js';
+import { ConfirmAction, Loading, Field, ErrorMessage, CopyableValue } from '../layout/ui.js';
 
 /** État de navigation : la clé secrète d'un Projet tout juste créé. */
 export interface CleSecreteState {
@@ -40,8 +34,8 @@ function useCleSecreteRecue(): [string | null, (cle: string) => void] {
 export function Projet() {
   const id = useParams().id ?? '';
   const projet = useProjet(id);
-  if (projet.isPending) return <Chargement />;
-  if (projet.isError) return <MessageErreur erreur={projet.error} />;
+  if (projet.isPending) return <Loading />;
+  if (projet.isError) return <ErrorMessage erreur={projet.error} />;
   return (
     <section>
       <h1>{projet.data.nom}</h1>
@@ -61,26 +55,26 @@ function Cles({ projet }: { projet: ProjetVu }) {
       <h2>Clés</h2>
       <h3>Clé publique</h3>
       <p className="aide">Pour le Widget ; acceptée seulement depuis les origines autorisées.</p>
-      <ValeurCopiable libelle="Clé publique" valeur={projet.clePublique} />
-      <ActionConfirmee
+      <CopyableValue libelle="Clé publique" valeur={projet.clePublique} />
+      <ConfirmAction
         libelle="Régénérer la clé publique"
         question="L’ancienne clé publique cessera de fonctionner. Régénérer ?"
         enCours={publique.isPending}
         onConfirm={() => publique.mutate()}
       />
-      <MessageErreur erreur={publique.error} />
+      <ErrorMessage erreur={publique.error} />
 
       <h3>Clé secrète</h3>
       <p className="aide">Pour envoyer des Retours depuis un serveur. Ne la publiez jamais.</p>
       {cleSecrete ? (
         <div className="avertissement" role="status">
           <p>Copiez la clé secrète maintenant : elle ne sera plus jamais affichée.</p>
-          <ValeurCopiable libelle="Clé secrète" valeur={cleSecrete} />
+          <CopyableValue libelle="Clé secrète" valeur={cleSecrete} />
         </div>
       ) : (
         <p className="discret">Affichée une seule fois, à sa création. Perdue ? Régénérez-la.</p>
       )}
-      <ActionConfirmee
+      <ConfirmAction
         libelle="Régénérer la clé secrète"
         question="L’ancienne clé secrète cessera immédiatement de fonctionner. Régénérer ?"
         enCours={secrete.isPending}
@@ -88,7 +82,7 @@ function Cles({ projet }: { projet: ProjetVu }) {
           secrete.mutate(undefined, { onSuccess: (resultat) => setCleSecrete(resultat.cleSecrete) })
         }
       />
-      <MessageErreur erreur={secrete.error} />
+      <ErrorMessage erreur={secrete.error} />
     </div>
   );
 }
@@ -104,7 +98,7 @@ function Informations({ projet }: { projet: ProjetVu }) {
   return (
     <form onSubmit={soumettre} className="formulaire encadre">
       <h2>Informations</h2>
-      <Champ
+      <Field
         libelle="Nom du Projet"
         required
         value={nom}
@@ -123,7 +117,7 @@ function Informations({ projet }: { projet: ProjetVu }) {
           mieux la Gravité.
         </p>
       </div>
-      <MessageErreur erreur={modification.error} />
+      <ErrorMessage erreur={modification.error} />
       <button type="submit" disabled={modification.isPending}>
         Enregistrer
       </button>
@@ -162,7 +156,7 @@ function Origines({ projet }: { projet: ProjetVu }) {
           Le Widget n’est accepté que depuis ces origines (schéma://hôte[:port], sans chemin).
         </p>
       </div>
-      <MessageErreur erreur={modification.error} />
+      <ErrorMessage erreur={modification.error} />
       <button type="submit" disabled={modification.isPending}>
         Enregistrer
       </button>

@@ -17,7 +17,7 @@ export const toProjetVu = (projet: Projet): ProjetVu => ({
   createdAt: projet.createdAt.toISOString(),
 });
 
-export interface ChampsProjet {
+export interface ProjetFields {
   readonly nom?: string;
   readonly description?: string | null;
   readonly originesAutorisees?: readonly string[];
@@ -40,14 +40,14 @@ export class ProjetsService {
     return toProjetVu(projet);
   }
 
-  async create(champs: ChampsProjet & { nom: string }): Promise<ProjetAvecCleSecrete> {
+  async create(champs: ProjetFields & { nom: string }): Promise<ProjetAvecCleSecrete> {
     const { projet, cleSecrete } = await createProjet(this.db, champs);
     return { projet: toProjetVu(projet), cleSecrete };
   }
 
-  async update(id: string, champs: ChampsProjet): Promise<ProjetVu> {
+  async update(id: string, champs: ProjetFields): Promise<ProjetVu> {
     const { originesAutorisees, ...reste } = champs;
-    return this.set(id, {
+    return this.updateColumns(id, {
       ...reste,
       ...(originesAutorisees ? { originesAutorisees: [...originesAutorisees] } : {}),
     });
@@ -55,17 +55,22 @@ export class ProjetsService {
 
   /** Nouvelle clé publique : l'ancienne n'existe plus nulle part, elle est donc révoquée. */
   regenerateClePublique(id: string): Promise<ProjetVu> {
-    return this.set(id, { clePublique: generateClePublique() });
+    return this.updateColumns(id, { clePublique: generateClePublique() });
   }
 
   /** Nouvelle clé secrète, lisible une seule fois ; l'ancienne empreinte est remplacée. */
   async regenerateCleSecrete(id: string): Promise<ProjetAvecCleSecrete> {
     const cleSecrete = generateCleSecrete();
-    const projet = await this.set(id, { empreinteCleSecrete: hashCleSecrete(cleSecrete) });
+    const projet = await this.updateColumns(id, {
+      empreinteCleSecrete: hashCleSecrete(cleSecrete),
+    });
     return { projet, cleSecrete };
   }
 
-  private async set(id: string, valeurs: Partial<typeof projets.$inferInsert>): Promise<ProjetVu> {
+  private async updateColumns(
+    id: string,
+    valeurs: Partial<typeof projets.$inferInsert>,
+  ): Promise<ProjetVu> {
     if (!UUID.test(id)) throw projetIntrouvable();
     // Un PATCH vide touche quand même `updated_at` : drizzle refuse un SET sans colonne.
     const [projet] = await this.db

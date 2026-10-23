@@ -1,5 +1,5 @@
 import { lienInvitation, useCreationInvitation } from '../api/invitations.js';
-import { MessageErreur, ValeurCopiable } from '../mise-en-page/ui.js';
+import { ErrorMessage, CopyableValue } from '../layout/ui.js';
 
 const dateLongue = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
@@ -17,10 +17,10 @@ export function Membres() {
       <button type="button" disabled={invitation.isPending} onClick={() => invitation.mutate()}>
         Générer un lien d’invitation
       </button>
-      <MessageErreur erreur={invitation.error} />
+      <ErrorMessage erreur={invitation.error} />
       {invitation.data ? (
         <div className="encadre">
-          <ValeurCopiable
+          <CopyableValue
             libelle="Lien d’invitation"
             valeur={lienInvitation(invitation.data.jeton)}
           />

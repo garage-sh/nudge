@@ -19,27 +19,19 @@ export function readSessionCookie(requete: Request): string | null {
 
 /**
  * httpOnly : le script de la page ne lit jamais le jeton. SameSite=Lax : un site
- * tiers ne peut pas faire porter la session à un POST/PATCH/DELETE (CSRF).
+ * tiers ne fait pas porter la session à un POST/PATCH/DELETE (CSRF).
  */
+const attributs = (options: SessionCookieOptions) =>
+  ({ httpOnly: true, sameSite: 'lax', secure: options.secure, path: '/' }) as const;
+
 export function writeSessionCookie(
   reponse: Response,
   jeton: string,
   options: SessionCookieOptions,
 ): void {
-  reponse.cookie(COOKIE_SESSION, jeton, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: options.secure,
-    path: '/',
-    maxAge: DUREE_SESSION_MS,
-  });
+  reponse.cookie(COOKIE_SESSION, jeton, { ...attributs(options), maxAge: DUREE_SESSION_MS });
 }
 
 export function clearSessionCookie(reponse: Response, options: SessionCookieOptions): void {
-  reponse.clearCookie(COOKIE_SESSION, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: options.secure,
-    path: '/',
-  });
+  reponse.clearCookie(COOKIE_SESSION, attributs(options));
 }

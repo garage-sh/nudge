@@ -1,5 +1,5 @@
 import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
-import { ErreurApi } from '../api/client.js';
+import { ApiError } from '../api/client.js';
 
 const MESSAGES: Record<string, string> = {
   identifiants_invalides: 'Email ou mot de passe incorrect.',
@@ -11,34 +11,34 @@ const MESSAGES: Record<string, string> = {
 };
 
 /** Message lisible pour une erreur de l'API (code connu, détail des champs refusés) ou du réseau. */
-export function messageErreur(erreur: unknown): string {
-  if (!(erreur instanceof ErreurApi)) return 'L’Instance est injoignable. Réessayez.';
+export function errorMessage(erreur: unknown): string {
+  if (!(erreur instanceof ApiError)) return 'L’Instance est injoignable. Réessayez.';
   if (erreur.code === 'requete_invalide' && erreur.corps.details?.length) {
     return erreur.corps.details.map((detail) => detail.message).join(' ');
   }
   return MESSAGES[erreur.code] ?? `Erreur inattendue (${erreur.code}).`;
 }
 
-export function MessageErreur({ erreur }: { erreur: unknown }) {
+export function ErrorMessage({ erreur }: { erreur: unknown }) {
   if (!erreur) return null;
   return (
     <p role="alert" className="alerte">
-      {messageErreur(erreur)}
+      {errorMessage(erreur)}
     </p>
   );
 }
 
-export function Chargement() {
+export function Loading() {
   return (
     <p className="discret" aria-live="polite">
-      Chargement…
+      Loading…
     </p>
   );
 }
 
-type ChampProps = InputHTMLAttributes<HTMLInputElement> & { libelle: string; aide?: ReactNode };
+type FieldProps = InputHTMLAttributes<HTMLInputElement> & { libelle: string; aide?: ReactNode };
 
-export function Champ({ libelle, aide, id, ...input }: ChampProps) {
+export function Field({ libelle, aide, id, ...input }: FieldProps) {
   const identifiant = id ?? `champ-${libelle.toLowerCase().replace(/\W+/g, '-')}`;
   return (
     <div className="champ">
@@ -50,7 +50,7 @@ export function Champ({ libelle, aide, id, ...input }: ChampProps) {
 }
 
 /** Une clé ou un lien affiché en entier, avec un bouton de copie. */
-export function ValeurCopiable({ valeur, libelle }: { valeur: string; libelle: string }) {
+export function CopyableValue({ valeur, libelle }: { valeur: string; libelle: string }) {
   const [copie, setCopie] = useState(false);
   const copier = async () => {
     await navigator.clipboard.writeText(valeur);
@@ -67,7 +67,7 @@ export function ValeurCopiable({ valeur, libelle }: { valeur: string; libelle: s
 }
 
 /** Action irréversible en deux temps : le bouton demande une confirmation sur place. */
-export function ActionConfirmee({
+export function ConfirmAction({
   libelle,
   question,
   enCours,

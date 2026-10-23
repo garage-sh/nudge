@@ -37,7 +37,7 @@ export function Layout() {
 }
 
 /** Page publique centrée (setup, connexion, invitation). */
-export function PagePublique({ titre, children }: { titre: string; children: React.ReactNode }) {
+export function PublicPage({ titre, children }: { titre: string; children: React.ReactNode }) {
   return (
     <main className="publique">
       <div className="carte">

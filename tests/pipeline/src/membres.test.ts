@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startPipeline, type Pipeline } from './harness/index.js';
 
 const ADA = { email: 'ada@nudge.test', motDePasse: 'un mot de passe solide' };
@@ -130,6 +130,51 @@ describe('Membres : setup, session, invitation', () => {
     });
   });
 
+  describe('protections des routes publiques', () => {
+    beforeEach(async () => {
+      await pipeline.dashboard().post('/api/setup', ADA);
+    });
+
+    it('refuse une écriture qui ne vient pas du dashboard (CSRF)', async () => {
+      const navigateur = pipeline.dashboard();
+      await navigateur.post('/api/session', ADA);
+      const sansEnTete = (chemin: string, corps?: unknown) =>
+        fetch(`${pipeline.url}${chemin}`, {
+          method: 'POST',
+          headers: {
+            cookie: `nudge_session=${navigateur.sessionCookie}`,
+            'content-type': 'text/plain',
+          },
+          body: corps === undefined ? undefined : JSON.stringify(corps),
+        });
+
+      for (const reponse of [
+        await sansEnTete('/api/invitations'),
+        await sansEnTete('/api/session', ADA),
+      ]) {
+        expect(reponse.status).toBe(403);
+        expect(await reponse.json()).toMatchObject({ erreur: 'en_tete_manquant' });
+      }
+    });
+
+    it('freine les tentatives de connexion répétées depuis une même adresse', async () => {
+      for (let essai = 0; essai < 10; essai += 1) {
+        const echec = await pipeline.dashboard().post('/api/session', {
+          email: ADA.email,
+          motDePasse: `essai ${essai}`,
+        });
+        expect(echec.status).toBe(401);
+      }
+
+      const bonMotDePasse = await pipeline.dashboard().post('/api/session', ADA);
+
+      expect(bonMotDePasse).toMatchObject({
+        status: 429,
+        body: { erreur: 'trop_de_tentatives' },
+      });
+    });
+  });
+
   describe('invitation', () => {
     const BOB = { email: 'bob@nudge.test', motDePasse: 'le mot de passe de bob' };
 
@@ -170,6 +215,22 @@ describe('Membres : setup, session, invitation', () => {
       expect(await pipeline.dashboard().get(`/api/invitations/${jeton}`)).toMatchObject({
         status: 404,
       });
+    });
+
+    it('expire au bout de sept jours', async () => {
+      const jeton = await inviter();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60_000);
+
+        const tardive = await pipeline
+          .dashboard()
+          .post(`/api/invitations/${jeton}/acceptation`, BOB);
+
+        expect(tardive).toMatchObject({ status: 404, body: { erreur: 'invitation_invalide' } });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('refuse un lien inconnu', async () => {

@@ -38,6 +38,10 @@ _Avoid_: Support, demande
 La personne qui a laissé un Retour. Anonyme par défaut ; identifiée seulement si l'application hôte ou l'utilisateur le fournit.
 _Avoid_: User, reporter, client
 
+**Origine autorisée**:
+Une origine web (`https://app.exemple.com`) depuis laquelle la clé publique d'un Projet est acceptée. Une propriété du Projet, pas la Source d'un Retour.
+_Avoid_: Domaine autorisé, whitelist
+
 **Widget**:
 Le formulaire embarquable que nudge fournit aux Projets web pour recueillir des Retours.
 _Avoid_: SDK, snippet, plugin
