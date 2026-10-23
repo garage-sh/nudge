@@ -12,7 +12,7 @@ import {
   type RetourLu,
 } from '@nudge/database';
 import type { RetourEntrant } from '@nudge/shared';
-import { createWorker } from '@nudge/worker';
+import { createWorker, type OptionsBalayage } from '@nudge/worker';
 import { Client } from 'pg';
 import { inject } from 'vitest';
 import { DashboardClient } from './dashboard-client.js';
@@ -27,7 +27,7 @@ export interface PipelineOptions {
   /** Délai de réponse du Juge avant abandon et retry ; celui du worker sinon. */
   readonly delaiJugeMs?: number;
   /** Balayage des Retours restés Reçu ; celui du worker (5 min) sinon. */
-  readonly balayage?: { readonly delaiMs: number; readonly intervalleMs: number };
+  readonly balayage?: OptionsBalayage;
 }
 
 export interface Pipeline {

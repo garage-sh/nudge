@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ActionRevue, ResultatRevue, TriageJob } from '@nudge/core';
-import { revoirRetour, type Db } from '@nudge/database';
+import { annulerRevue, revoirRetour, type Db } from '@nudge/database';
 import type { Queue } from 'bullmq';
 import { DB, TRIAGE_QUEUE_TOKEN } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
@@ -35,10 +35,23 @@ export class RevueService {
     if (!isUuid(retourId)) return { statut: 'introuvable' };
     const resultat = await revoirRetour(this.db, retourId, action);
     if (resultat.statut === 'applique' && resultat.etat === 'trie') {
-      // Le job de triage dispatche un Retour Trié. Un Retour ne redevient Trié qu'une
-      // fois : un jobId propre à la revue suffit à ne pas l'enfiler deux fois.
-      await this.triageQueue.add('triage', { retourId }, { jobId: `${retourId}-revue` });
+      await this.dispatcher(retourId, action);
     }
     return resultat;
+  }
+
+  /**
+   * Le job de triage dispatche un Retour Trié. Un Retour ne redevient Trié qu'une
+   * fois : un jobId propre à la revue suffit à ne pas l'enfiler deux fois. Si la mise
+   * en queue échoue, la transition est annulée pour que le Membre puisse réessayer
+   * plutôt que de laisser un Retour Trié que rien ne dispatchera.
+   */
+  private async dispatcher(retourId: string, action: ActionRevue): Promise<void> {
+    try {
+      await this.triageQueue.add('triage', { retourId }, { jobId: `${retourId}-revue` });
+    } catch (erreur) {
+      await annulerRevue(this.db, retourId, action);
+      throw erreur;
+    }
   }
 }

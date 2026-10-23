@@ -39,3 +39,15 @@ export async function revoirRetour(
     .where(eq(retours.id, retourId));
   return actuel ? { statut: 'refuse', etat: actuel.etat } : { statut: 'introuvable' };
 }
+
+/**
+ * Annule une transition de revue tant que rien ne l'a suivie (le Retour est encore
+ * dans son état d'arrivée) : sert quand l'effet attendu, la mise en queue, a échoué.
+ */
+export async function annulerRevue(db: Db, retourId: string, action: ActionRevue): Promise<void> {
+  const { depuis, vers } = TRANSITIONS_REVUE[action];
+  await db
+    .update(retours)
+    .set({ etat: depuis })
+    .where(and(eq(retours.id, retourId), eq(retours.etat, vers)));
+}

@@ -4,7 +4,6 @@ import {
   etatApresTriage,
   triageQuestions,
   renderVerdict,
-  SEUILS_TRIAGE_PAR_DEFAUT,
   TRIAGE_INSTRUCTIONS,
   type DispatchJob,
   type TriageAnswers,
@@ -73,11 +72,7 @@ export class TriageProcessor {
           questions: triageQuestions,
         })
       : null;
-    const verdict = renderVerdict(
-      reponses,
-      retour.typeDeclare,
-      this.options.seuilsTriage ?? SEUILS_TRIAGE_PAR_DEFAUT,
-    );
+    const verdict = renderVerdict(reponses, retour.typeDeclare, this.options.seuilsTriage);
 
     await this.db.transaction(async (tx) => {
       await tx

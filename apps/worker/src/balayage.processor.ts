@@ -44,13 +44,14 @@ export class BalayageProcessor {
   private async relancerTriage(retourId: string): Promise<boolean> {
     const job = await this.triageQueue.getJob(retourId);
     if (job) {
-      const etat = await job.getState();
-      if (etat === 'failed') {
-        await job.retry();
+      const etatJob = await job.getState();
+      if (etatJob === 'failed') {
+        // Remis à zéro, le job retrouve toutes ses tentatives et leur backoff.
+        await job.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
         return true;
       }
       // En attente, différé ou en cours : le Triage suit son cours.
-      if (etat !== 'completed' && etat !== 'unknown') return false;
+      if (etatJob !== 'completed' && etatJob !== 'unknown') return false;
       await job.remove();
     }
     await this.triageQueue.add('triage', { retourId }, { jobId: retourId });
