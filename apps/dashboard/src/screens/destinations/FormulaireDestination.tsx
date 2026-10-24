@@ -8,7 +8,7 @@ import {
   type TypeDestination,
   type TypeRetour,
 } from '@nudge/shared';
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { ErrorMessage, Field } from '../../layout/ui.js';
 import { LIBELLES_GRAVITE, LIBELLES_TYPE } from '../../libelles.js';
 import { FORMULAIRES_DESTINATION } from './types/index.js';
@@ -24,7 +24,8 @@ export interface ValeursDestination {
 
 /**
  * Formulaire commun à tous les types : nom, champs du type, Filtre. Le type ne se
- * choisit qu'à l'ajout (`typeModifiable`) ; une Destination le garde ensuite.
+ * choisit qu'à l'ajout (`typeModifiable`) ; une Destination le garde ensuite. La
+ * Destination d'alerte de l'Instance n'a ni nom ni Filtre (`sansNomNiFiltre`).
  */
 export function FormulaireDestination({
   titre,
@@ -36,6 +37,9 @@ export function FormulaireDestination({
   erreur,
   onSubmit,
   onAnnuler,
+  sansNomNiFiltre = false,
+  children,
+  actions,
 }: {
   titre: string;
   initiales: Omit<ValeursDestination, 'secrets' | 'filtre'> & { readonly filtre: FiltreVu };
@@ -46,6 +50,11 @@ export function FormulaireDestination({
   erreur: unknown;
   onSubmit: (valeurs: ValeursDestination) => void;
   onAnnuler?: () => void;
+  sansNomNiFiltre?: boolean;
+  /** Sous le titre : une présentation, un état. */
+  children?: ReactNode;
+  /** Après le bouton d'envoi : d'autres actions (boutons `type="button"`). */
+  actions?: ReactNode;
 }) {
   const id = useId();
   const [type, setType] = useState(initiales.type);
@@ -84,6 +93,7 @@ export function FormulaireDestination({
   return (
     <form onSubmit={soumettre} className="formulaire encadre" aria-label={titre}>
       <h2>{titre}</h2>
+      {children}
       {typeModifiable ? (
         <div className="champ">
           <label htmlFor={`${id}-type`}>Type</label>
@@ -100,52 +110,59 @@ export function FormulaireDestination({
           </select>
         </div>
       ) : null}
-      <Field
-        libelle="Nom"
-        id={`${id}-nom`}
-        required
-        value={nom}
-        onChange={(e) => setNom(e.target.value)}
-      />
+      {sansNomNiFiltre ? null : (
+        <Field
+          libelle="Nom"
+          id={`${id}-nom`}
+          required
+          value={nom}
+          onChange={(e) => setNom(e.target.value)}
+        />
+      )}
       <Champs
         idPrefixe={id}
         config={config}
         setConfig={setConfig}
         secrets={secrets}
         setSecrets={setSecrets}
-        secretsEnregistres={secretsEnregistres}
+        // Les secrets enregistrés ne valent que pour leur type.
+        secretsEnregistres={type === initiales.type ? secretsEnregistres : []}
       />
-      <fieldset className="champ">
-        <legend>Types retenus</legend>
-        {TYPES_RETOUR.map((typeRetour) => (
-          <label key={typeRetour} className="case">
-            <input
-              type="checkbox"
-              checked={types.includes(typeRetour)}
-              onChange={() => basculer(typeRetour)}
-            />
-            {LIBELLES_TYPE[typeRetour]}
-          </label>
-        ))}
-      </fieldset>
-      <div className="champ">
-        <label htmlFor={`${id}-gravite`}>Gravité minimale</label>
-        <select
-          id={`${id}-gravite`}
-          value={graviteMinimale ?? ''}
-          onChange={(e) => setGraviteMinimale((e.target.value || null) as Gravite | null)}
-        >
-          <option value="">Aucune</option>
-          {GRAVITES.map((gravite) => (
-            <option key={gravite} value={gravite}>
-              {LIBELLES_GRAVITE[gravite]}
-            </option>
-          ))}
-        </select>
-        <p className="aide">
-          Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.
-        </p>
-      </div>
+      {sansNomNiFiltre ? null : (
+        <>
+          <fieldset className="champ">
+            <legend>Types retenus</legend>
+            {TYPES_RETOUR.map((typeRetour) => (
+              <label key={typeRetour} className="case">
+                <input
+                  type="checkbox"
+                  checked={types.includes(typeRetour)}
+                  onChange={() => basculer(typeRetour)}
+                />
+                {LIBELLES_TYPE[typeRetour]}
+              </label>
+            ))}
+          </fieldset>
+          <div className="champ">
+            <label htmlFor={`${id}-gravite`}>Gravité minimale</label>
+            <select
+              id={`${id}-gravite`}
+              value={graviteMinimale ?? ''}
+              onChange={(e) => setGraviteMinimale((e.target.value || null) as Gravite | null)}
+            >
+              <option value="">Aucune</option>
+              {GRAVITES.map((gravite) => (
+                <option key={gravite} value={gravite}>
+                  {LIBELLES_GRAVITE[gravite]}
+                </option>
+              ))}
+            </select>
+            <p className="aide">
+              Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.
+            </p>
+          </div>
+        </>
+      )}
       <ErrorMessage erreur={erreur} />
       <button type="submit" disabled={enCours}>
         {libelleBouton}
@@ -155,6 +172,7 @@ export function FormulaireDestination({
           Annuler
         </button>
       ) : null}
+      {actions}
     </form>
   );
 }

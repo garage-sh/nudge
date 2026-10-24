@@ -1,9 +1,11 @@
-import type {
-  ClasseEchec,
-  DestinationAdapter,
-  DestinationConfiguree,
-  EnvoiASortir,
-  ResultatEnvoi,
+import {
+  presenterAlerte,
+  type Alerte,
+  type ClasseEchec,
+  type DestinationAdapter,
+  type DestinationConfiguree,
+  type EnvoiASortir,
+  type ResultatEnvoi,
 } from '@nudge/core';
 import {
   LIBELLES_GRAVITE,
@@ -213,6 +215,28 @@ export function adaptateurLinear(
     return { ok: true, data: fichier.assetUrl };
   }
 
+  async function creerIssue(entree: {
+    teamId: string;
+    title: string;
+    description: string;
+    labelIds: readonly string[];
+  }): Promise<ResultatEnvoi> {
+    const creation = await graphql<DonneesCreation>(MUTATION_ISSUE, { entree });
+    const issue = creation.ok ? creation.data.issueCreate.issue : null;
+    if (!creation.ok || !creation.data.issueCreate.success || !issue) {
+      // Un label ou l'équipe a pu changer chez Linear : le prochain Envoi les relit.
+      equipes.delete(cleCache);
+      return creation.ok
+        ? {
+            statut: 'echec',
+            classe: 'permanent',
+            message: 'Linear n’a pas créé l’issue (success: false)',
+          }
+        : echec(creation);
+    }
+    return { statut: 'livre', lienExterne: issue.url };
+  }
+
   return {
     async send(envoi) {
       const noms = [
@@ -229,27 +253,24 @@ export function adaptateurLinear(
         if (!televersee.ok) return echec(televersee);
         assetUrl = televersee.data;
       }
-      const creation = await graphql<DonneesCreation>(MUTATION_ISSUE, {
-        entree: {
-          teamId: cible.data.equipeId,
-          title: titreAvecType(envoi, TITRE_MAX),
-          description: description(envoi, assetUrl),
-          labelIds: cible.data.labelIds,
-        },
+      return creerIssue({
+        teamId: cible.data.equipeId,
+        title: titreAvecType(envoi, TITRE_MAX),
+        description: description(envoi, assetUrl),
+        labelIds: cible.data.labelIds,
       });
-      const issue = creation.ok ? creation.data.issueCreate.issue : null;
-      if (!creation.ok || !creation.data.issueCreate.success || !issue) {
-        // Un label ou l'équipe a pu changer chez Linear : le prochain Envoi les relit.
-        equipes.delete(cleCache);
-        return creation.ok
-          ? {
-              statut: 'echec',
-              classe: 'permanent',
-              message: 'Linear n’a pas créé l’issue (success: false)',
-            }
-          : echec(creation);
-      }
-      return { statut: 'livre', lienExterne: issue.url };
+    },
+    /** Une issue dans l'équipe configurée, sans label : les labels sont ceux des Retours. */
+    async alerter(alerte) {
+      const cible = await resoudre([]);
+      if (!cible.ok) return echec(cible);
+      const { titre } = presenterAlerte(alerte);
+      return creerIssue({
+        teamId: cible.data.equipeId,
+        title: tronquer(titre, TITRE_MAX),
+        description: descriptionAlerte(alerte),
+        labelIds: [],
+      });
     },
     /**
      * Relit l'équipe et tous les labels configurés avec la clé, sans rien créer : la
@@ -317,6 +338,19 @@ function description({ projet, retour }: EnvoiASortir, assetUrl: string | null):
   ];
   const capture = lienSur(assetUrl) ? [`![Capture de la page](<${assetUrl}>)`] : [];
   return [texteEchappe(retour.texte), ...capture, '---', ...pied].join('\n\n');
+}
+
+/**
+ * Description d'une alerte : écrite par nudge, où les noms (saisis par un Membre) et
+ * le refus (formulé par la cible) sont échappés comme le texte de l'Auteur.
+ */
+function descriptionAlerte(alerte: Alerte): string {
+  const { resume, details } = presenterAlerte(alerte);
+  return [
+    resume,
+    ...details.map(({ libelle, valeur }) => `**${libelle}** : ${texteEchappe(valeur)}`),
+    ...(lienSur(alerte.lienDashboard) ? [`[Ouvrir dans nudge](<${alerte.lienDashboard}>)`] : []),
+  ].join('\n\n');
 }
 
 /**

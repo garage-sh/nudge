@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from 'react-router';
 import { useDeconnexion, useSession } from '../api/session.js';
+import { Alertes } from './Alertes.js';
 import { NAVIGATION } from './navigation.js';
 
-/** Cadre des écrans connectés : en-tête, navigation, Membre connecté, déconnexion. */
+/** Cadre des écrans connectés : en-tête, navigation, Membre connecté, déconnexion, alertes. */
 export function Layout() {
   const { data: membre } = useSession();
   const deconnexion = useDeconnexion();
@@ -29,6 +30,7 @@ export function Layout() {
           </button>
         </div>
       </header>
+      <Alertes />
       <main className="contenu">
         <Outlet />
       </main>

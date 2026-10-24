@@ -111,6 +111,19 @@ a {
   color: var(--discret);
 }
 
+/* Badges des alertes, sous l'en-tête */
+.bandeau-alertes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.bandeau-alertes a {
+  text-decoration: none;
+}
+
 .contenu {
   max-width: 960px;
   margin: 0 auto;

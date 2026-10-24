@@ -17,6 +17,7 @@ import {
   chiffrerSecretsDestination,
   connectDb,
   createDestination,
+  DESTINATION_ALERTE_ID,
   createProjet,
   destinations,
   parametresInstance,
@@ -68,6 +69,8 @@ export interface PipelineOptions {
   readonly destinations?: 'fakes' | 'reelles';
   /** Seuil, refroidissement et sonde de la Suspension ; ceux du worker sinon. */
   readonly suspension?: OptionsSuspension;
+  /** URL publique du dashboard (`NUDGE_DASHBOARD_URL`) : liens des Envois et des alertes. */
+  readonly dashboardUrl?: string;
   /** Répliques du worker sur les mêmes queues et la même base (1 par défaut). */
   readonly repliquesWorker?: number;
   /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
@@ -84,6 +87,11 @@ export interface Pipeline {
   readonly url: string;
   /** Le Juge branché sur le worker (lève si le pipeline tourne sans Juge). */
   readonly juge: FakeJuge;
+  /**
+   * La `FakeDestination` qui sert la Destination d'alerte de l'Instance, quel que soit
+   * le type configuré par le dashboard (`PUT /api/instance/alerte`).
+   */
+  readonly fakeAlerte: FakeDestination;
   /** Chaque passage d'une Destination en Suspendue signalé par le worker, dans l'ordre. */
   readonly suspensions: readonly Suspension[];
   /** Le Projet est créé directement en base (seed) ; ses clés sont rendues en clair. */
@@ -242,6 +250,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
+    ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     surSuspension: (suspension) => {
       suspensions.push(suspension);
     },
@@ -285,6 +294,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       if (!fakeJuge) throw new Error('Ce pipeline tourne sans FakeJuge');
       return fakeJuge;
     },
+    fakeAlerte: fakeFor(DESTINATION_ALERTE_ID),
     suspensions,
     createProjet: (donnees) => createProjet(db, donnees),
     async createDestination(projetId, donnees = {}) {

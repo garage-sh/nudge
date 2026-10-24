@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { DestinationAdapterResolver } from '@nudge/core';
 import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
+import { AlertesController } from './alertes/alertes.controller.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
@@ -17,6 +18,7 @@ import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
 import { DestinationsController } from './destinations/destinations.controller.js';
 import { DestinationsService } from './destinations/destinations.service.js';
+import { DestinationAlerteService } from './instance/destination-alerte.service.js';
 import { InstanceController } from './instance/instance.controller.js';
 import { JugeInstanceService } from './instance/juge-instance.service.js';
 import { ProjetsController } from './projets/projets.controller.js';
@@ -44,6 +46,7 @@ const CONTROLLERS = [
   EnvoisController,
   InstanceController,
   DestinationsController,
+  AlertesController,
 ];
 
 /**
@@ -68,6 +71,7 @@ export class DashboardModule implements NestModule {
         RevueService,
         EnvoisService,
         JugeInstanceService,
+        DestinationAlerteService,
         DestinationsService,
         SessionGuard,
         AuthThrottleGuard,

@@ -8,21 +8,26 @@ import {
 import {
   createSecretCipher,
   jobOptions,
+  ALERTES_QUEUE,
   BALAYAGE_RECUS_JOB,
   SONDE_SUSPENDUES_JOB,
   DISPATCH_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
   DEFAULT_QUEUE_PREFIX,
+  idJobAlerte,
+  type AlerteJob,
   type DispatchJob,
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
+import { AlertesService } from './alertes.service.js';
 import { BalayageProcessor } from './balayage.processor.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import {
+  ALERTES_QUEUE_TOKEN,
   DB,
   OPTIONS,
   SECRET_CIPHER,
@@ -56,10 +61,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
     @Inject(MAINTENANCE_QUEUE_TOKEN) private readonly maintenanceQueue: Queue,
+    @Inject(ALERTES_QUEUE_TOKEN) private readonly alertesQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
     private readonly balayage: BalayageProcessor,
     private readonly suspension: SuspensionService,
+    private readonly alertes: AlertesService,
   ) {}
 
   static forRoot(options: WorkerOptions): DynamicModule {
@@ -71,7 +78,23 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         {
           provide: SUR_SUSPENSION,
-          useValue: options.surSuspension ?? ((() => undefined) satisfies SurSuspension),
+          // Chaque Suspension alerte les Membres, puis l'observateur des options (tests).
+          useFactory:
+            (alertes: AlertesService): SurSuspension =>
+            async (suspension) => {
+              try {
+                await alertes.signaler({
+                  evenement: 'destination_suspendue',
+                  destinationId: suspension.destinationId,
+                  classe: suspension.classe,
+                  message: suspension.message,
+                  suspendueLe: suspension.suspendueLe.toISOString(),
+                });
+              } finally {
+                await options.surSuspension?.(suspension);
+              }
+            },
+          inject: [AlertesService],
         },
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
@@ -101,6 +124,16 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           inject: [REDIS],
         },
         {
+          provide: ALERTES_QUEUE_TOKEN,
+          useFactory: (redis: Redis) =>
+            new Queue(ALERTES_QUEUE, {
+              connection: redis,
+              prefix,
+              defaultJobOptions: jobOptions(options.retryPolicy),
+            }),
+          inject: [REDIS],
+        },
+        {
           provide: MAINTENANCE_QUEUE_TOKEN,
           useFactory: (redis: Redis) =>
             new Queue(MAINTENANCE_QUEUE, {
@@ -115,6 +148,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         DispatchProcessor,
         BalayageProcessor,
         SuspensionService,
+        AlertesService,
       ],
     };
   }
@@ -147,6 +181,16 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           }),
         { connection: this.redis, prefix },
       ),
+      new Worker<AlerteJob>(
+        ALERTES_QUEUE,
+        (job) =>
+          this.alertes.envoyer(job.data, {
+            id: job.id ?? idJobAlerte(job.data),
+            signaleLe: new Date(job.timestamp),
+            derniereTentative: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+          }),
+        { connection: this.redis, prefix },
+      ),
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
@@ -164,6 +208,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       this.dispatchQueue.close(),
       this.triageQueue.close(),
       this.maintenanceQueue.close(),
+      this.alertesQueue.close(),
     ]);
     await this.redis.quit();
     await this.connexion.close();

@@ -34,7 +34,7 @@ import { FormulaireDestination } from './FormulaireDestination.js';
 import { formulaireDe, FORMULAIRES_DESTINATION } from './types/index.js';
 
 /** Secrets générés par l'Instance, montrés une seule fois après création ou régénération. */
-interface SecretsMontres {
+export interface SecretsMontres {
   readonly type: string;
   readonly nom: string;
   readonly secrets: Readonly<Record<string, string>>;
@@ -83,7 +83,7 @@ export function Destinations() {
   );
 }
 
-function SecretsGeneres({ type, nom, secrets }: SecretsMontres) {
+export function SecretsGeneres({ type, nom, secrets }: SecretsMontres) {
   const descriptions: Readonly<Record<string, { libelle: string; aide: string }>> =
     formulaireDe(type)?.secretsGeneres ?? {};
   return (
@@ -194,11 +194,18 @@ function CarteDestination({
   );
 }
 
-function ResultatTest({ resultat }: { resultat: ResultatTestDestination }) {
+/** Résultat du bouton « tester » ; `livre` : ce qui a été livré (un Retour, une alerte d'exemple). */
+export function ResultatTest({
+  resultat,
+  livre = 'Retour d’exemple livré.',
+}: {
+  resultat: ResultatTestDestination;
+  livre?: string;
+}) {
   if (resultat.statut === 'livre') {
     return (
       <p role="status">
-        Retour d’exemple livré.
+        {livre}
         {resultat.lienExterne ? (
           <>
             {' '}

@@ -1,8 +1,11 @@
-import type {
-  ClasseEchec,
-  DestinationAdapter,
-  DestinationConfiguree,
-  EnvoiASortir,
+import {
+  presenterAlerte,
+  type Alerte,
+  type ClasseEchec,
+  type DestinationAdapter,
+  type DestinationConfiguree,
+  type EnvoiASortir,
+  type ResultatEnvoi,
 } from '@nudge/core';
 import {
   LIBELLES_GRAVITE,
@@ -10,6 +13,7 @@ import {
   lireWebhookSlack,
   type SecretsSlack,
 } from '@nudge/shared';
+import { tronquer } from './texte.js';
 import {
   DELAI_HTTP_PAR_DEFAUT_MS,
   classerStatut,
@@ -46,18 +50,22 @@ export function adaptateurSlack(
       body: JSON.stringify(corps),
     });
 
+  /** Le webhook entrant ne rend pas de permalien : un message livré n'a pas de lien. */
+  async function publier(corps: unknown): Promise<ResultatEnvoi> {
+    let reponse: Response;
+    try {
+      reponse = await poster(corps);
+    } catch (erreur) {
+      return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
+    }
+    if (!reponse.ok) return { statut: 'echec', ...(await echecSlack(reponse)) };
+    await reponse.body?.cancel();
+    return { statut: 'livre', lienExterne: null };
+  }
+
   return {
-    async send(envoi) {
-      let reponse: Response;
-      try {
-        reponse = await poster(corpsSlack(envoi));
-      } catch (erreur) {
-        return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
-      }
-      if (!reponse.ok) return { statut: 'echec', ...(await echecSlack(reponse)) };
-      await reponse.body?.cancel();
-      return { statut: 'livre', lienExterne: null };
-    },
+    send: (envoi) => publier(corpsSlack(envoi)),
+    alerter: (alerte) => publier(corpsAlerte(alerte)),
     /**
      * Un webhook entrant ne se lit pas : la sonde lui poste un message vide, qu'il refuse
      * sans rien publier. `no_text` (« the `text` attribute was missing from the
@@ -148,6 +156,36 @@ function corpsSlack({ essai, projet, retour }: EnvoiASortir) {
     ],
   };
 }
+
+/**
+ * L'alerte en blocs : les noms (saisis par un Membre) et le refus (formulé par la
+ * cible) passent par l'échappement des caractères de contrôle, mentions coupées.
+ */
+function corpsAlerte(alerte: Alerte) {
+  const { titre, resume, details } = presenterAlerte(alerte);
+  const texte = (brut: string) => echapperControles(neutraliserMentionsGenerales(brut));
+  const pied = [
+    alerte.essai ? 'nudge · alerte d’essai' : 'nudge · alerte',
+    ...(lienSurSlack(alerte.lienDashboard) ? [`<${alerte.lienDashboard}|Ouvrir dans nudge>`] : []),
+  ];
+  return {
+    text: texte(titre),
+    blocks: [
+      { type: 'section', text: mrkdwn(`*${texte(titre)}*`) },
+      { type: 'section', text: mrkdwn(resume) },
+      {
+        type: 'section',
+        fields: details.map(({ libelle, valeur }) =>
+          mrkdwn(`*${libelle}*\n${tronquer(texte(valeur), CHAMP_MAX)}`),
+        ),
+      },
+      { type: 'context', elements: [mrkdwn(pied.join(' · '))] },
+    ],
+  };
+}
+
+/** Longueur d'un champ de section (docs.slack.dev, Section block : 2000), marge comprise. */
+const CHAMP_MAX = 1900;
 
 /**
  * Un objet texte mrkdwn `verbatim` : Slack ne transforme pas son texte brut (« URLs

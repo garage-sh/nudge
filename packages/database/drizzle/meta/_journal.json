@@ -50,6 +50,13 @@
       "when": 1792808211177,
       "tag": "0006_captures",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792810041541,
+      "tag": "0007_alertes",
+      "breakpoints": true
     }
   ]
 }

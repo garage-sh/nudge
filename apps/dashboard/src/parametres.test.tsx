@@ -12,6 +12,8 @@ const SANS_JUGE: JugeInstanceVu = {
   cleConfiguree: false,
 };
 
+const SANS_DESTINATION_ALERTE = { status: 200, body: { destination: null } };
+
 const enregistre = (corps: unknown) => ({
   status: 200,
   body: { ...SANS_JUGE, ...(corps as object), cleConfiguree: true },
@@ -21,6 +23,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('sans Juge choisi, annonce le mode dégradé', async () => {
     fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
     });
     renderDashboard('/parametres');
@@ -35,6 +38,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('choisit OpenRouter avec une clé, envoyée une fois et jamais réaffichée', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
       'PUT /api/instance/juge': enregistre,
     });
@@ -63,6 +67,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('garde la clé enregistrée quand le champ reste vide', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': {
         status: 200,
         body: { ...SANS_JUGE, fournisseur: 'typesafe', cleConfiguree: true },
@@ -85,6 +90,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('auto-hébergé : envoie l’URL du serveur, et affiche un refus de l’API', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
       'PUT /api/instance/juge': {
         status: 400,
@@ -113,6 +119,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('revient au mode dégradé en retirant le Juge', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': {
         status: 200,
         body: { ...SANS_JUGE, fournisseur: 'typesafe', cleConfiguree: true },

@@ -9,6 +9,7 @@ import type {
   TypeCapture,
   TypeRetour,
 } from '@nudge/shared';
+import type { Alerte } from './alerte.js';
 
 export type { ClasseEchec } from '@nudge/shared';
 
@@ -65,13 +66,19 @@ export type SanteDestination =
 
 export interface DestinationAdapter {
   send(envoi: EnvoiASortir): Promise<ResultatEnvoi>;
+  /**
+   * Prévient les Membres (Destination d'alerte de l'Instance) : même cible, mêmes
+   * identifiants et même classification des échecs qu'un Envoi.
+   */
+  alerter(alerte: Alerte): Promise<ResultatEnvoi>;
   healthCheck(): Promise<SanteDestination>;
 }
 
 /** Une Destination telle que lue en base, secrets déchiffrés. */
 export interface DestinationConfiguree {
   readonly id: string;
-  readonly projetId: string;
+  /** `null` : la Destination d'alerte, qui appartient à l'Instance et non à un Projet. */
+  readonly projetId: string | null;
   readonly nom: string;
   /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
   readonly type: string;
@@ -92,8 +99,20 @@ export async function envoyer(
   adaptateur: () => DestinationAdapter,
   envoi: EnvoiASortir,
 ): Promise<ResultatEnvoi> {
+  return sansException(() => adaptateur().send(envoi));
+}
+
+/** `envoyer()` pour une alerte : une exception devient un échec transitoire. */
+export async function alerter(
+  adaptateur: () => DestinationAdapter,
+  alerte: Alerte,
+): Promise<ResultatEnvoi> {
+  return sansException(() => adaptateur().alerter(alerte));
+}
+
+async function sansException(appel: () => Promise<ResultatEnvoi>): Promise<ResultatEnvoi> {
   try {
-    return await adaptateur().send(envoi);
+    return await appel();
   } catch (erreur) {
     return {
       statut: 'echec',

@@ -1,4 +1,5 @@
 import type {
+  Alerte,
   ClasseEchec,
   DestinationAdapter,
   EnvoiASortir,
@@ -19,7 +20,12 @@ export class FakeDestination implements DestinationAdapter {
   readonly attemptTimes: number[] = [];
   /** Instant (`performance.now()`) de chaque appel à `healthCheck`, dans l'ordre. */
   readonly healthCheckTimes: number[] = [];
+  /** Les alertes livrées, dans l'ordre (Destination d'alerte de l'Instance). */
+  readonly alertes: Alerte[] = [];
+  /** Tous les appels à `alerter`, livrés ou non. */
+  readonly alertAttempts: Alerte[] = [];
   private sends: (ResultatEnvoi | Error)[] = [];
+  private alerts: (ResultatEnvoi | Error)[] = [];
   private held: Promise<void> | null = null;
   private health: SanteDestination[] = [];
 
@@ -29,6 +35,11 @@ export class FakeDestination implements DestinationAdapter {
    */
   scriptSends(...results: (ResultatEnvoi | Error)[]): void {
     this.sends.push(...results);
+  }
+
+  /** Les prochains `alerter` rendent ces résultats, dans l'ordre ; ensuite, livraison. */
+  scriptAlertes(...results: (ResultatEnvoi | Error)[]): void {
+    this.alerts.push(...results);
   }
 
   /** Les prochains `healthCheck` rendent ces résultats ; ensuite, joignable. */
@@ -68,6 +79,14 @@ export class FakeDestination implements DestinationAdapter {
     };
     if (result instanceof Error) throw result;
     if (result.statut === 'livre') this.envois.push(envoi);
+    return result;
+  }
+
+  async alerter(alerte: Alerte): Promise<ResultatEnvoi> {
+    this.alertAttempts.push(alerte);
+    const result = this.alerts.shift() ?? { statut: 'livre', lienExterne: null };
+    if (result instanceof Error) throw result;
+    if (result.statut === 'livre') this.alertes.push(alerte);
     return result;
   }
 

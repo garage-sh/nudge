@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
+import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
 import { adaptateurWebhook } from './webhook.js';
 
 const SECRET = 'secret-de-signature-de-test';
@@ -20,7 +21,7 @@ const DESTINATION: DestinationConfiguree = {
 const ENVOI: EnvoiASortir = {
   envoiId: '6f1c2a40-0000-4000-8000-000000000003',
   essai: false,
-  projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
   retour: {
     id: '6f1c2a40-0000-4000-8000-000000000004',
     texte: '@everyone <script>alert(1)</script> [clic](javascript:alert(1)) **gras**',
@@ -91,7 +92,7 @@ describe('Adaptateur webhook', () => {
       evenement: 'retour',
       essai: false,
       envoi: { id: ENVOI.envoiId },
-      projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+      projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
       retour: {
         id: ENVOI.retour.id,
         texte: '@everyone <script>alert(1)</script> [clic](javascript:alert(1)) **gras**',
@@ -105,6 +106,65 @@ describe('Adaptateur webhook', () => {
         recuLe: '2026-10-24T09:29:58.000Z',
         lien: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000004',
       },
+    });
+  });
+
+  describe('alerte (Destination d’alerte)', () => {
+    it('POSTe l’alerte signée, événement « alerte », avec son id stable', async () => {
+      const { fetch, requetes } = recepteur({ status: 200 });
+
+      expect(await webhook(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
+        statut: 'livre',
+        lienExterne: null,
+      });
+
+      const [requete] = requetes;
+      expect(requete?.url).toBe('https://recepteur.test/nudge?canal=bugs');
+      expect(requete?.entetes.get('x-nudge-evenement')).toBe('alerte');
+      expect(requete?.entetes.get('x-nudge-alerte')).toBe(ALERTE_EN_REVUE.id);
+      expect(requete?.entetes.get('x-nudge-envoi')).toBeNull();
+      expect(requete?.entetes.get('x-nudge-signature')).toBe(
+        signatureAttendue(HORODATAGE, requete!.corps),
+      );
+      expect(JSON.parse(requete!.corps)).toEqual({
+        evenement: 'alerte',
+        essai: false,
+        alerte: {
+          id: ALERTE_EN_REVUE.id,
+          type: 'retour_en_revue',
+          le: '2026-10-24T09:30:00.000Z',
+          titre: 'Retour en revue · @everyone *Boutique*',
+          resume: expect.stringContaining('influencer le Triage'),
+          projet: { id: ALERTE_EN_REVUE.projet.id, nom: '@everyone *Boutique*' },
+          retour: { id: ALERTE_EN_REVUE.retour.id },
+          lien: ALERTE_EN_REVUE.lienDashboard,
+        },
+      });
+    });
+
+    it('d’une Destination Suspendue, transmet sa classe et le refus tels quels', async () => {
+      const { fetch, requetes } = recepteur({ status: 204 });
+
+      await webhook(fetch).alerter(ALERTE_SUSPENSION);
+
+      expect(JSON.parse(requetes[0]!.corps).alerte).toMatchObject({
+        type: 'destination_suspendue',
+        destination: {
+          id: ALERTE_SUSPENSION.destination.id,
+          nom: 'Linear [prod](https://piege.test)',
+          classe: 'auth',
+          message: 'HTTP 401 : <!channel> @here `jeton` refusé',
+        },
+        lien: null,
+      });
+    });
+
+    it('classe un refus du récepteur comme un Envoi', async () => {
+      const { fetch } = recepteur({ status: 503 }, { status: 401 });
+      const adaptateur = webhook(fetch);
+
+      expect(await adaptateur.alerter(ALERTE_EN_REVUE)).toMatchObject({ classe: 'transient' });
+      expect(await adaptateur.alerter(ALERTE_EN_REVUE)).toMatchObject({ classe: 'auth' });
     });
   });
 

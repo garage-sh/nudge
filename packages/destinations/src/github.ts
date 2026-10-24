@@ -1,8 +1,11 @@
-import type {
-  ClasseEchec,
-  DestinationAdapter,
-  DestinationConfiguree,
-  EnvoiASortir,
+import {
+  presenterAlerte,
+  type Alerte,
+  type ClasseEchec,
+  type DestinationAdapter,
+  type DestinationConfiguree,
+  type EnvoiASortir,
+  type ResultatEnvoi,
 } from '@nudge/core';
 import {
   LIBELLES_GRAVITE,
@@ -65,25 +68,29 @@ export function adaptateurGitHub(
       },
     });
 
+  /** « Create an issue » : livrée avec son lien, ou l'échec classé. */
+  async function creerIssue(issue: { title: string; body: string }): Promise<ResultatEnvoi> {
+    let reponse: Response;
+    try {
+      reponse = await appeler(`${pointDAppel}/issues`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(issue),
+      });
+    } catch (erreur) {
+      return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
+    }
+    if (!reponse.ok) return { statut: 'echec', ...(await echecGitHub(reponse)) };
+    const creee = (await reponse.json().catch(() => ({}))) as { html_url?: unknown };
+    return {
+      statut: 'livre',
+      lienExterne: typeof creee.html_url === 'string' ? creee.html_url : null,
+    };
+  }
+
   return {
-    async send(envoi) {
-      let reponse: Response;
-      try {
-        reponse = await appeler(`${pointDAppel}/issues`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ title: titre(envoi), body: corps(envoi) }),
-        });
-      } catch (erreur) {
-        return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
-      }
-      if (!reponse.ok) return { statut: 'echec', ...(await echecGitHub(reponse)) };
-      const creee = (await reponse.json().catch(() => ({}))) as { html_url?: unknown };
-      return {
-        statut: 'livre',
-        lienExterne: typeof creee.html_url === 'string' ? creee.html_url : null,
-      };
-    },
+    send: (envoi) => creerIssue({ title: titre(envoi), body: corps(envoi) }),
+    alerter: (alerte) => creerIssue(issueAlerte(alerte)),
     /**
      * « Get a repository » : le jeton voit le dépôt, ses issues sont ouvertes et il
      * n'est pas archivé (lecture seule). Ne vérifie pas la permission d'écrire des
@@ -175,6 +182,20 @@ function corps({ projet, retour }: EnvoiASortir): string {
       : []),
   ];
   return [blocDeCode(retour.texte), '---', ...pied].join('\n\n');
+}
+
+/**
+ * L'issue d'une alerte : titre en texte brut sans mention ; corps écrit par nudge, où
+ * les noms (saisis par un Membre) et le refus (formulé par la cible) sont littéraux.
+ */
+function issueAlerte(alerte: Alerte): { title: string; body: string } {
+  const { titre: titreAlerte, resume, details } = presenterAlerte(alerte);
+  const lignes = [
+    resume,
+    ...details.map(({ libelle, valeur }) => `**${libelle}** : ${echapperMarkdown(valeur)}`),
+    ...(lienSur(alerte.lienDashboard) ? [`[Ouvrir dans nudge](<${alerte.lienDashboard}>)`] : []),
+  ];
+  return { title: sansMention(tronquer(titreAlerte, TITRE_MAX)), body: lignes.join('\n\n') };
 }
 
 /**

@@ -5,6 +5,8 @@
 
 export const TRIAGE_QUEUE = 'triage';
 export const DISPATCH_QUEUE = 'dispatch';
+/** Alertes des Membres, envoyées à la Destination d'alerte de l'Instance (retentées). */
+export const ALERTES_QUEUE = 'alertes';
 /** Tâches planifiées du worker (jobs répétables) : balayage des Retours restés Reçu… */
 export const MAINTENANCE_QUEUE = 'maintenance';
 export const BALAYAGE_RECUS_JOB = 'balayage-recus';
@@ -22,6 +24,28 @@ export interface TriageJob {
 /** Identifiant de job = id de l'Envoi. */
 export interface DispatchJob {
   readonly envoiId: string;
+}
+
+/**
+ * Un événement à signaler aux Membres. L'alerte est composée à l'envoi, d'après la
+ * base ; l'identifiant du job (`idJobAlerte`) la rend unique par événement.
+ */
+export type AlerteJob =
+  | { readonly evenement: 'retour_en_revue'; readonly retourId: string }
+  | {
+      readonly evenement: 'destination_suspendue';
+      readonly destinationId: string;
+      readonly classe: 'transient' | 'auth';
+      readonly message: string;
+      /** ISO 8601 : distingue deux Suspensions successives de la même Destination. */
+      readonly suspendueLe: string;
+    };
+
+/** Un job par événement : un Retour ne passe En revue qu'une fois, une Suspension a sa date. */
+export function idJobAlerte(job: AlerteJob): string {
+  return job.evenement === 'retour_en_revue'
+    ? `en-revue-${job.retourId}`
+    : `suspension-${job.destinationId}-${Date.parse(job.suspendueLe)}`;
 }
 
 /** Politique de retry des jobs : backoff exponentiel avec jitter. */

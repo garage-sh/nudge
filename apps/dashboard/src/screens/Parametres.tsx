@@ -3,28 +3,128 @@ import {
   exigeUrlBase,
   FOURNISSEURS_JUGE,
   MODELES_JUGE_PAR_DEFAUT,
+  estTypeDestination,
+  FILTRE_TOUT,
+  TYPES_DESTINATION,
   type FournisseurJuge,
   type ChoixJuge,
+  type DestinationAlerteVu,
   type JugeInstanceVu,
 } from '@nudge/shared';
 import { useState, type FormEvent } from 'react';
-import { useChoixJuge, useJugeInstance } from '../api/instance.js';
-import { ErrorMessage, Field, Loading } from '../layout/ui.js';
+import {
+  useChoixJuge,
+  useConfigurationAlerte,
+  useDestinationAlerte,
+  useJugeInstance,
+  useRetraitAlerte,
+  useTestAlerte,
+} from '../api/instance.js';
+import { ConfirmAction, ErrorMessage, Field, Loading } from '../layout/ui.js';
 import { LIBELLES_FOURNISSEUR_JUGE } from '../libelles.js';
+import { ResultatTest, SecretsGeneres, type SecretsMontres } from './destinations/Destinations.js';
+import { FormulaireDestination } from './destinations/FormulaireDestination.js';
+import { FORMULAIRES_DESTINATION } from './destinations/types/index.js';
 
 /**
- * Paramètres de l'Instance. Chaque paramètre est un bloc `encadre` : la Destination
- * d'alerte et la durée de rétention s'ajoutent ici à côté du Juge.
+ * Paramètres de l'Instance. Chaque paramètre est un bloc `encadre` : la durée de
+ * rétention s'ajoute ici à côté du Juge et de la Destination d'alerte.
  */
 export function Parametres() {
   const juge = useJugeInstance();
+  const alerte = useDestinationAlerte();
   return (
     <section>
       <h1>Paramètres de l’Instance</h1>
-      {juge.isPending ? <Loading /> : null}
-      {juge.isError ? <ErrorMessage erreur={juge.error} /> : null}
+      {juge.isPending || alerte.isPending ? <Loading /> : null}
+      <ErrorMessage erreur={juge.error ?? alerte.error} />
       {juge.data ? <Juge juge={juge.data} /> : null}
+      {alerte.data ? <DestinationAlerte destination={alerte.data.destination} /> : null}
     </section>
+  );
+}
+
+/**
+ * La Destination d'alerte : un type de Destination, sans nom ni Filtre, qui reçoit
+ * une alerte quand un Retour passe En revue ou qu'une Destination est Suspendue.
+ */
+function DestinationAlerte({ destination }: { destination: DestinationAlerteVu | null }) {
+  const configuration = useConfigurationAlerte();
+  const retrait = useRetraitAlerte();
+  const test = useTestAlerte();
+  const [secretsMontres, setSecretsMontres] = useState<SecretsMontres | null>(null);
+  const type =
+    destination && estTypeDestination(destination.type) ? destination.type : TYPES_DESTINATION[0];
+  const config =
+    destination && destination.type === type
+      ? destination.config
+      : FORMULAIRES_DESTINATION[type].configInitiale;
+
+  return (
+    <>
+      <FormulaireDestination
+        // Un formulaire neuf quand la Destination d'alerte change de type ou est retirée.
+        key={destination?.type ?? 'aucune'}
+        titre="Destination d’alerte"
+        initiales={{ type, nom: '', config, filtre: FILTRE_TOUT }}
+        typeModifiable
+        sansNomNiFiltre
+        secretsEnregistres={destination?.secrets ?? []}
+        libelleBouton="Enregistrer l’alerte"
+        enCours={configuration.isPending}
+        erreur={configuration.error ?? retrait.error ?? test.error}
+        onSubmit={({ type: choisi, config: saisie, secrets }) =>
+          configuration.mutate(
+            { type: choisi, config: saisie, ...(secrets ? { secrets } : {}) },
+            {
+              onSuccess: (resultat) =>
+                setSecretsMontres(
+                  Object.keys(resultat.secretsGeneres).length > 0
+                    ? {
+                        type: choisi,
+                        nom: 'la Destination d’alerte',
+                        secrets: resultat.secretsGeneres,
+                      }
+                    : null,
+                ),
+            },
+          )
+        }
+        actions={
+          destination ? (
+            <>
+              <button
+                type="button"
+                className="secondaire"
+                disabled={test.isPending}
+                onClick={() => test.mutate()}
+              >
+                Tester
+              </button>
+              <ConfirmAction
+                libelle="Retirer"
+                question="Plus aucune alerte ne partira. Retirer la Destination d’alerte ?"
+                enCours={retrait.isPending}
+                onConfirm={() => retrait.mutate()}
+              />
+            </>
+          ) : null
+        }
+      >
+        <p className="aide">
+          Prévient les Membres quand un Retour passe En revue ou qu’une Destination est Suspendue,
+          par l’un des types de Destination. Le dashboard les signale de toute façon.
+        </p>
+        <p className="discret">
+          {destination
+            ? `Enregistrée : ${FORMULAIRES_DESTINATION[type].libelle}.`
+            : 'Aucune Destination d’alerte : les alertes ne partent nulle part.'}
+        </p>
+        {test.data ? <ResultatTest resultat={test.data} livre="Alerte d’exemple livrée." /> : null}
+        {configuration.isSuccess ? <p className="discret">Enregistré.</p> : null}
+      </FormulaireDestination>
+      {secretsMontres ? <SecretsGeneres {...secretsMontres} /> : null}
+    </>
   );
 }
 

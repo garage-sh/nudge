@@ -3,6 +3,7 @@ import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { adaptateurLinear } from './linear.js';
+import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
 import {
   ASSET_URL,
   CLE_API,
@@ -32,7 +33,7 @@ const DESTINATION: DestinationConfiguree = {
 const ENVOI: EnvoiASortir = {
   envoiId: '6f1c2a40-0000-4000-8000-000000000023',
   essai: false,
-  projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
   retour: {
     id: '6f1c2a40-0000-4000-8000-000000000024',
     texte: 'Le panier se vide quand je change de page.\nDepuis ce matin.',
@@ -375,6 +376,55 @@ describe('Adaptateur Linear', () => {
         }),
       ).toMatchObject({ statut: 'echec', classe: 'auth' });
       expect(Object.keys(second.requetes[0]!.variables)).toEqual(['equipe']);
+    });
+  });
+
+  describe('alerte (Destination d’alerte)', () => {
+    const md = new MarkdownIt({ html: true });
+    const jetons = (corps: string) =>
+      md.parse(corps, {}).flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
+
+    it('crée une issue de l’alerte dans l’équipe, sans label, avec le lien vers le dashboard', async () => {
+      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
+        statut: 'livre',
+        lienExterne: ISSUE_URL,
+      });
+
+      const entree = entreeCreation(requetes[1]);
+      expect(entree.teamId).toBe(EQUIPE_ID);
+      expect(entree.labelIds).toEqual([]);
+      expect(entree.title).toBe('Retour en revue · @everyone *Boutique*');
+      expect(entree.description).toContain('influencer le Triage');
+      const liens = jetons(entree.description).filter((j) => j.type === 'link_open');
+      expect(liens.map((j) => j.attrGet('href'))).toEqual([ALERTE_EN_REVUE.lienDashboard]);
+    });
+
+    it('rend littéraux les noms et le refus de la cible : ni lien, ni HTML', async () => {
+      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+
+      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+
+      const { description } = entreeCreation(requetes[1]);
+      const types = jetons(description).map((j) => j.type);
+      expect(types).not.toContain('link_open');
+      expect(types).not.toContain('html_inline');
+      const texte = jetons(description)
+        .filter((j) => j.type === 'text')
+        .map((j) => j.content)
+        .join('');
+      expect(texte).toContain('Linear [prod](https://piege.test)');
+      expect(texte).toContain('HTTP 401 : <!channel> @here `jeton` refusé');
+    });
+
+    it('classe un refus comme un Envoi : clé refusée = auth', async () => {
+      const { fetch } = linear(LINEAR.cleRefusee);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
+        statut: 'echec',
+        classe: 'auth',
+      });
     });
   });
 

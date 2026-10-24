@@ -19,6 +19,7 @@ import {
 } from '@nudge/judge';
 import type { Queue } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
+import { AlertesService } from './alertes.service.js';
 import type { WorkerOptions } from './options.js';
 import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
@@ -40,6 +41,7 @@ export class TriageProcessor {
     private readonly jugeResolver: JugeResolver,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
+    private readonly alertes: AlertesService,
   ) {}
 
   async handle({ retourId }: TriageJob): Promise<void> {
@@ -58,6 +60,11 @@ export class TriageProcessor {
     const etat = (await this.readEtat(retourId)) ?? retour.etat;
     if (etat === 'trie' || etat === 'dispatche') {
       await this.dispatcher(retourId, retour.projetId, etat);
+    }
+    // Après le commit du passage En revue (décidé par `etatApresTriage`). Si la mise en
+    // queue échoue, le job de Triage retenté la refait : l'alerte est unique par Retour.
+    if (etat === 'en_revue') {
+      await this.alertes.signaler({ evenement: 'retour_en_revue', retourId });
     }
   }
 

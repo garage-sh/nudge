@@ -2,6 +2,7 @@ import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { adaptateurSlack } from './slack.js';
+import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
 import {
   EQUIPE_ID,
   SERVICE_ID,
@@ -24,7 +25,7 @@ const DESTINATION: DestinationConfiguree = {
 const ENVOI: EnvoiASortir = {
   envoiId: '6f1c2a40-0000-4000-8000-000000000033',
   essai: false,
-  projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
   retour: {
     id: '6f1c2a40-0000-4000-8000-000000000034',
     texte: 'Le panier se vide quand je change de page.',
@@ -195,6 +196,49 @@ describe('Adaptateur Slack', () => {
     expect(await adaptateur(slack('bloque').fetch, 50).send(ENVOI)).toMatchObject({
       statut: 'echec',
       classe: 'transient',
+    });
+  });
+
+  describe('alerte (Destination d’alerte)', () => {
+    it('poste l’alerte en blocs, avec le lien vers le dashboard', async () => {
+      const { fetch, requetes } = slack(SLACK.ok);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
+        statut: 'livre',
+        lienExterne: null,
+      });
+
+      const corps = corpsJson(requetes[0]);
+      expect(corps.text).toBe('Retour en revue · @\u200beveryone *Boutique*');
+      const contenu = textes(corps);
+      expect(contenu.every((t) => t.verbatim === true)).toBe(true);
+      const brut = contenu.map((t) => t.text);
+      expect(brut.join('\n')).toContain('influencer le Triage');
+      expect(brut).toContainEqual('*Projet*\n@\u200beveryone *Boutique*');
+      expect(brut).toContainEqual(`*Retour*\n${ALERTE_EN_REVUE.retour.id}`);
+      expect(brut.join('\n')).toContain(`<${ALERTE_EN_REVUE.lienDashboard}|Ouvrir dans nudge>`);
+    });
+
+    it('neutralise les caractères de contrôle et les mentions du refus de la cible', async () => {
+      const { fetch, requetes } = slack(SLACK.ok);
+
+      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+
+      const brut = textes(corpsJson(requetes[0])).map((t) => t.text);
+      expect(brut).toContainEqual(
+        '*Dernier refus*\nHTTP 401 : &lt;!channel&gt; @\u200bhere `jeton` refusé',
+      );
+      expect(brut.join('\n')).not.toContain('<!channel>');
+      expect(brut.join('\n')).not.toContain('Ouvrir dans nudge');
+    });
+
+    it('classe un refus comme un Envoi : webhook supprimé = auth', async () => {
+      const { fetch } = slack(SLACK.noService);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
+        statut: 'echec',
+        classe: 'auth',
+      });
     });
   });
 

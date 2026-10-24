@@ -229,6 +229,14 @@ export const parametresInstance = pgTable(
     jugeUrlBase: text('juge_url_base'),
     /** Clé API du Juge, chiffrée par la clé d'Instance (`JUGE_KEY_CONTEXT`). */
     jugeCleChiffree: text('juge_cle_chiffree'),
+    /**
+     * Destination d'alerte de l'Instance (`null` : aucune), servie par l'adaptateur de
+     * ce type, comme une Destination de Projet : configuration non secrète…
+     */
+    alerteType: text('alerte_type'),
+    alerteConfig: jsonb('alerte_config').$type<Record<string, unknown>>(),
+    /** … et secrets en un objet JSON chiffré par la clé d'Instance (`ALERTE_SECRETS_CONTEXT`). */
+    alerteSecretsChiffres: text('alerte_secrets_chiffres'),
     ...timestamps,
   },
   (t) => [check('parametres_instance_ligne_unique', sql`${t.id} = 1`)],

@@ -2,6 +2,7 @@ import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { adaptateurDiscord } from './discord.js';
 import { resolveDestinationAdapter } from './index.js';
+import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
 import {
   DISCORD,
   MESSAGE_ID,
@@ -27,7 +28,7 @@ const DESTINATION: DestinationConfiguree = {
 const ENVOI: EnvoiASortir = {
   envoiId: '6f1c2a40-0000-4000-8000-000000000013',
   essai: false,
-  projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
   retour: {
     id: '6f1c2a40-0000-4000-8000-000000000014',
     texte: 'Le panier se vide quand je change de page.',
@@ -224,6 +225,61 @@ describe('Adaptateur Discord', () => {
     expect(embed.url).toBeUndefined();
     expect(embed.fields).toContainEqual({ name: 'Gravité', value: 'Non évaluée', inline: true });
     expect(embed.footer).toEqual({ text: 'nudge · Verdict incertain' });
+  });
+
+  describe('alerte (Destination d’alerte)', () => {
+    it('poste un embed de l’alerte, lien vers le dashboard, sans mention ni lire le serveur', async () => {
+      const { fetch, requetes } = discord(DISCORD.messageCree);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
+        statut: 'livre',
+        lienExterne: null,
+      });
+
+      expect(requetes).toHaveLength(1);
+      expect(requetes[0]?.url).toBe(`${POINT_D_APPEL}?wait=true`);
+      const corps = corpsJson(requetes[0]);
+      expect(corps.allowed_mentions).toEqual({ parse: [] });
+      expect(corps.embeds[0]).toMatchObject({
+        title: 'Retour en revue · @\u200beveryone \\*Boutique\\*',
+        url: ALERTE_EN_REVUE.lienDashboard,
+        timestamp: '2026-10-24T09:30:00.000Z',
+        fields: [
+          { name: 'Projet', value: '@\u200beveryone \\*Boutique\\*', inline: true },
+          // Le tiret est échappé comme dans tout texte : Discord l'affiche tel quel.
+          { name: 'Retour', value: ALERTE_EN_REVUE.retour.id.replaceAll('-', '\\-'), inline: true },
+        ],
+      });
+      expect(corps.embeds[0].description).toContain('influencer le Triage');
+    });
+
+    it('échappe le nom de la Destination et le refus de la cible, sans lien masqué ni mention', async () => {
+      const { fetch, requetes } = discord(DISCORD.messageCree);
+
+      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+
+      const embed = corpsJson(requetes[0]).embeds[0];
+      expect(embed.url).toBeUndefined();
+      expect(embed.title).toBe('Destination suspendue · Linear \\[prod\\]\\(https://piege.test\\)');
+      expect(embed.fields).toEqual([
+        { name: 'Projet', value: 'Boutique', inline: true },
+        { name: 'Destination', value: 'Linear \\[prod\\]\\(https://piege.test\\)', inline: true },
+        {
+          name: 'Dernier refus',
+          value: 'HTTP 401 : \\<!channel\\> @\u200bhere \\`jeton\\` refusé',
+          inline: false,
+        },
+      ]);
+    });
+
+    it('classe un refus comme un Envoi : webhook inconnu = auth', async () => {
+      const { fetch } = discord(DISCORD.webhookInconnu);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
+        statut: 'echec',
+        classe: 'auth',
+      });
+    });
   });
 
   describe('healthCheck', () => {

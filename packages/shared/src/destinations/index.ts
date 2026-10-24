@@ -119,6 +119,33 @@ export interface DestinationAvecSecretsGeneres {
   readonly secretsGeneres: Readonly<Record<string, string>>;
 }
 
+/**
+ * Destination d'alerte de l'Instance : un type de Destination, sa config et ses
+ * secrets, sans nom ni Filtre. Pour le même type, une clé de `secrets` absente garde
+ * le secret enregistré et `null` l'efface ; changer de type repart de zéro.
+ */
+export const schemaDestinationAlerte = z.strictObject({
+  type: z.enum(TYPES_DESTINATION),
+  config: z.record(z.string(), z.unknown()),
+  secrets: z.record(z.string(), z.string().max(LIMITES_DESTINATION.secret).nullable()).optional(),
+});
+export type DestinationAlerteSaisie = z.input<typeof schemaDestinationAlerte>;
+
+/** La Destination d'alerte telle que le dashboard la lit : jamais la valeur d'un secret. */
+export interface DestinationAlerteVu {
+  /** Un `TypeDestination` en principe (voir `DestinationVu.type`). */
+  readonly type: string;
+  readonly config: Readonly<Record<string, unknown>>;
+  /** Noms des secrets enregistrés (chiffrés). */
+  readonly secrets: readonly string[];
+}
+
+/** Réponse d'un enregistrement : les secrets générés à cette occasion, lisibles cette seule fois. */
+export interface DestinationAlerteAvecSecretsGeneres {
+  readonly destination: DestinationAlerteVu;
+  readonly secretsGeneres: Readonly<Record<string, string>>;
+}
+
 /** Résultat du bouton « tester » : un Retour d'exemple envoyé, sans Envoi enregistré. */
 export type ResultatTestDestination =
   | { readonly statut: 'livre'; readonly lienExterne: string | null }

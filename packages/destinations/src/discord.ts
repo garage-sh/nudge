@@ -1,8 +1,11 @@
-import type {
-  ClasseEchec,
-  DestinationAdapter,
-  DestinationConfiguree,
-  EnvoiASortir,
+import {
+  presenterAlerte,
+  type Alerte,
+  type ClasseEchec,
+  type DestinationAdapter,
+  type DestinationConfiguree,
+  type EnvoiASortir,
+  type ResultatEnvoi,
 } from '@nudge/core';
 import {
   LIBELLES_GRAVITE,
@@ -82,21 +85,38 @@ export function adaptateurDiscord(
     }
   }
 
+  /** « Execute Webhook » : le message créé, ou l'échec classé. */
+  async function executer(
+    corps: unknown,
+  ): Promise<{ ok: true; cree: MessageCree } | { ok: false; echec: ResultatEnvoi }> {
+    let reponse: Response;
+    try {
+      reponse = await appeler(`${pointDAppel}?wait=true`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+    } catch (erreur) {
+      return {
+        ok: false,
+        echec: { statut: 'echec', classe: 'transient', message: messageErreur(erreur) },
+      };
+    }
+    if (!reponse.ok)
+      return { ok: false, echec: { statut: 'echec', ...(await echecDiscord(reponse)) } };
+    return { ok: true, cree: (await reponse.json().catch(() => ({}))) as MessageCree };
+  }
+
   return {
     async send(envoi) {
-      let reponse: Response;
-      try {
-        reponse = await appeler(`${pointDAppel}?wait=true`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(corpsDiscord(envoi)),
-        });
-      } catch (erreur) {
-        return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
-      }
-      if (!reponse.ok) return { statut: 'echec', ...(await echecDiscord(reponse)) };
-      const cree = (await reponse.json().catch(() => ({}))) as MessageCree;
-      return { statut: 'livre', lienExterne: await lienDuMessage(cree) };
+      const execution = await executer(corpsDiscord(envoi));
+      if (!execution.ok) return execution.echec;
+      return { statut: 'livre', lienExterne: await lienDuMessage(execution.cree) };
+    },
+    /** Le lien du message n'est gardé nulle part : le serveur n'est pas lu pour l'alerte. */
+    async alerter(alerte) {
+      const execution = await executer(corpsAlerte(alerte));
+      return execution.ok ? { statut: 'livre', lienExterne: null } : execution.echec;
     },
     /** « Get Webhook with Token » : vérifie le jeton sans poster dans le salon. */
     async healthCheck() {
@@ -182,6 +202,35 @@ function corpsDiscord({ essai, projet, retour }: EnvoiASortir) {
     ],
   };
 }
+
+/**
+ * L'alerte en un embed : titre et détails écrits par nudge, où les noms (saisis par un
+ * Membre) et le refus (formulé par la cible) sont échappés comme le nom du Projet.
+ */
+function corpsAlerte(alerte: Alerte) {
+  const { titre, resume, details } = presenterAlerte(alerte);
+  return {
+    allowed_mentions: { parse: [] },
+    embeds: [
+      {
+        title: tronquer(echapperMarkdown(titre), TITRE_MAX),
+        ...(alerte.lienDashboard ? { url: alerte.lienDashboard } : {}),
+        description: resume,
+        timestamp: alerte.le.toISOString(),
+        color: COULEUR_ALERTE,
+        fields: details.map(({ libelle, valeur }) => ({
+          name: libelle,
+          value: tronquer(echapperMarkdown(valeur), CHAMP_MAX),
+          // Le refus de la cible est long : il prend toute la largeur.
+          inline: libelle !== 'Dernier refus',
+        })),
+        footer: { text: alerte.essai ? 'nudge · alerte d’essai' : 'nudge · alerte' },
+      },
+    ],
+  };
+}
+
+const COULEUR_ALERTE = 0xf1c40f;
 
 /** Bandeau de l'embed, du gris (cosmétique) au rouge (bloquante). */
 const COULEURS: Readonly<Record<Gravite | 'aucune', number>> = {

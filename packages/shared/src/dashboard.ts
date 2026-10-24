@@ -184,6 +184,18 @@ export interface JugeInstanceVu {
   readonly cleConfiguree: boolean;
 }
 
+/** Ce qui attend un Membre, pour les badges du dashboard. */
+export interface AlertesVu {
+  /** Retours En revue (suspicion de Manipulation), tous Projets confondus. */
+  readonly retoursEnRevue: number;
+  /** Destinations Suspendues, des plus anciennes aux plus récentes. */
+  readonly destinationsSuspendues: readonly {
+    readonly id: string;
+    readonly nom: string;
+    readonly projet: { readonly id: string; readonly nom: string };
+  }[];
+}
+
 /** Corps d'erreur de l'api : un code stable, et le détail des champs refusés le cas échéant. */
 export interface ApiErrorBody {
   readonly erreur: string;

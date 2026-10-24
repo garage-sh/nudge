@@ -3,6 +3,7 @@ import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { adaptateurGitHub } from './github.js';
 import { resolveDestinationAdapter } from './index.js';
+import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
 import {
   GITHUB,
   ISSUE_URL,
@@ -26,7 +27,7 @@ const DESTINATION: DestinationConfiguree = {
 const ENVOI: EnvoiASortir = {
   envoiId: '6f1c2a40-0000-4000-8000-000000000043',
   essai: false,
-  projet: { id: DESTINATION.projetId, nom: 'Boutique' },
+  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
   retour: {
     id: '6f1c2a40-0000-4000-8000-000000000044',
     texte: 'Le panier se vide quand je change de page.\nDepuis ce matin.',
@@ -174,6 +175,60 @@ describe('Adaptateur GitHub Issues', () => {
     expect(await adaptateur(github('bloque').fetch, 50).send(ENVOI)).toMatchObject({
       statut: 'echec',
       classe: 'transient',
+    });
+  });
+
+  describe('alerte (Destination d’alerte)', () => {
+    /** Sans `linkify` : seuls les liens que le markdown écrit (un lien nu reste lisible). */
+    const md = new MarkdownIt({ html: true });
+    const jetons = (corps: string) =>
+      md.parse(corps, {}).flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
+
+    it('crée une issue de l’alerte, avec le lien vers le dashboard', async () => {
+      const { fetch, requetes } = github(GITHUB.issueCreee);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
+        statut: 'livre',
+        lienExterne: ISSUE_URL,
+      });
+
+      expect(requetes[0]?.url).toBe(`${API_DEPOT}/issues`);
+      const corps = corpsJson(requetes[0]);
+      expect(corps.title).toBe('Retour en revue · @\u200beveryone *Boutique*');
+      expect(corps.body).toContain('influencer le Triage');
+      expect(corps.body).toContain(
+        `**Retour** : ${ALERTE_EN_REVUE.retour.id.replaceAll('-', '\\-')}`,
+      );
+      const liens = jetons(corps.body).filter((j) => j.type === 'link_open');
+      expect(liens.map((j) => j.attrGet('href'))).toEqual([ALERTE_EN_REVUE.lienDashboard]);
+    });
+
+    it('rend littéraux les noms et le refus de la cible : ni lien masqué, ni HTML, ni mention', async () => {
+      const { fetch, requetes } = github(GITHUB.issueCreee);
+
+      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+
+      const { title, body } = corpsJson(requetes[0]);
+      expect(title).toBe('Destination suspendue · Linear [prod](https://piege.test)');
+      const types = jetons(body).map((j) => j.type);
+      expect(types).not.toContain('link_open');
+      expect(types).not.toContain('html_inline');
+      expect(body).not.toMatch(/@here/);
+      const texte = jetons(body)
+        .filter((j) => j.type === 'text' || j.type === 'code_inline')
+        .map((j) => j.content)
+        .join('');
+      expect(texte).toContain('Linear [prod](https://piege.test)');
+      expect(texte).toContain('HTTP 401 : <!channel> @\u200bhere `jeton` refusé');
+    });
+
+    it('classe un refus comme un Envoi : dépôt introuvable = auth', async () => {
+      const { fetch } = github(GITHUB.introuvable);
+
+      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
+        statut: 'echec',
+        classe: 'auth',
+      });
     });
   });
 

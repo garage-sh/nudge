@@ -1,5 +1,4 @@
-import { randomBytes } from 'node:crypto';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   envoiDEssai,
   envoyer,
@@ -16,14 +15,10 @@ import {
   toDestinationConfiguree,
   type Db,
   type DestinationRow,
-  type SecretsDestination,
 } from '@nudge/database';
 import {
   DEFINITIONS_DESTINATION,
-  estTypeDestination,
   FILTRE_TOUT,
-  type ApiErrorBody,
-  type DefinitionDestination,
   type DestinationAvecSecretsGeneres,
   type DestinationVu,
   type ResultatTestDestination,
@@ -31,10 +26,11 @@ import {
   type schemaNouvelleDestination,
 } from '@nudge/shared';
 import { asc, eq } from 'drizzle-orm';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from '../../infra/tokens.js';
-import { isUuid, parseBody } from '../../validation.js';
+import { isUuid } from '../../validation.js';
 import { ProjetsService } from '../projets/projets.service.js';
+import { definitionDe, genererSecrets, separerSecrets, validerParType } from './par-type.js';
 
 type NouvelleDestination = z.output<typeof schemaNouvelleDestination>;
 type ModificationDestination = z.output<typeof schemaModificationDestination>;
@@ -228,41 +224,3 @@ export class DestinationsService {
 }
 
 const destinationIntrouvable = () => new NotFoundException({ erreur: 'destination_introuvable' });
-
-/** Une Destination dont le type n'est plus servi par cette Instance ne se modifie pas. */
-function definitionDe(type: string): DefinitionDestination {
-  if (estTypeDestination(type)) return DEFINITIONS_DESTINATION[type];
-  const refus: ApiErrorBody = { erreur: 'type_destination_inconnu' };
-  throw new BadRequestException(refus);
-}
-
-/** Config et secrets selon le schéma du type ; un refus nomme `config.…` ou `secrets.…`. */
-function validerParType(
-  definition: DefinitionDestination,
-  valeurs: { config: unknown; secrets: unknown },
-): { config: Record<string, unknown>; secrets: SecretsDestination } {
-  return parseBody(
-    z.strictObject({ config: definition.config, secrets: definition.secrets }),
-    valeurs,
-  );
-}
-
-function genererSecrets(definition: DefinitionDestination): Record<string, string> {
-  return Object.fromEntries(
-    definition.secretsGeneres.map((nom) => [nom, randomBytes(32).toString('base64url')]),
-  );
-}
-
-/** Secrets générés par l'Instance d'un côté, saisis par le Membre de l'autre. */
-function separerSecrets(
-  definition: DefinitionDestination,
-  secrets: SecretsDestination,
-): { generes: Record<string, string>; saisis: Record<string, string> } {
-  const generes: Record<string, string> = {};
-  const saisis: Record<string, string> = {};
-  for (const [nom, valeur] of Object.entries(secrets)) {
-    if (definition.secretsGeneres.includes(nom)) generes[nom] = valeur;
-    else saisis[nom] = valeur;
-  }
-  return { generes, saisis };
-}

@@ -1,4 +1,11 @@
-import type { ChoixJuge, JugeInstanceVu } from '@nudge/shared';
+import type {
+  ChoixJuge,
+  DestinationAlerteAvecSecretsGeneres,
+  DestinationAlerteSaisie,
+  DestinationAlerteVu,
+  JugeInstanceVu,
+  ResultatTestDestination,
+} from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
 
@@ -15,3 +22,34 @@ export function useChoixJuge() {
     onSuccess: (juge) => client.setQueryData(CLE_JUGE, juge),
   });
 }
+
+const CLE_ALERTE = ['instance', 'alerte'] as const;
+const CHEMIN_ALERTE = '/api/instance/alerte';
+
+export const useDestinationAlerte = () =>
+  useQuery({
+    queryKey: CLE_ALERTE,
+    queryFn: () => api.get<{ destination: DestinationAlerteVu | null }>(CHEMIN_ALERTE),
+  });
+
+export function useConfigurationAlerte() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (saisie: DestinationAlerteSaisie) =>
+      api.put<DestinationAlerteAvecSecretsGeneres>(CHEMIN_ALERTE, saisie),
+    onSuccess: ({ destination }) => client.setQueryData(CLE_ALERTE, { destination }),
+  });
+}
+
+export function useRetraitAlerte() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<void>(CHEMIN_ALERTE),
+    onSuccess: () => client.setQueryData(CLE_ALERTE, { destination: null }),
+  });
+}
+
+export const useTestAlerte = () =>
+  useMutation({
+    mutationFn: () => api.post<ResultatTestDestination>(`${CHEMIN_ALERTE}/test`),
+  });

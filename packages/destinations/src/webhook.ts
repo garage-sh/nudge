@@ -1,9 +1,11 @@
 import { createHmac } from 'node:crypto';
-import type {
-  DestinationAdapter,
-  DestinationConfiguree,
-  EnvoiASortir,
-  ResultatEnvoi,
+import {
+  presenterAlerte,
+  type Alerte,
+  type DestinationAdapter,
+  type DestinationConfiguree,
+  type EnvoiASortir,
+  type ResultatEnvoi,
 } from '@nudge/core';
 import { definitionWebhook, type SecretsWebhook } from '@nudge/shared';
 import { lireCapture, type ImageCapture } from './capture.js';
@@ -20,10 +22,12 @@ export interface OptionsWebhook {
 /**
  * Webhook générique (D10) : un POST JSON vers l'URL configurée, par événement :
  * - `retour` : un Retour dispatché (`essai: true` pour le bouton « tester ») ;
+ * - `alerte` : une alerte des Membres, quand le webhook est la Destination d'alerte ;
  * - `ping` : la sonde `healthCheck()`, à laquelle le récepteur répond en 2xx.
  *
- * En-têtes : `X-Nudge-Evenement`, `X-Nudge-Envoi` (id stable d'un Envoi : un
- * récepteur s'en sert pour ignorer une livraison retentée), `X-Nudge-Timestamp`
+ * En-têtes : `X-Nudge-Evenement`, `X-Nudge-Envoi` ou `X-Nudge-Alerte` (id stable
+ * d'un Envoi ou d'une alerte : un récepteur s'en sert pour ignorer une livraison
+ * retentée), `X-Nudge-Timestamp`
  * (secondes Unix) et `X-Nudge-Signature: sha256=<hex>`, HMAC-SHA256 de
  * `<timestamp>.<corps brut>` par le secret de signature de la Destination.
  *
@@ -44,9 +48,9 @@ export function adaptateurWebhook(
   const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
 
   async function poster(
-    evenement: 'retour' | 'ping',
+    evenement: 'retour' | 'alerte' | 'ping',
     corps: unknown,
-    envoiId?: string,
+    idStable: Readonly<Record<string, string>> = {},
   ): Promise<ResultatEnvoi> {
     const brut = JSON.stringify(corps);
     const horodatage = String(Math.floor(maintenant().getTime() / 1000));
@@ -63,7 +67,7 @@ export function adaptateurWebhook(
           'content-type': 'application/json',
           'user-agent': 'nudge-webhook',
           'x-nudge-evenement': evenement,
-          ...(envoiId ? { 'x-nudge-envoi': envoiId } : {}),
+          ...idStable,
           'x-nudge-timestamp': horodatage,
           'x-nudge-signature': `sha256=${signature}`,
         },
@@ -83,7 +87,12 @@ export function adaptateurWebhook(
     async send(envoi) {
       const capture = await lireCapture(envoi.retour.capture);
       if (!capture.ok) return { statut: 'echec', classe: capture.classe, message: capture.message };
-      return poster('retour', corpsRetour(envoi, capture.image), envoi.envoiId);
+      return poster('retour', corpsRetour(envoi, capture.image), {
+        'x-nudge-envoi': envoi.envoiId,
+      });
+    },
+    alerter(alerte) {
+      return poster('alerte', corpsAlerte(alerte), { 'x-nudge-alerte': alerte.id });
     },
     async healthCheck() {
       const resultat = await poster('ping', { evenement: 'ping' });
@@ -128,5 +137,35 @@ function corpsRetour(
       recuLe: retour.recuLe.toISOString(),
       lien: retour.lienDashboard,
     },
+  };
+}
+
+/** L'alerte structurée, et son texte (`titre`, `resume`) pour qui la relaie telle quelle. */
+function corpsAlerte(alerte: Alerte) {
+  const { titre, resume } = presenterAlerte(alerte);
+  const commun = {
+    id: alerte.id,
+    type: alerte.evenement,
+    le: alerte.le.toISOString(),
+    titre,
+    resume,
+    projet: { id: alerte.projet.id, nom: alerte.projet.nom },
+  };
+  return {
+    evenement: 'alerte',
+    essai: alerte.essai,
+    alerte:
+      alerte.evenement === 'retour_en_revue'
+        ? { ...commun, retour: { id: alerte.retour.id }, lien: alerte.lienDashboard }
+        : {
+            ...commun,
+            destination: {
+              id: alerte.destination.id,
+              nom: alerte.destination.nom,
+              classe: alerte.destination.classe,
+              message: alerte.destination.message,
+            },
+            lien: alerte.lienDashboard,
+          },
   };
 }

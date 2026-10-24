@@ -38,8 +38,8 @@ export interface WorkerOptions {
   /** Seuil de Suspension, refroidissement et période de la sonde ; `SUSPENSION_PAR_DEFAUT` à défaut. */
   readonly suspension?: OptionsSuspension;
   /**
-   * Appelé à chaque passage d'une Destination en Suspendue (fournit `SUR_SUSPENSION`) ;
-   * rien à défaut.
+   * Observateur de chaque passage d'une Destination en Suspendue, appelé par
+   * `SUR_SUSPENSION` après la mise en queue de l'alerte des Membres (tests).
    */
   readonly surSuspension?: SurSuspension;
   readonly logger?: false | LogLevel[];
