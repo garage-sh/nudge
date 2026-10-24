@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TYPES_RETOUR } from './domaine.js';
+import { TYPES_RETOUR, type EtatRetour } from './domaine.js';
 
 /** Bornes de l'ingestion : elles protègent le stockage et le Juge. */
 export const LIMITES_RETOUR = {
@@ -135,5 +135,5 @@ export type CaptureEntrante = z.output<typeof schemaCaptureEntrante>;
 /** Réponse de l'API publique (202) : le Retour est conservé et attend son Triage. */
 export interface RetourRecu {
   readonly id: string;
-  readonly etat: 'recu';
+  readonly etat: Extract<EtatRetour, 'recu'>;
 }

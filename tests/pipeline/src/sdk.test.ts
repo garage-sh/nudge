@@ -67,4 +67,13 @@ describe('SDK JS (clé secrète)', () => {
       code: 'cle_invalide',
     });
   });
+
+  it('n’atteste pas un Auteur sans identité', async () => {
+    const { cleSecrete } = await pipeline.createProjet({ nom: 'Anonyme' });
+    const nudge = creerClient({ url: pipeline.url, cleSecrete });
+
+    const { id } = await nudge.envoyerRetour({ texte: 'Merci pour la mise à jour', auteur: {} });
+
+    expect(await pipeline.readRetour(id)).toMatchObject({ auteur: null, confianceAuteur: null });
+  });
 });

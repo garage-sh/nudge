@@ -5,9 +5,9 @@ import {
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
-import { hashCleSecrete, PREFIXE_CLE_PUBLIQUE } from '@nudge/core';
+import { hashCleSecrete } from '@nudge/core';
 import { projets, type Db, type Projet } from '@nudge/database';
-import type { Source } from '@nudge/shared';
+import { PREFIXE_CLE_PUBLIQUE, type Source } from '@nudge/shared';
 import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { DB } from '../infra/tokens.js';

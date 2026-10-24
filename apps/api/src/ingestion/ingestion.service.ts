@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { TriageJob } from '@nudge/core';
 import { captures, retours, type Db } from '@nudge/database';
-import type { CaptureEntrante, RetourRecu, RetourValide, Source } from '@nudge/shared';
+import type { Auteur, CaptureEntrante, RetourRecu, RetourValide, Source } from '@nudge/shared';
 import type { StockageCaptures } from '@nudge/stockage';
 import type { Queue } from 'bullmq';
 import { DB, STOCKAGE_CAPTURES, TRIAGE_QUEUE_TOKEN } from '../infra/tokens.js';
@@ -24,6 +24,7 @@ export class IngestionService {
    */
   async receive(projetId: string, source: Source, retour: RetourValide): Promise<RetourRecu> {
     const id = randomUUID();
+    const auteur = auteurIdentifie(retour.auteur);
     const capture = retour.capture ? await this.stocker(id, retour.capture) : null;
     try {
       await this.db.transaction(async (tx) => {
@@ -33,9 +34,9 @@ export class IngestionService {
           source,
           texte: retour.texte,
           typeDeclare: retour.type ?? null,
-          auteur: retour.auteur ?? null,
+          auteur,
           // Seule la clé secrète atteste l'identité ; le navigateur ne fait que la déclarer.
-          confianceAuteur: retour.auteur ? (source === 'api' ? 'attestee' : 'declaree') : null,
+          confianceAuteur: auteur ? (source === 'api' ? 'attestee' : 'declaree') : null,
           contexte: retour.contexte ?? {},
         });
         if (capture) await tx.insert(captures).values({ retourId: id, ...capture });
@@ -56,3 +57,7 @@ export class IngestionService {
     return { cle, contentType: capture.contentType, octets: contenu.length };
   }
 }
+
+/** Un Auteur sans identifiant, email ni nom n'identifie personne : il n'y a rien à attester. */
+const auteurIdentifie = (auteur: Auteur | undefined): Auteur | null =>
+  auteur && Object.values(auteur).some((valeur) => valeur) ? auteur : null;

@@ -7,14 +7,15 @@
  * serveur.
  *
  * Les types viennent des schémas partagés (`@nudge/shared`) ; la validation reste
- * celle de l'Instance, qui renvoie le détail des champs refusés.
+ * celle de l'Instance, qui renvoie le détail des champs refusés. À l'exécution, le
+ * client n'importe rien : ni zod ni les schémas ne sont chargés chez l'Intégrateur.
  */
-import {
-  PREFIXE_CLE_PUBLIQUE,
-  PREFIXE_CLE_SECRETE,
-  type ApiErrorBody,
-  type RetourEntrant,
-  type RetourRecu,
+import type {
+  ApiErrorBody,
+  PREFIXE_CLE_PUBLIQUE as PREFIXE_PUBLIQUE_INSTANCE,
+  PREFIXE_CLE_SECRETE as PREFIXE_SECRETE_INSTANCE,
+  RetourEntrant,
+  RetourRecu,
 } from '@nudge/shared';
 
 export type {
@@ -26,6 +27,11 @@ export type {
   TypeRetour,
 } from '@nudge/shared';
 
+// Préfixes des clés recopiés plutôt qu'importés (aucune dépendance d'exécution) ; le
+// compilateur les tient alignés sur `@nudge/shared`.
+const PREFIXE_CLE_PUBLIQUE = 'nk_pub_' satisfies typeof PREFIXE_PUBLIQUE_INSTANCE;
+const PREFIXE_CLE_SECRETE = 'nk_sec_' satisfies typeof PREFIXE_SECRETE_INSTANCE;
+
 export interface OptionsClient {
   /** URL de base de l'Instance, par exemple `https://nudge.exemple.com`. */
   readonly url: string;
@@ -35,14 +41,14 @@ export interface OptionsClient {
   readonly fetch?: typeof fetch;
 }
 
-export interface OptionsEnvoi {
+export interface OptionsAppel {
   /** Annule l'appel (délai, arrêt du processus…). */
   readonly signal?: AbortSignal;
 }
 
 export interface ClientNudge {
   /** Poste un Retour ; résout quand l'Instance l'a conservé (il attend alors son Triage). */
-  envoyerRetour(retour: RetourEntrant, options?: OptionsEnvoi): Promise<RetourRecu>;
+  envoyerRetour(retour: RetourEntrant, options?: OptionsAppel): Promise<RetourRecu>;
 }
 
 /**

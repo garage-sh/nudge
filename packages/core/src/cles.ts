@@ -7,9 +7,6 @@ export interface ProjetKeys {
   readonly cleSecrete: string;
 }
 
-// Les préfixes font partie du contrat de l'API publique (le SDK les vérifie) : ils vivent dans shared.
-export { PREFIXE_CLE_PUBLIQUE, PREFIXE_CLE_SECRETE };
-
 export const generateClePublique = (): string =>
   `${PREFIXE_CLE_PUBLIQUE}${randomBytes(18).toString('base64url')}`;
 
