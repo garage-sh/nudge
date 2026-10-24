@@ -372,6 +372,16 @@ export interface RetourDetailVu {
   readonly createdAt: string;
 }
 
+/**
+ * Redispatch d'un Retour par un Membre (`POST /api/retours/:id/redispatch`) : les Envois
+ * créés vers les Destinations dont le Filtre retient désormais le Retour, et le Retour
+ * à jour. `envoisCrees` vaut 0 quand aucune Destination de plus ne le retient.
+ */
+export interface RedispatchVu {
+  readonly envoisCrees: number;
+  readonly retour: RetourDetailVu;
+}
+
 /** Revue d'un Retour par un Membre (`POST /api/retours/:id/revue`). */
 export const schemaRevue = z.strictObject({ action: z.enum(ACTIONS_REVUE) });
 export type Revue = z.input<typeof schemaRevue>;

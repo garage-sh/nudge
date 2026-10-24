@@ -59,6 +59,18 @@ export const STATUTS_ENVOI_REJOUABLES = [
 export const estEnvoiRejouable = (statut: StatutEnvoi): boolean =>
   (STATUTS_ENVOI_REJOUABLES as readonly StatutEnvoi[]).includes(statut);
 
+/**
+ * États d'où un Membre peut redispatcher un Retour (D22) : déjà passé par le Dispatch.
+ * Reçu attend son Triage ; Écarté et En revue se revoient d'abord.
+ */
+export const ETATS_RETOUR_REDISPATCHABLES = [
+  'trie',
+  'dispatche',
+] as const satisfies readonly EtatRetour[];
+
+export const estRetourRedispatchable = (etat: EtatRetour): boolean =>
+  (ETATS_RETOUR_REDISPATCHABLES as readonly EtatRetour[]).includes(etat);
+
 /** Les transitions qu'un Membre déclenche sur un Retour retenu par le Triage. */
 export const ACTIONS_REVUE = ['valider', 'rejeter', 'rehabiliter'] as const;
 export type ActionRevue = (typeof ACTIONS_REVUE)[number];

@@ -3,6 +3,7 @@ import type {
   CorrectionVerdict,
   EnvoiVu,
   PageRetours,
+  RedispatchVu,
   RetourDetailVu,
 } from '@nudge/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -115,6 +116,18 @@ export function useRejeu(retourId: string) {
     mutationFn: (envoiId: string) =>
       api.post<EnvoiVu>(`/api/envois/${encodeURIComponent(envoiId)}/rejeu`),
     onSettled: () => apres(),
+  });
+}
+
+/**
+ * Redispatcher le Retour : les Envois manquants vers les Destinations dont le Filtre
+ * le retient selon son Verdict courant ; le Retour à jour est rangé.
+ */
+export function useRedispatch(id: string) {
+  const apres = useApresAction(id);
+  return useMutation({
+    mutationFn: () => api.post<RedispatchVu>(`${cheminRetour(id)}/redispatch`),
+    onSettled: (resultat) => apres(resultat?.retour),
   });
 }
 

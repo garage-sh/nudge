@@ -123,6 +123,11 @@ export interface Pipeline {
    */
   rendreSecretsIndechiffrables(destinationId: string): Promise<void>;
   /**
+   * Suspend une Destination comme après un refus de ses identifiants, sans appel
+   * sortant ; la sonde ne la teste pas avant une heure.
+   */
+  suspendre(destinationId: string): Promise<void>;
+  /**
    * Remet une Destination Suspendue en active sans libérer ses Envois retenus, comme un
    * worker arrêté entre la réactivation et la remise en queue.
    */
@@ -330,6 +335,17 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .update(destinations)
         .set({
           secretsChiffres: chiffrerSecretsDestination(autreCle, destinationId, { perdu: 'x' }),
+        })
+        .where(eq(destinations.id, destinationId));
+    },
+    async suspendre(destinationId) {
+      await db
+        .update(destinations)
+        .set({
+          etat: 'suspendue',
+          suspendueLe: sql`now()`,
+          motifSuspension: 'auth: suspendue par le test',
+          prochaineSondeLe: sql`now() + interval '1 hour'`,
         })
         .where(eq(destinations.id, destinationId));
     },

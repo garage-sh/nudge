@@ -21,12 +21,14 @@ import {
   type ApiErrorBody,
   type EtatRetour,
   type PageRetours,
+  type RedispatchVu,
   type RetourDetailVu,
 } from '@nudge/shared';
 import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
 import { retourIntrouvable, RetoursService } from './retours.service.js';
+import { RedispatchService } from './redispatch.service.js';
 import { RevueService } from './revue.service.js';
 
 /** Boîte de réception : les Retours de tous les Projets, et ce qu'un Membre en fait. */
@@ -36,6 +38,7 @@ export class RetoursController {
   constructor(
     private readonly retours: RetoursService,
     private readonly revue: RevueService,
+    private readonly redispatch: RedispatchService,
   ) {}
 
   /** Filtres : `projet`, `type`, `gravite`, `etat`, `source`, `incertain` ; pagination : `curseur`, `limite`. */
@@ -97,6 +100,25 @@ export class RetoursController {
       } satisfies ApiErrorBody & { etat: EtatRetour });
     }
     return this.retours.read(id);
+  }
+
+  /**
+   * Crée, selon le Verdict courant, les Envois manquants vers les Destinations dont le
+   * Filtre retient le Retour (D22) : 200 avec le nombre d'Envois créés et le Retour à
+   * jour, 409 `retour_non_redispatchable` (avec son état) s'il n'est ni Trié ni Dispatché.
+   */
+  @Post(':id/redispatch')
+  @HttpCode(200)
+  async redispatcher(@Param('id') id: string): Promise<RedispatchVu> {
+    const resultat = await this.redispatch.redispatcher(id);
+    if (resultat.statut === 'introuvable') throw retourIntrouvable();
+    if (resultat.statut === 'refuse') {
+      throw new ConflictException({
+        erreur: 'retour_non_redispatchable',
+        etat: resultat.etat,
+      } satisfies ApiErrorBody & { etat: EtatRetour });
+    }
+    return { envoisCrees: resultat.envois.length, retour: await this.retours.read(id) };
   }
 
   /** Corrige le Type retenu et / ou la Gravité ; 409 `retour_non_trie` sans Verdict. */

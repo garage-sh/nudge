@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildTriageState,
   etatApresTriage,
-  filtreRetient,
   triageQuestions,
   renderVerdict,
   TRIAGE_INSTRUCTIONS,
@@ -10,7 +9,7 @@ import {
   type TriageAnswers,
   type TriageJob,
 } from '@nudge/core';
-import { destinations, envois, filtreDe, retours, verdicts, type Db } from '@nudge/database';
+import { creerEnvoisManquants, envois, retours, verdicts, type Db } from '@nudge/database';
 import {
   ErreurJugeRefusee,
   ErreurJugeTransitoire,
@@ -18,13 +17,11 @@ import {
   type RequeteJuge,
 } from '@nudge/judge';
 import type { Queue } from 'bullmq';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { AlertesService } from './alertes.service.js';
 import { DELAI_JUGE_PAR_DEFAUT_MS, type WorkerOptions } from './options.js';
 import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
-
-type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /**
  * Triage puis création des Envois. Chaque transition est persistée et
@@ -141,8 +138,8 @@ export class TriageProcessor {
    * passe Dispatché dès qu'il en a un, et reste Trié si aucun Filtre ne le retient.
    * L'Envoi est unique par (Retour, Destination) : un job rejoué n'en crée pas d'autre.
    * Un Retour déjà Dispatché ne reçoit plus de nouvel Envoi (pas d'effet rétroactif
-   * d'une Destination ajoutée ou d'un Filtre modifié depuis) : le job rejoué remet
-   * seulement en queue ses Envois encore en attente.
+   * d'une Destination ajoutée ou d'un Filtre modifié depuis, sauf redispatch manuel
+   * d'un Membre, D22) : le job rejoué remet seulement en queue ses Envois en attente.
    */
   private async dispatcher(
     retourId: string,
@@ -150,7 +147,7 @@ export class TriageProcessor {
     etat: 'trie' | 'dispatche',
   ): Promise<void> {
     const aEnvoyer = await this.db.transaction(async (tx) => {
-      if (etat === 'trie') await this.creerEnvois(tx, retourId, projetId);
+      if (etat === 'trie') await creerEnvoisManquants(tx, retourId, projetId);
       return tx
         .select({ id: envois.id })
         .from(envois)
@@ -161,44 +158,6 @@ export class TriageProcessor {
     await this.dispatchQueue.addBulk(
       aEnvoyer.map(({ id }) => ({ name: 'dispatch', data: { envoiId: id }, opts: { jobId: id } })),
     );
-  }
-
-  /**
-   * Les Envois des Destinations dont le Filtre retient le Verdict, retenus pour une
-   * Destination Suspendue ; Dispatché s'il y en a.
-   */
-  private async creerEnvois(tx: Transaction, retourId: string, projetId: string): Promise<void> {
-    const [verdict] = await tx
-      .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
-      .from(verdicts)
-      .where(eq(verdicts.retourId, retourId));
-    if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
-    const destinationsDuProjet = await tx
-      .select({
-        id: destinations.id,
-        etat: destinations.etat,
-        filtreTypes: destinations.filtreTypes,
-        filtreGraviteMinimale: destinations.filtreGraviteMinimale,
-      })
-      .from(destinations)
-      .where(eq(destinations.projetId, projetId));
-    const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
-    if (cibles.length === 0) return;
-    await tx
-      .insert(envois)
-      .values(
-        cibles.map((d) => ({
-          retourId,
-          destinationId: d.id,
-          // Destination Suspendue : l'Envoi est retenu d'emblée, sans job ni appel sortant.
-          ...(d.etat === 'suspendue' ? { statut: 'retenu' as const, retenuLe: sql`now()` } : {}),
-        })),
-      )
-      .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] });
-    await tx
-      .update(retours)
-      .set({ etat: 'dispatche' })
-      .where(and(eq(retours.id, retourId), eq(retours.etat, 'trie')));
   }
 
   private async readEtat(retourId: string) {

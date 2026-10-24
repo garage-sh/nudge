@@ -102,6 +102,10 @@ _Avoid_: Règle, route, abonnement
 Une tentative de livraison d'un Retour à une Destination, avec son statut et le lien vers l'objet créé chez elle. Un Retour a un Envoi par Destination retenue.
 _Avoid_: Delivery, job, dispatch
 
+**Redispatch**:
+L'action manuelle d'un Membre qui reprend le Dispatch d'un Retour Trié ou Dispatché selon son Verdict courant : elle crée les Envois manquants vers les Destinations dont le Filtre le retient désormais, sans toucher aux Envois existants. À distinguer du rejeu, qui renvoie un Envoi existant.
+_Avoid_: Re-triage, propagation automatique
+
 **Suspendue**:
 État d'une Destination dont les Envois échouent de façon répétée ; ses Envois sont retenus jusqu'à ce qu'elle redevienne joignable.
 _Avoid_: Désactivée, en panne, circuit ouvert

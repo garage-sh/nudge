@@ -4,6 +4,9 @@ import * as schema from './schema.js';
 
 export type Db = NodePgDatabase<typeof schema>;
 
+/** Une transaction ouverte par `db.transaction`. */
+export type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 export interface DbConnection {
   readonly db: Db;
   close(): Promise<void>;

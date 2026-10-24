@@ -56,7 +56,8 @@ export async function annulerRevue(db: Db, retourId: string, action: ActionRevue
 /**
  * Corrige le Type retenu et / ou la Gravité du Verdict d'un Retour. Vérifié par un
  * Membre, le Verdict n'est plus Incertain ; les réponses brutes du Juge restent telles
- * quelles. Rien n'est remis en queue : seul le rejeu d'un Envoi propage la correction.
+ * quelles. Rien n'est remis en queue : seuls le rejeu d'un Envoi et le redispatch du
+ * Retour (D22) propagent la correction.
  * Rend faux si le Retour n'a pas (encore) de Verdict.
  */
 export async function corrigerVerdict(

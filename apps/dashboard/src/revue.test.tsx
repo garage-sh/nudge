@@ -268,3 +268,79 @@ describe('Rejeu d’un Envoi', () => {
     expect((await within(envois).findByRole('alert')).textContent).toMatch(/ne se rejoue pas/);
   });
 });
+
+describe('Redispatch d’un Retour', () => {
+  const TRIE: RetourDetailVu = { ...RETOUR, etat: 'trie', envois: [] };
+
+  it('crée les Envois manquants d’un Retour Trié et dit combien', async () => {
+    const api = fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/retours/retour-1': detail(TRIE),
+    });
+    api.set('POST /api/retours/retour-1/redispatch', () => {
+      const apres = { ...TRIE, etat: 'dispatche', envois: [{ ...LIVRE, statut: 'en_attente' }] };
+      api.set('GET /api/retours/retour-1', detail(apres as RetourDetailVu));
+      return { status: 200, body: { envoisCrees: 1, retour: apres } };
+    });
+    renderDashboard('/retours/retour-1');
+
+    const envois = await screen.findByRole('region', { name: 'Envois' });
+    expect(envois.textContent).toMatch(/Aucun Envoi/);
+    await userEvent.click(within(envois).getByRole('button', { name: 'Redispatcher' }));
+
+    expect(api.appels.map((a) => a.route)).toContain('POST /api/retours/retour-1/redispatch');
+    expect(await within(envois).findByText('1 Envoi créé.')).toBeTruthy();
+    expect(within(envois).getByText('Linear produit')).toBeTruthy();
+    expect(await screen.findByText('Dispatché')).toBeTruthy();
+  });
+
+  it('dit quand aucune Destination de plus ne retient le Retour', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/retours/retour-1': detail(RETOUR),
+      'POST /api/retours/retour-1/redispatch': {
+        status: 200,
+        body: { envoisCrees: 0, retour: RETOUR },
+      },
+    });
+    renderDashboard('/retours/retour-1');
+
+    const envois = await screen.findByRole('region', { name: 'Envois' });
+    await userEvent.click(within(envois).getByRole('button', { name: 'Redispatcher' }));
+
+    expect(
+      await within(envois).findByText(/Aucune autre Destination ne retient ce Retour/),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ['Reçu', { ...RETOUR, etat: 'recu', verdict: null, envois: [] }],
+    ['Écarté', ECARTE],
+    ['En revue', EN_REVUE],
+  ] as const)('n’offre pas de redispatch à un Retour %s', async (_libelle, retour) => {
+    fakeApi({ 'GET /api/session': CONNECTE, 'GET /api/retours/retour-1': detail(retour) });
+    renderDashboard('/retours/retour-1');
+
+    const envois = await screen.findByRole('region', { name: 'Envois' });
+    expect(within(envois).queryByRole('button', { name: 'Redispatcher' })).toBeNull();
+  });
+
+  it('explique un redispatch refusé', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/retours/retour-1': detail(TRIE),
+      'POST /api/retours/retour-1/redispatch': {
+        status: 409,
+        body: { erreur: 'retour_non_redispatchable', etat: 'recu' },
+      },
+    });
+    renderDashboard('/retours/retour-1');
+
+    const envois = await screen.findByRole('region', { name: 'Envois' });
+    await userEvent.click(within(envois).getByRole('button', { name: 'Redispatcher' }));
+
+    expect((await within(envois).findByRole('alert')).textContent).toMatch(
+      /ne peut pas être redispatché/,
+    );
+  });
+});

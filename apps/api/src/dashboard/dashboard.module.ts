@@ -29,6 +29,7 @@ import { EnvoisController } from './retours/envois.controller.js';
 import { EnvoisService } from './retours/envois.service.js';
 import { RetoursController } from './retours/retours.controller.js';
 import { RetoursService } from './retours/retours.service.js';
+import { RedispatchService } from './retours/redispatch.service.js';
 import { RevueService } from './retours/revue.service.js';
 import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
@@ -71,6 +72,7 @@ export class DashboardModule implements NestModule {
         ProjetsService,
         RetoursService,
         RevueService,
+        RedispatchService,
         EnvoisService,
         JugeInstanceService,
         RetentionInstanceService,

@@ -1,5 +1,6 @@
 import {
   estEnvoiRejouable,
+  estRetourRedispatchable,
   GRAVITES,
   TYPES_RETOUR,
   urlCapture,
@@ -17,6 +18,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   useCorrectionVerdict,
+  useRedispatch,
   useRejeu,
   useRetour,
   useRevue,
@@ -88,6 +90,9 @@ export function Retour() {
       ) : null}
       <Section id="envois" titre="Envois">
         <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
+        {estRetourRedispatchable(detail.etat) ? (
+          <Redispatch retourId={detail.id} apresRedispatch={suivre} />
+        ) : null}
       </Section>
       <Section id="suppression" titre="Suppression">
         <Suppression retour={detail} />
@@ -295,7 +300,8 @@ function FormulaireCorrection({
     <form onSubmit={soumettre} className="formulaire">
       <p className="aide">
         La correction ne change rien chez les Destinations déjà servies : rejouez un Envoi pour la
-        leur propager.
+        leur propager, ou redispatchez le Retour pour l’envoyer aux Destinations qui le retiennent
+        désormais.
       </p>
       <div className="champ">
         <label htmlFor="correction-type">Type retenu</label>
@@ -425,5 +431,47 @@ function Envois({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Redispatcher le Retour selon son Verdict courant, après une correction ou l'ajout
+ * d'une Destination : crée les Envois manquants vers les Destinations dont le Filtre le
+ * retient désormais. Les Envois existants ne sont pas touchés.
+ */
+function Redispatch({
+  retourId,
+  apresRedispatch,
+}: {
+  retourId: string;
+  apresRedispatch: () => void;
+}) {
+  const redispatch = useRedispatch(retourId);
+  const crees = redispatch.data?.envoisCrees;
+  return (
+    <>
+      <p className="aide">
+        Redispatcher envoie le Retour, selon son Verdict actuel, aux Destinations dont le Filtre le
+        retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.
+      </p>
+      <div className="actions">
+        <button
+          type="button"
+          className="secondaire"
+          disabled={redispatch.isPending}
+          onClick={() => redispatch.mutate(undefined, { onSuccess: apresRedispatch })}
+        >
+          Redispatcher
+        </button>
+      </div>
+      {crees === undefined ? null : (
+        <p role="status">
+          {crees === 0
+            ? 'Aucune autre Destination ne retient ce Retour.'
+            : `${crees} Envoi${crees > 1 ? 's' : ''} créé${crees > 1 ? 's' : ''}.`}
+        </p>
+      )}
+      <ErrorMessage erreur={redispatch.error} />
+    </>
   );
 }

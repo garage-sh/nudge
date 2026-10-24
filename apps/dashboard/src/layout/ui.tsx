@@ -15,6 +15,8 @@ const MESSAGES: Record<string, string> = {
   envoi_introuvable: 'Cet Envoi n’existe plus.',
   envoi_non_rejouable:
     'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
+  retour_non_redispatchable:
+    'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
   destination_introuvable: 'Cette Destination n’existe plus.',
   type_destination_inconnu: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
   session_requise: 'Votre session a expiré : reconnectez-vous.',
