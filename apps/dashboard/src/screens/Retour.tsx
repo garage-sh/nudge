@@ -16,7 +16,7 @@ import {
   type VerdictVu,
 } from '@nudge/shared';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import {
   useCorrectionVerdict,
   useRedispatch,
@@ -27,16 +27,21 @@ import {
 } from '../api/retours.js';
 import {
   formatDate,
+  formatDateRelative,
   LIBELLES_CONFIANCE,
-  LIBELLES_ETAT,
-  LIBELLES_ETAT_DESTINATION,
   LIBELLES_GRAVITE,
   LIBELLES_SOURCE,
-  LIBELLES_STATUT_ENVOI,
   LIBELLES_TYPE,
 } from '../libelles.js';
-import { ConfirmAction, ErrorMessage, LienExterne, Loading } from '../layout/ui.js';
-import { BadgeIncertain } from './retour-badges.js';
+import { ConfirmAction, ErrorMessage, LienExterne, Loading, Pastille } from '../layout/ui.js';
+import {
+  BadgeIncertain,
+  JaugeGravite,
+  PastilleEtat,
+  PastilleEtatDestination,
+  PastilleStatutEnvoi,
+} from './retour-badges.js';
+import type { ListeState } from './Retours.js';
 
 /**
  * Détail d'un Retour. Tout ce que l'Auteur a fourni (texte, identité, contexte)
@@ -49,56 +54,125 @@ export function Retour() {
   const [suivreJusqua, setSuivreJusqua] = useState(0);
   const suivre = () => setSuivreJusqua(Date.now() + SUIVI_APRES_ACTION_MS);
   const retour = useRetour(id, { suivreJusqua });
+  const liste = (useLocation().state as ListeState | null)?.liste;
+  const versListe = liste?.recherche ? `/retours?${liste.recherche}` : '/retours';
   if (retour.isPending) return <Loading />;
-  if (retour.isError) return <ErrorMessage erreur={retour.error} />;
+  if (retour.isError) {
+    return (
+      <>
+        <Fil versListe={versListe} />
+        <ErrorMessage erreur={retour.error} />
+      </>
+    );
+  }
   const detail = retour.data;
+  const { verdict } = detail;
   return (
     <article className="retour">
-      <p className="discret">
-        <Link to="/retours">Boîte de réception</Link>
-      </p>
-      <h1>Retour</h1>
-      <p className="meta">
-        <Link to={`/projets/${detail.projet.id}`}>{detail.projet.nom}</Link>
-        <span>{LIBELLES_ETAT[detail.etat]}</span>
-        <span>{LIBELLES_SOURCE[detail.source]}</span>
-        <time dateTime={detail.createdAt}>{formatDate(detail.createdAt)}</time>
-      </p>
-      <p className="texte-retour" aria-label="Texte du Retour">
-        {detail.texte}
-      </p>
-      {detail.typeDeclare ? (
-        <p className="discret">Type déclaré par l’Auteur : {LIBELLES_TYPE[detail.typeDeclare]}</p>
-      ) : null}
-      {actionsDeRevuePermises(detail.etat, detail.verdict).length > 0 ? (
-        <Section id="revue" titre="Revue">
-          <Revue retour={detail} apresAction={suivre} />
-        </Section>
-      ) : null}
-      <Section id="verdict" titre="Verdict">
-        <Verdict retourId={detail.id} verdict={detail.verdict} />
-      </Section>
-      <Section id="auteur" titre="Auteur">
-        <Auteur auteur={detail.auteur} />
-      </Section>
-      <Section id="contexte" titre="Contexte">
-        <ContexteRetour contexte={detail.contexte} />
-      </Section>
-      {detail.capture ? (
-        <Section id="capture" titre="Capture">
-          <Capture retourId={detail.id} capture={detail.capture} />
-        </Section>
-      ) : null}
-      <Section id="envois" titre="Envois">
-        <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
-        {estRetourRedispatchable(detail.etat) ? (
-          <Redispatch retourId={detail.id} apresRedispatch={suivre} />
-        ) : null}
-      </Section>
-      <Section id="suppression" titre="Suppression">
-        <Suppression retour={detail} />
-      </Section>
+      <Fil versListe={versListe} id={detail.id} liste={liste} />
+      <h1 className="visuellement-cache">Retour</h1>
+      <div className="retour-grille">
+        <div className="retour-principal">
+          <header className="titre-retour">
+            <JaugeGravite gravite={verdict?.gravite} grande />
+            <div>
+              <p className="texte-retour" aria-label="Texte du Retour">
+                {detail.texte}
+              </p>
+              <p className="meta">
+                <PastilleEtat etat={detail.etat} />
+                <Link to={`/projets/${detail.projet.id}`}>{detail.projet.nom}</Link>
+                <span>{LIBELLES_SOURCE[detail.source]}</span>
+                <time dateTime={detail.createdAt} title={formatDate(detail.createdAt)}>
+                  {formatDateRelative(detail.createdAt)}
+                </time>
+                {detail.typeDeclare ? (
+                  <span>Type déclaré par l’Auteur : {LIBELLES_TYPE[detail.typeDeclare]}</span>
+                ) : null}
+              </p>
+            </div>
+          </header>
+          {actionsDeRevuePermises(detail.etat, detail.verdict).length > 0 ? (
+            <section className="bandeau-revue" aria-labelledby="retour-revue">
+              <h2 id="retour-revue">Revue</h2>
+              <Revue retour={detail} apresAction={suivre} />
+            </section>
+          ) : null}
+          {detail.capture ? (
+            <Section id="capture" titre="Capture">
+              <Capture retourId={detail.id} capture={detail.capture} />
+            </Section>
+          ) : null}
+          <Section id="envois" titre="Envois">
+            <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
+            {estRetourRedispatchable(detail.etat) ? (
+              <Redispatch retourId={detail.id} apresRedispatch={suivre} />
+            ) : null}
+          </Section>
+        </div>
+        <aside className="retour-cote" aria-label="Propriétés du Retour">
+          <Section id="verdict" titre="Verdict">
+            <Verdict retourId={detail.id} verdict={detail.verdict} />
+          </Section>
+          <Section id="auteur" titre="Auteur">
+            <Auteur auteur={detail.auteur} />
+          </Section>
+          <Section id="contexte" titre="Contexte">
+            <ContexteRetour contexte={detail.contexte} />
+          </Section>
+          <Section id="suppression" titre="Suppression">
+            <Suppression retour={detail} />
+          </Section>
+        </aside>
+      </div>
     </article>
+  );
+}
+
+/**
+ * Le fil au-dessus du Retour : retour à la liste d'où il a été ouvert (filtres
+ * compris), et Retour précédent / suivant dans cette liste.
+ */
+function Fil({
+  versListe,
+  id,
+  liste,
+}: {
+  versListe: string;
+  id?: string;
+  liste?: ListeState['liste'];
+}) {
+  const position = id && liste ? liste.ids.indexOf(id) : -1;
+  const precedent = position > 0 ? liste?.ids[position - 1] : undefined;
+  const suivant = position >= 0 ? liste?.ids[position + 1] : undefined;
+  const state: ListeState = { liste };
+  return (
+    <nav className="fil" aria-label="Fil">
+      <Link to={versListe} className="retour-lien">
+        ← Boîte de réception
+      </Link>
+      {position >= 0 && liste ? (
+        <span className="precedent-suivant">
+          <span className="discret">
+            {position + 1} sur {liste.ids.length}
+          </span>
+          {precedent ? (
+            <Link to={`/retours/${precedent}`} state={state}>
+              Précédent
+            </Link>
+          ) : (
+            <span aria-disabled="true">Précédent</span>
+          )}
+          {suivant ? (
+            <Link to={`/retours/${suivant}`} state={state}>
+              Suivant
+            </Link>
+          ) : (
+            <span aria-disabled="true">Suivant</span>
+          )}
+        </span>
+      ) : null}
+    </nav>
   );
 }
 
@@ -248,14 +322,19 @@ function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu |
       <Proprietes
         lignes={[
           ['Type retenu', LIBELLES_TYPE[verdict.typeRetenu]],
-          ['Gravité', verdict.gravite ? LIBELLES_GRAVITE[verdict.gravite] : 'Non évaluée'],
+          [
+            'Gravité',
+            verdict.gravite ? <JaugeGravite gravite={verdict.gravite} visible /> : 'Non évaluée',
+          ],
         ]}
       />
-      <p className="meta">
-        {verdict.incertain ? <BadgeIncertain /> : null}
-        {verdict.indesirable ? <span className="badge">Indésirable</span> : null}
-        {verdict.manipulation ? <span className="badge">Manipulation</span> : null}
-      </p>
+      {verdict.incertain || verdict.indesirable || verdict.manipulation ? (
+        <p className="meta">
+          {verdict.incertain ? <BadgeIncertain /> : null}
+          {verdict.indesirable ? <Pastille ton="eteint">Indésirable</Pastille> : null}
+          {verdict.manipulation ? <Pastille ton="revue">Manipulation</Pastille> : null}
+        </p>
+      ) : null}
       <div className="actions">
         <button type="button" className="secondaire" onClick={() => setEnCorrection(true)}>
           Corriger
@@ -391,24 +470,27 @@ function Envois({
     return <p className="discret">Aucun Envoi.</p>;
   }
   return (
-    <ul className="liste">
+    <ul className="liste envois">
       {envois.map((envoi) => (
         <li key={envoi.id}>
-          <p className="meta">
-            <strong>{envoi.destination.nom}</strong>
-            <span>{envoi.destination.type}</span>
-            {envoi.destination.etat !== 'active' ? (
-              <span className="badge">{LIBELLES_ETAT_DESTINATION[envoi.destination.etat]}</span>
-            ) : null}
-            <span>{LIBELLES_STATUT_ENVOI[envoi.statut]}</span>
-            <span>
+          <div className="envoi">
+            <div className="envoi-destination">
+              <strong>{envoi.destination.nom}</strong>
+              <span className="discret">
+                {envoi.destination.type}
+                {envoi.destination.etat !== 'active' ? (
+                  <>
+                    {' '}
+                    <PastilleEtatDestination etat={envoi.destination.etat} />
+                  </>
+                ) : null}
+              </span>
+            </div>
+            <PastilleStatutEnvoi statut={envoi.statut} />
+            <span className="discret envoi-tentatives">
               {envoi.tentatives} tentative{envoi.tentatives > 1 ? 's' : ''}
             </span>
-          </p>
-          {envoi.lienExterne ? <LienExterne href={envoi.lienExterne} /> : null}
-          {envoi.derniereErreur ? <p className="alerte">{envoi.derniereErreur}</p> : null}
-          {estEnvoiRejouable(envoi.statut) ? (
-            <div className="actions">
+            {estEnvoiRejouable(envoi.statut) ? (
               <button
                 type="button"
                 className="secondaire"
@@ -417,8 +499,16 @@ function Envois({
               >
                 Rejouer
               </button>
-            </div>
+            ) : (
+              <span />
+            )}
+          </div>
+          {envoi.lienExterne ? (
+            <p className="envoi-lien">
+              <LienExterne href={envoi.lienExterne} />
+            </p>
           ) : null}
+          {envoi.derniereErreur ? <p className="alerte">{envoi.derniereErreur}</p> : null}
           {rejeu.variables === envoi.id ? <ErrorMessage erreur={rejeu.error} /> : null}
         </li>
       ))}

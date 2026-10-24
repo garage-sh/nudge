@@ -1077,13 +1077,224 @@ button.plus {
   margin-top: 1rem;
 }
 
+/* Détail d'un Retour : fil, contenu et décision à gauche, propriétés à droite */
+.fil {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1.25rem;
+  font-size: var(--t-s);
+}
+
+.retour-lien {
+  color: var(--discret);
+  text-decoration: none;
+}
+
+.retour-lien:hover {
+  color: var(--texte);
+  text-decoration: underline;
+}
+
+.precedent-suivant {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.precedent-suivant > * {
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--r-controle);
+}
+
+.precedent-suivant a {
+  color: var(--texte);
+  text-decoration: none;
+  border: 1px solid var(--bordure-forte);
+  background: var(--surface);
+}
+
+.precedent-suivant a:hover {
+  background: var(--surface-2);
+}
+
+.precedent-suivant [aria-disabled='true'] {
+  color: var(--discret);
+  opacity: 0.6;
+  border: 1px solid var(--bordure);
+}
+
+.retour-grille {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.retour-principal {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.retour-principal > .encadre {
+  margin: 0;
+}
+
+.titre-retour {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.titre-retour .porte-jauge {
+  padding-top: 0.25rem;
+}
+
 .texte-retour {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: var(--t-l);
+  font-size: 1.0625rem;
   line-height: 1.55;
+  font-weight: 500;
+  letter-spacing: -0.005em;
   max-width: 72ch;
-  margin: 0 0 1.25rem;
+  margin: 0 0 0.5rem;
+}
+
+.bandeau-revue {
+  background: var(--revue-doux);
+  border-radius: var(--r-panneau);
+  padding: 1rem 1.15rem;
+}
+
+.bandeau-revue h2 {
+  color: var(--revue);
+  font-size: var(--t-m);
+  margin: 0 0 0.35rem;
+}
+
+.bandeau-revue .confirmation {
+  background: var(--surface);
+}
+
+.retour-cote {
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--r-panneau);
+  padding: 0 1.1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.retour-cote .encadre {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--bordure);
+  border-radius: 0;
+  padding: 1rem 0;
+  margin: 0;
+}
+
+.retour-cote .encadre:first-child {
+  border-top: 0;
+}
+
+.retour-cote .encadre > h2:first-child {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--discret);
+  letter-spacing: 0;
+  margin-bottom: 0.6rem;
+}
+
+.retour-cote .proprietes {
+  font-size: var(--t-s);
+}
+
+.retour-cote .proprietes div {
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 0.6rem;
+}
+
+.retour-cote h3 {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--discret);
+  margin: 0.9rem 0 0.4rem;
+}
+
+.retour-cote .meta {
+  margin: 0.6rem 0;
+}
+
+.retour-cote .actions {
+  margin-top: 0.75rem;
+}
+
+.envois > li {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.envoi {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 96px 84px;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.envoi-destination {
+  display: grid;
+  min-width: 0;
+}
+
+.envoi-destination .discret {
+  font-size: var(--t-s);
+}
+
+.envoi-tentatives {
+  font-size: var(--t-s);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.envoi-lien {
+  margin: 0;
+  font-size: var(--t-s);
+}
+
+.envoi + .alerte,
+.envoi-lien + .alerte {
+  margin: 0;
+}
+
+.envois + .aide {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .retour-grille {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retour-cote {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .envoi {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .envoi-tentatives {
+    text-align: left;
+  }
 }
 
 .capture {
@@ -1173,4 +1384,9 @@ fieldset.champ legend {
     transition: none !important;
     animation: none !important;
   }
+}
+
+.retour-cote .encadre > p,
+.retour-cote .aide {
+  font-size: var(--t-s);
 }
