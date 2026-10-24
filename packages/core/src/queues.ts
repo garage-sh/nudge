@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { ClasseEchec } from '@nudge/shared';
 
 /**
@@ -22,15 +23,49 @@ export const PURGE_RETENTION_JOB = 'purge-retention';
 /** Préfixe des clés BullMQ par défaut ; l'api et le worker doivent partager le même. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';
 
-/** Identifiant de job = id du Retour : un même Retour n'est mis en queue qu'une fois. */
+/** Nom des jobs des queues de Triage et de dispatch (une seule sorte de job chacune). */
+export const TRIAGE_JOB = 'triage';
+export const DISPATCH_JOB = 'dispatch';
+
+/** Identifiant de job : `idJobTriage` ou `idJobRevue`. */
 export interface TriageJob {
   readonly retourId: string;
 }
 
-/** Identifiant de job = id de l'Envoi. */
+/** Identifiant de job : `idJobDispatch`, puis `idJobRejeu`, `idJobLiberation`, `idJobBalayage`. */
 export interface DispatchJob {
   readonly envoiId: string;
 }
+
+/** Premier job de Triage d'un Retour (ingestion, balayage D18) : il n'est mis en queue qu'une fois. */
+export const idJobTriage = (retourId: string): string => retourId;
+
+/** Un Retour ne redevient Trié par une revue qu'une fois : un job propre à la revue suffit. */
+export const idJobRevue = (retourId: string): string => `${retourId}-revue`;
+
+/**
+ * Premier job de dispatch d'un Envoi (après le Triage ou un redispatch, D22) : un Envoi
+ * n'est créé qu'une fois, son premier job aussi. Les jobs suivants ont un id propre,
+ * cet id restant pris par le job terminé de la première tentative.
+ */
+export const idJobDispatch = (envoiId: string): string => envoiId;
+
+/** Rejeu manuel d'un Envoi (D9) : un job neuf par demande du Membre. */
+export const idJobRejeu = (envoiId: string): string => `${envoiId}-rejeu-${randomUUID()}`;
+
+/**
+ * Libération d'un Envoi retenu, propre à la retenue en cours : une sonde suivante ne
+ * double pas un job encore en attente.
+ */
+export const idJobLiberation = (envoiId: string, retenuLe: Date | null): string =>
+  `${envoiId}-liberation-${retenuLe?.getTime() ?? 0}`;
+
+/**
+ * Remise au dispatch par le balayage (D26), propre au passage : un job en échec garde
+ * son id, l'Envoi repart avec toutes ses tentatives.
+ */
+export const idJobBalayage = (envoiId: string, passage: number): string =>
+  `${envoiId}-balayage-${passage}`;
 
 /**
  * Un événement à signaler aux Membres. L'alerte est composée à l'envoi, d'après la

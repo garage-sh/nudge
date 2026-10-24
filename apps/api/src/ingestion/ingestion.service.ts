@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { TriageJob } from '@nudge/core';
+import { idJobTriage, TRIAGE_JOB, type TriageJob } from '@nudge/core';
 import { captures, retours, type Db } from '@nudge/database';
 import type { Auteur, CaptureEntrante, RetourRecu, RetourValide, Source } from '@nudge/shared';
 import type { StockageCaptures } from '@nudge/stockage';
@@ -52,7 +52,7 @@ export class IngestionService {
       throw erreur;
     }
     try {
-      await this.triageQueue.add('triage', { retourId: id }, { jobId: id });
+      await this.triageQueue.add(TRIAGE_JOB, { retourId: id }, { jobId: idJobTriage(id) });
     } catch (erreur) {
       this.logger.error(
         `Retour ${id} enregistré mais pas mis en queue, le balayage le triera : ${String(erreur)}`,

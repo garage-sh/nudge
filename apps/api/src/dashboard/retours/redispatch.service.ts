@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { DispatchJob } from '@nudge/core';
+import { DISPATCH_JOB, idJobDispatch, type DispatchJob } from '@nudge/core';
 import {
   annulerRedispatch,
   redispatcherRetour,
@@ -24,8 +24,8 @@ export class RedispatchService {
   ) {}
 
   /**
-   * Les Envois créés en attente partent avec un job d'id `<envoiId>`, comme au Dispatch
-   * après le Triage : un Envoi n'est créé qu'une fois, son premier job aussi. Si la mise
+   * Les Envois créés en attente partent avec leur premier job (`idJobDispatch`), comme
+   * au Dispatch après le Triage. Si la mise
    * en queue échoue, le redispatch est annulé pour que le Membre puisse réessayer.
    */
   async redispatcher(retourId: string): Promise<ResultatRedispatch> {
@@ -36,9 +36,9 @@ export class RedispatchService {
     try {
       await this.dispatchQueue.addBulk(
         enAttente.map(({ id }) => ({
-          name: 'dispatch',
+          name: DISPATCH_JOB,
           data: { envoiId: id },
-          opts: { jobId: id },
+          opts: { jobId: idJobDispatch(id) },
         })),
       );
     } catch (erreur) {

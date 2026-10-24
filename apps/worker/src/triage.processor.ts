@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildTriageState,
+  DISPATCH_JOB,
+  idJobDispatch,
   etatApresTriage,
   triageQuestions,
   renderVerdict,
@@ -154,9 +156,13 @@ export class TriageProcessor {
         .where(and(eq(envois.retourId, retourId), eq(envois.statut, 'en_attente')));
     });
 
-    // Après le commit : le job de dispatch lit un Envoi qui existe. jobId = id de l'Envoi.
+    // Après le commit : le job de dispatch lit un Envoi qui existe.
     await this.dispatchQueue.addBulk(
-      aEnvoyer.map(({ id }) => ({ name: 'dispatch', data: { envoiId: id }, opts: { jobId: id } })),
+      aEnvoyer.map(({ id }) => ({
+        name: DISPATCH_JOB,
+        data: { envoiId: id },
+        opts: { jobId: idJobDispatch(id) },
+      })),
     );
   }
 

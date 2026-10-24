@@ -1,10 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type {
-  DestinationAdapterResolver,
-  DispatchJob,
-  ResultatEnvoi,
-  SanteDestination,
-  SecretCipher,
+import {
+  DISPATCH_JOB,
+  idJobLiberation,
+  type DestinationAdapterResolver,
+  type DispatchJob,
+  type ResultatEnvoi,
+  type SanteDestination,
+  type SecretCipher,
 } from '@nudge/core';
 import { destinations, envois, toDestinationConfiguree, type Db } from '@nudge/database';
 import type { Queue } from 'bullmq';
@@ -282,9 +284,9 @@ export class SuspensionService {
     if (retenus.length === 0) return;
     await this.dispatchQueue.addBulk(
       retenus.map(({ id, retenuLe }) => ({
-        name: 'dispatch',
+        name: DISPATCH_JOB,
         data: { envoiId: id },
-        opts: { jobId: `${id}-liberation-${retenuLe?.getTime() ?? 0}` },
+        opts: { jobId: idJobLiberation(id, retenuLe) },
       })),
     );
   }

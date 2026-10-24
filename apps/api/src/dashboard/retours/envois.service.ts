@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DispatchJob } from '@nudge/core';
+import { DISPATCH_JOB, idJobRejeu, type DispatchJob } from '@nudge/core';
 import { annulerRejeu, envois, rouvrirEnvoi, type Db } from '@nudge/database';
 import type { ApiErrorBody, EnvoiVu, StatutEnvoi } from '@nudge/shared';
 import type { Queue } from 'bullmq';
@@ -34,11 +33,7 @@ export class EnvoisService {
       } satisfies ApiErrorBody & { statut: StatutEnvoi });
     }
     try {
-      await this.dispatchQueue.add(
-        'dispatch',
-        { envoiId },
-        { jobId: `${envoiId}-rejeu-${randomUUID()}` },
-      );
+      await this.dispatchQueue.add(DISPATCH_JOB, { envoiId }, { jobId: idJobRejeu(envoiId) });
     } catch (erreur) {
       await annulerRejeu(this.db, envoiId, resultat.avant);
       throw erreur;

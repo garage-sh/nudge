@@ -1,5 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { DispatchJob, TriageJob } from '@nudge/core';
+import {
+  DISPATCH_JOB,
+  idJobBalayage,
+  idJobTriage,
+  TRIAGE_JOB,
+  type DispatchJob,
+  type TriageJob,
+} from '@nudge/core';
 import { envois, retours, type Db } from '@nudge/database';
 import type { JobType, Queue } from 'bullmq';
 import { and, asc, eq, lt } from 'drizzle-orm';
@@ -75,14 +82,12 @@ export class BalayageProcessor {
     );
     const oublies = enAttente.filter(({ id }) => !vivants.has(id));
     if (oublies.length === 0) return;
-    // Un id neuf par passage : un job en échec garde le sien, l'Envoi repart avec
-    // toutes ses tentatives.
     const passage = Date.now();
     await this.dispatchQueue.addBulk(
       oublies.map(({ id }) => ({
-        name: 'dispatch',
+        name: DISPATCH_JOB,
         data: { envoiId: id },
-        opts: { jobId: `${id}-balayage-${passage}` },
+        opts: { jobId: idJobBalayage(id, passage) },
       })),
     );
     for (const { id } of oublies) {
@@ -90,9 +95,9 @@ export class BalayageProcessor {
     }
   }
 
-  /** Le job de Triage d'un Retour a pour id celui du Retour. Rend vrai s'il a été (re)lancé. */
+  /** Relance le premier job de Triage du Retour (`idJobTriage`). Rend vrai s'il a été (re)lancé. */
   private async relancerTriage(retourId: string): Promise<boolean> {
-    const job = await this.triageQueue.getJob(retourId);
+    const job = await this.triageQueue.getJob(idJobTriage(retourId));
     if (job) {
       const etatJob = await job.getState();
       if (etatJob === 'failed') {
@@ -104,7 +109,7 @@ export class BalayageProcessor {
       if (etatJob !== 'completed' && etatJob !== 'unknown') return false;
       await job.remove();
     }
-    await this.triageQueue.add('triage', { retourId }, { jobId: retourId });
+    await this.triageQueue.add(TRIAGE_JOB, { retourId }, { jobId: idJobTriage(retourId) });
     return true;
   }
 }

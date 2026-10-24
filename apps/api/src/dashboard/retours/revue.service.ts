@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ActionRevue, ResultatRevue, TriageJob } from '@nudge/core';
+import {
+  idJobRevue,
+  TRIAGE_JOB,
+  type ActionRevue,
+  type ResultatRevue,
+  type TriageJob,
+} from '@nudge/core';
 import { annulerRevue, revoirRetour, type Db } from '@nudge/database';
 import type { Queue } from 'bullmq';
 import { DB, TRIAGE_QUEUE_TOKEN } from '../../infra/tokens.js';
@@ -48,7 +54,7 @@ export class RevueService {
    */
   private async dispatcher(retourId: string, action: ActionRevue): Promise<void> {
     try {
-      await this.triageQueue.add('triage', { retourId }, { jobId: `${retourId}-revue` });
+      await this.triageQueue.add(TRIAGE_JOB, { retourId }, { jobId: idJobRevue(retourId) });
     } catch (erreur) {
       await annulerRevue(this.db, retourId, action);
       throw erreur;
