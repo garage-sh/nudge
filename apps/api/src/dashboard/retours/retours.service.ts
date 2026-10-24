@@ -10,7 +10,7 @@ import {
   LIMITES_DASHBOARD,
   schemaFiltresRetours,
   type ApiErrorBody,
-  type schemaCorrectionVerdict,
+  type CorrectionVerdict,
   type PageRetours,
   type RetourDetailVu,
   type RetourResumeVu,
@@ -20,10 +20,9 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DB } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
-import { COLONNES_DESTINATION_ENVOI, toEnvoiVu } from './envois.service.js';
+import { COLONNES_DESTINATION_ENVOI, toEnvoiVu } from './envoi-vu.js';
 
 type FiltresRetours = z.output<typeof schemaFiltresRetours>;
-type CorrectionVerdict = z.output<typeof schemaCorrectionVerdict>;
 
 /**
  * Position d'un Retour dans la boîte de réception : son instant de création à la
@@ -193,7 +192,7 @@ export class RetoursService {
 const retourNonTrie = () =>
   new ConflictException({ erreur: 'retour_non_trie' } satisfies ApiErrorBody);
 
-const retourIntrouvable = () =>
+export const retourIntrouvable = () =>
   new NotFoundException({ erreur: 'retour_introuvable' } satisfies ApiErrorBody);
 
 type VerdictColonnes = Pick<typeof verdicts.$inferSelect, keyof VerdictVu>;

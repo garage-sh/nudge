@@ -34,6 +34,9 @@ export const STATUTS_ENVOI_REJOUABLES = [
   'echec',
 ] as const satisfies readonly StatutEnvoi[];
 
+export const estEnvoiRejouable = (statut: StatutEnvoi): boolean =>
+  (STATUTS_ENVOI_REJOUABLES as readonly StatutEnvoi[]).includes(statut);
+
 /** Les transitions qu'un Membre déclenche sur un Retour retenu par le Triage. */
 export const ACTIONS_REVUE = ['valider', 'rejeter', 'rehabiliter'] as const;
 export type ActionRevue = (typeof ACTIONS_REVUE)[number];

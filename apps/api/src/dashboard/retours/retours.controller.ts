@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   HttpCode,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -22,7 +21,7 @@ import {
 } from '@nudge/shared';
 import { SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
-import { RetoursService } from './retours.service.js';
+import { retourIntrouvable, RetoursService } from './retours.service.js';
 import { RevueService } from './revue.service.js';
 
 /** Boîte de réception : les Retours de tous les Projets, et ce qu'un Membre en fait. */
@@ -55,9 +54,7 @@ export class RetoursController {
   async revoir(@Param('id') id: string, @Body() corps: unknown): Promise<RetourDetailVu> {
     const { action } = parseBody(schemaRevue, corps);
     const resultat = await this.revue.revoir(id, action);
-    if (resultat.statut === 'introuvable') {
-      throw new NotFoundException({ erreur: 'retour_introuvable' } satisfies ApiErrorBody);
-    }
+    if (resultat.statut === 'introuvable') throw retourIntrouvable();
     if (resultat.statut === 'refuse') {
       throw new ConflictException({
         erreur: 'transition_refusee',

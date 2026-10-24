@@ -1,6 +1,6 @@
 import {
+  estEnvoiRejouable,
   GRAVITES,
-  STATUTS_ENVOI_REJOUABLES,
   TYPES_RETOUR,
   type ActionRevue,
   type AuteurVu,
@@ -8,7 +8,6 @@ import {
   type EnvoiVu,
   type Gravite,
   type RetourDetailVu,
-  type StatutEnvoi,
   type TypeRetour,
   type VerdictVu,
 } from '@nudge/shared';
@@ -164,7 +163,7 @@ function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu |
   if (!verdict) return <p className="discret">Ce Retour n’est pas encore trié.</p>;
   if (enCorrection) {
     return (
-      <CorrectionVerdict
+      <FormulaireCorrection
         retourId={retourId}
         verdict={verdict}
         fermer={() => setEnCorrection(false)}
@@ -197,7 +196,7 @@ function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu |
  * Le Membre corrige le Type retenu et la Gravité. Les Destinations déjà servies ne
  * voient pas la correction : le rejeu d'un Envoi la leur propage.
  */
-function CorrectionVerdict({
+function FormulaireCorrection({
   retourId,
   verdict,
   fermer,
@@ -299,9 +298,6 @@ function ContexteRetour({ contexte }: { contexte: Contexte }) {
   );
 }
 
-const estRejouable = (statut: StatutEnvoi): boolean =>
-  (STATUTS_ENVOI_REJOUABLES as readonly StatutEnvoi[]).includes(statut);
-
 /**
  * Les Envois, avec leur statut et le lien vers l'objet créé. Un Envoi livré ou en
  * échec se rejoue, avec le Verdict courant : pour rattraper un échec ou propager une
@@ -337,7 +333,7 @@ function Envois({
           </p>
           {envoi.lienExterne ? <LienExterne href={envoi.lienExterne} /> : null}
           {envoi.derniereErreur ? <p className="alerte">{envoi.derniereErreur}</p> : null}
-          {estRejouable(envoi.statut) ? (
+          {estEnvoiRejouable(envoi.statut) ? (
             <div className="actions">
               <button
                 type="button"

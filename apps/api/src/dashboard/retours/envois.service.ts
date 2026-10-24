@@ -7,29 +7,7 @@ import type { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { DB, DISPATCH_QUEUE_TOKEN } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
-
-/** Un Envoi tel que le dashboard le lit, avec sa Destination. */
-export const toEnvoiVu = (envoi: {
-  id: string;
-  destination: EnvoiVu['destination'];
-  statut: StatutEnvoi;
-  lienExterne: string | null;
-  tentatives: number;
-  derniereErreur: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}): EnvoiVu => ({
-  id: envoi.id,
-  destination: envoi.destination,
-  statut: envoi.statut,
-  lienExterne: envoi.lienExterne,
-  tentatives: envoi.tentatives,
-  derniereErreur: envoi.derniereErreur,
-  createdAt: envoi.createdAt.toISOString(),
-  updatedAt: envoi.updatedAt.toISOString(),
-});
-
-export const COLONNES_DESTINATION_ENVOI = { id: true, nom: true, type: true, etat: true } as const;
+import { COLONNES_DESTINATION_ENVOI, toEnvoiVu } from './envoi-vu.js';
 
 /** Rejeu manuel des Envois, pour rattraper un échec ou propager une correction du Verdict. */
 @Injectable()

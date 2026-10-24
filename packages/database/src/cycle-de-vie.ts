@@ -1,5 +1,5 @@
 import { TRANSITIONS_REVUE, type ActionRevue, type ResultatRevue } from '@nudge/core';
-import type { Gravite, TypeRetour } from '@nudge/shared';
+import type { CorrectionVerdict } from '@nudge/shared';
 import { and, eq, exists } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { retours, verdicts } from './schema.js';
@@ -62,7 +62,7 @@ export async function annulerRevue(db: Db, retourId: string, action: ActionRevue
 export async function corrigerVerdict(
   db: Db,
   retourId: string,
-  correction: { readonly typeRetenu?: TypeRetour; readonly gravite?: Gravite },
+  correction: CorrectionVerdict,
 ): Promise<boolean> {
   const corriges = await db
     .update(verdicts)

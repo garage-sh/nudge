@@ -89,8 +89,7 @@ export function useRevue(id: string) {
   return useMutation({
     mutationFn: (action: ActionRevue) =>
       api.post<RetourDetailVu>(`${cheminRetour(id)}/revue`, { action }),
-    onSuccess: (retour) => apres(retour),
-    onError: () => apres(),
+    onSettled: (retour) => apres(retour),
   });
 }
 
@@ -100,8 +99,7 @@ export function useCorrectionVerdict(id: string) {
   return useMutation({
     mutationFn: (correction: CorrectionVerdict) =>
       api.patch<RetourDetailVu>(`${cheminRetour(id)}/verdict`, correction),
-    onSuccess: (retour) => apres(retour),
-    onError: () => apres(),
+    onSettled: (retour) => apres(retour),
   });
 }
 

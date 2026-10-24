@@ -1,4 +1,4 @@
-import { STATUTS_ENVOI_REJOUABLES, type StatutEnvoi } from '@nudge/shared';
+import { estEnvoiRejouable, type StatutEnvoi } from '@nudge/shared';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { envois } from './schema.js';
@@ -15,9 +15,6 @@ export type ResultatRouverture =
   | { readonly statut: 'refuse'; readonly statutEnvoi: StatutEnvoi }
   | { readonly statut: 'introuvable' };
 
-const estRejouable = (statut: StatutEnvoi): boolean =>
-  (STATUTS_ENVOI_REJOUABLES as readonly StatutEnvoi[]).includes(statut);
-
 /**
  * Rouvre un Envoi livré ou en échec pour le rejouer (D9) : le même Envoi repasse en
  * attente, jamais un second. La ligne est verrouillée le temps de la lire et de la
@@ -32,7 +29,7 @@ export async function rouvrirEnvoi(db: Db, envoiId: string): Promise<ResultatRou
       .where(eq(envois.id, envoiId))
       .for('update');
     if (!envoi) return { statut: 'introuvable' };
-    if (!estRejouable(envoi.statut)) return { statut: 'refuse', statutEnvoi: envoi.statut };
+    if (!estEnvoiRejouable(envoi.statut)) return { statut: 'refuse', statutEnvoi: envoi.statut };
     await tx
       .update(envois)
       .set({ statut: 'en_attente', derniereErreur: null })
