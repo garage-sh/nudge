@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { BadRequestException } from '@nestjs/common';
+import { SecretDecryptionError } from '@nudge/core';
 import type { SecretsDestination } from '@nudge/database';
 import {
   DEFINITIONS_DESTINATION,
@@ -14,6 +15,19 @@ import { parseBody } from '../../validation.js';
  * Ce qui dépend du type d'une Destination (config, secrets saisis ou générés),
  * commun aux Destinations des Projets et à la Destination d'alerte de l'Instance.
  */
+
+/**
+ * Des secrets indéchiffrables (clé d'Instance changée) valent « aucun secret » : la
+ * Destination reste listée et modifiable, le Membre ressaisit ou régénère ses secrets.
+ */
+export function secretsLisibles(dechiffrer: () => SecretsDestination): Record<string, string> {
+  try {
+    return { ...dechiffrer() };
+  } catch (erreur) {
+    if (erreur instanceof SecretDecryptionError) return {};
+    throw erreur;
+  }
+}
 
 /** Une Destination dont le type n'est plus servi par cette Instance ne se modifie pas. */
 export function definitionDe(type: string): DefinitionDestination {

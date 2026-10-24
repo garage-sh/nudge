@@ -2,7 +2,6 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   alerteDEssai,
   alerter,
-  SecretDecryptionError,
   type DestinationAdapterResolver,
   type SecretCipher,
 } from '@nudge/core';
@@ -27,6 +26,7 @@ import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from '../../infra/tok
 import {
   appliquerSecretsSaisis,
   genererSecrets,
+  secretsLisibles,
   separerSecrets,
   validerParType,
 } from '../destinations/par-type.js';
@@ -103,13 +103,7 @@ export class DestinationAlerteService {
     };
   }
 
-  /** Des secrets indéchiffrables (clé d'Instance changée) valent « aucun secret ». */
   private secretsLisibles(alerte: DestinationAlerteEnregistree): Record<string, string> {
-    try {
-      return { ...dechiffrerSecretsAlerte(this.cipher, alerte) };
-    } catch (erreur) {
-      if (erreur instanceof SecretDecryptionError) return {};
-      throw erreur;
-    }
+    return secretsLisibles(() => dechiffrerSecretsAlerte(this.cipher, alerte));
   }
 }

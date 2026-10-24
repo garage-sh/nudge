@@ -2,7 +2,6 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   envoiDEssai,
   envoyer,
-  SecretDecryptionError,
   type DestinationAdapterResolver,
   type SecretCipher,
 } from '@nudge/core';
@@ -34,6 +33,7 @@ import {
   appliquerSecretsSaisis,
   definitionDe,
   genererSecrets,
+  secretsLisibles,
   separerSecrets,
   validerParType,
 } from './par-type.js';
@@ -204,17 +204,8 @@ export class DestinationsService {
     };
   }
 
-  /**
-   * Des secrets indéchiffrables (clé d'Instance changée) valent « aucun secret » : la
-   * Destination reste listée et modifiable, le Membre ressaisit ou régénère ses secrets.
-   */
   private secretsLisibles(ligne: DestinationRow): Record<string, string> {
-    try {
-      return { ...dechiffrerSecretsDestination(this.cipher, ligne) };
-    } catch (erreur) {
-      if (erreur instanceof SecretDecryptionError) return {};
-      throw erreur;
-    }
+    return secretsLisibles(() => dechiffrerSecretsDestination(this.cipher, ligne));
   }
 
   private async ligne(id: string): Promise<DestinationRow> {
