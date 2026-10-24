@@ -1,13 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { envoiDEssai, type DestinationAdapterResolver, type SecretCipher } from '@nudge/core';
+import {
+  envoiDEssai,
+  envoyer,
+  SecretDecryptionError,
+  type DestinationAdapterResolver,
+  type SecretCipher,
+} from '@nudge/core';
 import {
   chiffrerSecretsDestination,
   createDestination,
   dechiffrerSecretsDestination,
   destinations,
   filtreDe,
-  projets,
   toDestinationConfiguree,
   type Db,
   type DestinationRow,
@@ -24,12 +29,12 @@ import {
   type ResultatTestDestination,
   type schemaModificationDestination,
   type schemaNouvelleDestination,
-  type TypeDestination,
 } from '@nudge/shared';
 import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from '../../infra/tokens.js';
 import { isUuid, parseBody } from '../../validation.js';
+import { ProjetsService } from '../projets/projets.service.js';
 
 type NouvelleDestination = z.output<typeof schemaNouvelleDestination>;
 type ModificationDestination = z.output<typeof schemaModificationDestination>;
@@ -46,10 +51,11 @@ export class DestinationsService {
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
     @Inject(DESTINATION_ADAPTER_RESOLVER)
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
+    private readonly projets: ProjetsService,
   ) {}
 
   async lister(projetId: string): Promise<DestinationVu[]> {
-    await this.projet(projetId);
+    await this.projets.read(projetId);
     const lignes = await this.db
       .select()
       .from(destinations)
@@ -62,7 +68,7 @@ export class DestinationsService {
     projetId: string,
     nouvelle: NouvelleDestination,
   ): Promise<DestinationAvecSecretsGeneres> {
-    await this.projet(projetId);
+    await this.projets.read(projetId);
     const definition = DEFINITIONS_DESTINATION[nouvelle.type];
     const { config, secrets } = validerParType(definition, {
       config: nouvelle.config,
@@ -86,41 +92,50 @@ export class DestinationsService {
 
   /**
    * `config` remplace la configuration ; `secrets` ne touche que les secrets nommés
-   * (`null` efface). Les secrets générés par l'Instance ne se modifient pas ici.
+   * (`null` efface). Les secrets générés par l'Instance ne se modifient pas ici. La
+   * ligne est verrouillée le temps de fusionner ses secrets : une régénération
+   * concurrente n'est pas écrasée.
    */
   async modifier(id: string, champs: ModificationDestination): Promise<DestinationVu> {
-    const ligne = await this.ligne(id);
-    const definition = definitionDe(ligne.type);
-    const actuels = dechiffrerSecretsDestination(this.cipher, ligne);
-    const generes = garder(actuels, (nom) => definition.secretsGeneres.includes(nom));
-    const saisis: Record<string, string> = garder(
-      actuels,
-      (nom) => !definition.secretsGeneres.includes(nom),
-    );
-    for (const [nom, valeur] of Object.entries(champs.secrets ?? {})) {
-      if (valeur === null) delete saisis[nom];
-      else saisis[nom] = valeur;
-    }
-    const { config, secrets } = validerParType(definition, {
-      config: champs.config ?? ligne.config,
-      secrets: saisis,
+    if (!isUuid(id)) throw destinationIntrouvable();
+    const modifiee = await this.db.transaction(async (tx) => {
+      const [ligne] = await tx
+        .select()
+        .from(destinations)
+        .where(eq(destinations.id, id))
+        .for('update');
+      if (!ligne) throw destinationIntrouvable();
+      const definition = definitionDe(ligne.type);
+      const { generes, saisis } = separerSecrets(definition, this.secretsLisibles(ligne));
+      for (const [nom, valeur] of Object.entries(champs.secrets ?? {})) {
+        if (valeur === null) delete saisis[nom];
+        else saisis[nom] = valeur;
+      }
+      const { config, secrets } = validerParType(definition, {
+        config: champs.config ?? ligne.config,
+        secrets: saisis,
+      });
+      const [resultat] = await tx
+        .update(destinations)
+        .set({
+          ...(champs.nom ? { nom: champs.nom } : {}),
+          ...(champs.filtre
+            ? {
+                filtreTypes: [...champs.filtre.types],
+                filtreGraviteMinimale: champs.filtre.graviteMinimale,
+              }
+            : {}),
+          config,
+          secretsChiffres: chiffrerSecretsDestination(this.cipher, id, {
+            ...secrets,
+            ...generes,
+          }),
+          updatedAt: new Date(),
+        })
+        .where(eq(destinations.id, id))
+        .returning();
+      return resultat;
     });
-    const [modifiee] = await this.db
-      .update(destinations)
-      .set({
-        ...(champs.nom ? { nom: champs.nom } : {}),
-        ...(champs.filtre
-          ? {
-              filtreTypes: [...champs.filtre.types],
-              filtreGraviteMinimale: champs.filtre.graviteMinimale,
-            }
-          : {}),
-        config,
-        secretsChiffres: chiffrerSecretsDestination(this.cipher, id, { ...secrets, ...generes }),
-        updatedAt: new Date(),
-      })
-      .where(eq(destinations.id, id))
-      .returning();
     if (!modifiee) throw destinationIntrouvable();
     return this.vu(modifiee);
   }
@@ -135,21 +150,33 @@ export class DestinationsService {
     if (supprimees.length === 0) throw destinationIntrouvable();
   }
 
-  /** Nouveaux secrets générés (secret de signature…), lisibles cette seule fois. */
+  /**
+   * Nouveaux secrets générés (secret de signature…), lisibles cette seule fois. Ligne
+   * verrouillée comme pour une modification ; des secrets devenus indéchiffrables
+   * (clé d'Instance changée) sont remplacés par les nouveaux.
+   */
   async regenererSecretsGeneres(id: string): Promise<DestinationAvecSecretsGeneres> {
-    const ligne = await this.ligne(id);
-    const secretsGeneres = genererSecrets(definitionDe(ligne.type));
-    const secrets = { ...dechiffrerSecretsDestination(this.cipher, ligne), ...secretsGeneres };
-    const [modifiee] = await this.db
-      .update(destinations)
-      .set({
-        secretsChiffres: chiffrerSecretsDestination(this.cipher, id, secrets),
-        updatedAt: new Date(),
-      })
-      .where(eq(destinations.id, id))
-      .returning();
-    if (!modifiee) throw destinationIntrouvable();
-    return { destination: this.vu(modifiee), secretsGeneres };
+    if (!isUuid(id)) throw destinationIntrouvable();
+    return this.db.transaction(async (tx) => {
+      const [ligne] = await tx
+        .select()
+        .from(destinations)
+        .where(eq(destinations.id, id))
+        .for('update');
+      if (!ligne) throw destinationIntrouvable();
+      const secretsGeneres = genererSecrets(definitionDe(ligne.type));
+      const secrets = { ...this.secretsLisibles(ligne), ...secretsGeneres };
+      const [modifiee] = await tx
+        .update(destinations)
+        .set({
+          secretsChiffres: chiffrerSecretsDestination(this.cipher, id, secrets),
+          updatedAt: new Date(),
+        })
+        .where(eq(destinations.id, id))
+        .returning();
+      if (!modifiee) throw destinationIntrouvable();
+      return { destination: this.vu(modifiee), secretsGeneres };
+    });
   }
 
   /**
@@ -158,19 +185,11 @@ export class DestinationsService {
    */
   async tester(id: string): Promise<ResultatTestDestination> {
     const ligne = await this.ligne(id);
-    const projet = await this.projet(ligne.projetId);
-    try {
-      const adaptateur = this.resolveDestinationAdapter(
-        toDestinationConfiguree(ligne, this.cipher),
-      );
-      return await adaptateur.send(envoiDEssai({ id: projet.id, nom: projet.nom }));
-    } catch (erreur) {
-      return {
-        statut: 'echec',
-        classe: 'transient',
-        message: erreur instanceof Error ? erreur.message : String(erreur),
-      };
-    }
+    const projet = await this.projets.read(ligne.projetId);
+    return envoyer(
+      () => this.resolveDestinationAdapter(toDestinationConfiguree(ligne, this.cipher)),
+      envoiDEssai({ id: projet.id, nom: projet.nom }),
+    );
   }
 
   private vu(ligne: DestinationRow): DestinationVu {
@@ -178,13 +197,26 @@ export class DestinationsService {
       id: ligne.id,
       projetId: ligne.projetId,
       nom: ligne.nom,
-      type: ligne.type as TypeDestination,
+      type: ligne.type,
       config: ligne.config,
       filtre: filtreDe(ligne),
       etat: ligne.etat,
-      secrets: Object.keys(dechiffrerSecretsDestination(this.cipher, ligne)).sort(),
+      secrets: Object.keys(this.secretsLisibles(ligne)).sort(),
       createdAt: ligne.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Des secrets indéchiffrables (clé d'Instance changée) valent « aucun secret » : la
+   * Destination reste listée et modifiable, le Membre ressaisit ou régénère ses secrets.
+   */
+  private secretsLisibles(ligne: DestinationRow): Record<string, string> {
+    try {
+      return { ...dechiffrerSecretsDestination(this.cipher, ligne) };
+    } catch (erreur) {
+      if (erreur instanceof SecretDecryptionError) return {};
+      throw erreur;
+    }
   }
 
   private async ligne(id: string): Promise<DestinationRow> {
@@ -192,17 +224,6 @@ export class DestinationsService {
     const [ligne] = await this.db.select().from(destinations).where(eq(destinations.id, id));
     if (!ligne) throw destinationIntrouvable();
     return ligne;
-  }
-
-  private async projet(id: string): Promise<{ id: string; nom: string }> {
-    const projetIntrouvable = new NotFoundException({ erreur: 'projet_introuvable' });
-    if (!isUuid(id)) throw projetIntrouvable;
-    const [projet] = await this.db
-      .select({ id: projets.id, nom: projets.nom })
-      .from(projets)
-      .where(eq(projets.id, id));
-    if (!projet) throw projetIntrouvable;
-    return projet;
   }
 }
 
@@ -232,9 +253,16 @@ function genererSecrets(definition: DefinitionDestination): Record<string, strin
   );
 }
 
-function garder(
+/** Secrets générés par l'Instance d'un côté, saisis par le Membre de l'autre. */
+function separerSecrets(
+  definition: DefinitionDestination,
   secrets: SecretsDestination,
-  predicat: (nom: string) => boolean,
-): Record<string, string> {
-  return Object.fromEntries(Object.entries(secrets).filter(([nom]) => predicat(nom)));
+): { generes: Record<string, string>; saisis: Record<string, string> } {
+  const generes: Record<string, string> = {};
+  const saisis: Record<string, string> = {};
+  for (const [nom, valeur] of Object.entries(secrets)) {
+    if (definition.secretsGeneres.includes(nom)) generes[nom] = valeur;
+    else saisis[nom] = valeur;
+  }
+  return { generes, saisis };
 }

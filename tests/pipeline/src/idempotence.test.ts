@@ -35,6 +35,17 @@ describe('Idempotence des Envois', () => {
     expect(fake.attempts).toHaveLength(1);
   });
 
+  it('un job de Triage rejoué après le Dispatch ne sert pas une Destination ajoutée depuis', async () => {
+    const { retour, fake } = await retourLivre('Destination ajoutée après');
+    const ajoutee = await pipeline.createDestination(retour.projetId, { nom: 'Ajoutée après' });
+
+    await pipeline.rejouerTriage(retour.id);
+
+    expect((await pipeline.readRetour(retour.id))?.envois).toEqual(retour.envois);
+    expect(ajoutee.fake.attempts).toHaveLength(0);
+    expect(fake.attempts).toHaveLength(1);
+  });
+
   it('un job de Dispatch rejoué ne livre pas une seconde fois un Envoi déjà livré', async () => {
     const { retour, fake } = await retourLivre('Dispatch rejoué');
     const [envoi] = retour.envois;

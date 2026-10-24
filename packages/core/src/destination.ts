@@ -70,6 +70,26 @@ export interface DestinationConfiguree {
 export type DestinationAdapterResolver = (destination: DestinationConfiguree) => DestinationAdapter;
 
 /**
+ * Envoie par l'adaptateur que rend `adaptateur()` : une exception, à sa construction
+ * (type inconnu, secrets indéchiffrables) comme à l'envoi (réseau, bug), devient un
+ * échec transitoire au lieu de remonter.
+ */
+export async function envoyer(
+  adaptateur: () => DestinationAdapter,
+  envoi: EnvoiASortir,
+): Promise<ResultatEnvoi> {
+  try {
+    return await adaptateur().send(envoi);
+  } catch (erreur) {
+    return {
+      statut: 'echec',
+      classe: 'transient',
+      message: erreur instanceof Error ? erreur.message : String(erreur),
+    };
+  }
+}
+
+/**
  * Le Retour d'exemple que le bouton « tester » envoie à une Destination : il passe
  * par l'adaptateur comme un vrai, marqué `essai`, sans Envoi enregistré.
  */

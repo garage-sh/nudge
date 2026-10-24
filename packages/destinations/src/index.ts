@@ -1,9 +1,8 @@
 import type { DestinationConfiguree, DestinationAdapterResolver } from '@nudge/core';
-import type { TypeDestination } from '@nudge/shared';
+import { estTypeDestination, type TypeDestination } from '@nudge/shared';
 import { adaptateurWebhook } from './webhook.js';
 
 export { adaptateurWebhook, type OptionsWebhook } from './webhook.js';
-export { classerStatut } from './http.js';
 
 /**
  * Registre des adaptateurs de Destination de l'Instance, un par type déclaré dans
@@ -21,9 +20,6 @@ export class UnknownDestinationTypeError extends Error {
 }
 
 export const resolveDestinationAdapter: DestinationAdapterResolver = (destination) => {
-  const factory = Object.hasOwn(DESTINATION_ADAPTERS, destination.type)
-    ? DESTINATION_ADAPTERS[destination.type as TypeDestination]
-    : undefined;
-  if (!factory) throw new UnknownDestinationTypeError(destination);
-  return factory(destination);
+  if (!estTypeDestination(destination.type)) throw new UnknownDestinationTypeError(destination);
+  return DESTINATION_ADAPTERS[destination.type](destination);
 };

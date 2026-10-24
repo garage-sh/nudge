@@ -92,6 +92,24 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(JSON.stringify([lue.body, liste.body])).not.toContain(secret);
   });
 
+  it('des secrets indéchiffrables (clé d’Instance changée) n’empêchent ni de lister ni de régénérer', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'Clé changée' });
+    const { destination } = await creer(projet.id);
+    await pipeline.rendreSecretsIndechiffrables(destination.id);
+
+    expect(await membre.get(`/api/projets/${projet.id}/destinations`)).toEqual({
+      status: 200,
+      body: [{ ...destination, secrets: [] }],
+    });
+    const renomme = await membre.patch(`/api/destinations/${destination.id}`, { nom: 'Renommé' });
+    expect(renomme.status).toBe(200);
+    const regeneration = await membre.post<DestinationAvecSecretsGeneres>(
+      `/api/destinations/${destination.id}/secrets-generes`,
+    );
+    expect(regeneration.status).toBe(201);
+    expect(regeneration.body.destination.secrets).toEqual(['secretSignature']);
+  });
+
   it('régénère le secret de signature et montre le nouveau une seule fois', async () => {
     const { projet } = await pipeline.createProjet({ nom: 'Rotation' });
     const { destination, secretsGeneres } = await creer(projet.id);
@@ -147,6 +165,7 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     ['un type inconnu', { ...webhook(), type: 'pigeon' }, 'type'],
     ['une URL qui n’est pas http(s)', webhook('ftp://recepteur.test'), 'config.url'],
     ['une URL avec identifiants', webhook('https://moi:secret@recepteur.test'), 'config.url'],
+    ['une URL avec mot de passe', webhook('https://:secret@recepteur.test'), 'config.url'],
     [
       'un champ de config inconnu',
       { ...webhook(), config: { url: 'https://a.test', x: 1 } },

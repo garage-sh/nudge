@@ -2,6 +2,7 @@ import {
   GRAVITES,
   TYPES_DESTINATION,
   TYPES_RETOUR,
+  type FiltreSaisi,
   type FiltreVu,
   type Gravite,
   type TypeDestination,
@@ -16,7 +17,7 @@ export interface ValeursDestination {
   readonly type: TypeDestination;
   readonly nom: string;
   readonly config: Record<string, unknown>;
-  readonly filtre: FiltreVu;
+  readonly filtre: FiltreSaisi;
   /** Seulement les secrets saisis : absents, ceux enregistrés sont gardés. */
   readonly secrets?: Record<string, string>;
 }
@@ -37,7 +38,7 @@ export function FormulaireDestination({
   onAnnuler,
 }: {
   titre: string;
-  initiales: Omit<ValeursDestination, 'secrets'>;
+  initiales: Omit<ValeursDestination, 'secrets' | 'filtre'> & { readonly filtre: FiltreVu };
   typeModifiable: boolean;
   secretsEnregistres?: readonly string[];
   libelleBouton: string;
@@ -75,7 +76,7 @@ export function FormulaireDestination({
       type,
       nom,
       config,
-      filtre: { types, graviteMinimale },
+      filtre: { types: [...types], graviteMinimale },
       ...(Object.keys(saisis).length > 0 ? { secrets: saisis } : {}),
     });
   };

@@ -29,7 +29,9 @@ export const schemaUrlHttp = z
     (valeur) => {
       try {
         const url = new URL(valeur);
-        return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username;
+        return (
+          (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password
+        );
       } catch {
         return false;
       }

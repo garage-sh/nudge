@@ -11,6 +11,7 @@ import {
   type SeuilsTriage,
 } from '@nudge/core';
 import {
+  chiffrerSecretsDestination,
   connectDb,
   createDestination,
   createProjet,
@@ -80,6 +81,11 @@ export interface Pipeline {
   fakeDestination(destinationId: string): FakeDestination;
   /** La ligne d'une Destination telle qu'en base (secrets chiffrés), ou `null`. */
   ligneDestination(destinationId: string): Promise<DestinationRow | null>;
+  /**
+   * Chiffre les secrets d'une Destination avec une autre clé d'Instance : ils ne se
+   * déchiffrent plus, comme après un changement de `NUDGE_ENCRYPTION_KEY`.
+   */
+  rendreSecretsIndechiffrables(destinationId: string): Promise<void>;
   /** Un navigateur anonyme sur l'API du dashboard (il garde son cookie de session). */
   dashboard(): DashboardClient;
   /**
@@ -243,6 +249,15 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .from(destinations)
         .where(eq(destinations.id, destinationId));
       return ligne ?? null;
+    },
+    async rendreSecretsIndechiffrables(destinationId) {
+      const autreCle = createSecretCipher(randomBytes(32).toString('base64'));
+      await db
+        .update(destinations)
+        .set({
+          secretsChiffres: chiffrerSecretsDestination(autreCle, destinationId, { perdu: 'x' }),
+        })
+        .where(eq(destinations.id, destinationId));
     },
     dashboard: () => new DashboardClient(url),
     async signIn() {

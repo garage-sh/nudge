@@ -1,12 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type {
-  DestinationAdapterResolver,
-  DispatchJob,
-  EnvoiASortir,
-  ResultatEnvoi,
-  SecretCipher,
+import {
+  envoyer,
+  type DestinationAdapterResolver,
+  type DispatchJob,
+  type EnvoiASortir,
+  type SecretCipher,
 } from '@nudge/core';
-import { envois, toDestinationConfiguree, type Db, type DestinationRow } from '@nudge/database';
+import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
 import { and, eq, sql } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
@@ -66,7 +66,11 @@ export class DispatchProcessor {
       },
     };
 
-    const resultat = await this.send(destination, aSortir);
+    // Une exception (réseau, adaptateur, secrets indéchiffrables) est un échec transitoire.
+    const resultat = await envoyer(
+      () => this.resolveDestinationAdapter(toDestinationConfiguree(destination, this.cipher)),
+      aSortir,
+    );
     const enAttente = and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
     const tentatives = sql`${envois.tentatives} + 1`;
 
@@ -98,22 +102,5 @@ export class DispatchProcessor {
         derniereErreur: `${resultat.classe}: ${resultat.message}`,
       })
       .where(enAttente);
-  }
-
-  /**
-   * Une exception (réseau, bug de l'adaptateur, secrets indéchiffrables) est traitée
-   * comme un échec transitoire.
-   */
-  private async send(destination: DestinationRow, envoi: EnvoiASortir): Promise<ResultatEnvoi> {
-    try {
-      const configuree = toDestinationConfiguree(destination, this.cipher);
-      return await this.resolveDestinationAdapter(configuree).send(envoi);
-    } catch (erreur) {
-      return {
-        statut: 'echec',
-        classe: 'transient',
-        message: erreur instanceof Error ? erreur.message : String(erreur),
-      };
-    }
   }
 }

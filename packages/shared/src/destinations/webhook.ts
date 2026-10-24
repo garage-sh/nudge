@@ -13,6 +13,6 @@ export const definitionWebhook = {
 } as const satisfies DefinitionDestination;
 
 export type ConfigWebhook = z.output<typeof definitionWebhook.config>;
-export interface SecretsWebhook {
-  readonly secretSignature: string;
-}
+export type SecretsWebhook = Readonly<
+  Record<(typeof definitionWebhook.secretsGeneres)[number], string>
+>;

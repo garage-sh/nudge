@@ -1,3 +1,4 @@
+import type { DEFINITIONS_DESTINATION, TypeDestination } from '@nudge/shared';
 import type { ReactNode } from 'react';
 
 /** Ce que le formulaire commun passe aux champs propres à un type. */
@@ -17,7 +18,7 @@ export interface ChampsTypeProps {
  * Le versant dashboard d'un type de Destination. Chaque type (`webhook.tsx`…) en
  * exporte un, enregistré dans `FORMULAIRES_DESTINATION` (`index.ts`).
  */
-export interface FormulaireTypeDestination {
+export interface FormulaireTypeDestination<T extends TypeDestination = TypeDestination> {
   readonly libelle: string;
   /** Configuration d'une Destination neuve de ce type. */
   readonly configInitiale: Readonly<Record<string, unknown>>;
@@ -26,5 +27,10 @@ export interface FormulaireTypeDestination {
   /** Résumé de la config dans la liste (une URL, un salon…), affiché comme du texte. */
   readonly resume: (config: Readonly<Record<string, unknown>>) => string;
   /** Libellé et usage de chaque secret généré par l'Instance, montré une fois. */
-  readonly secretsGeneres: Readonly<Record<string, { libelle: string; aide: string }>>;
+  readonly secretsGeneres: Readonly<
+    Record<
+      (typeof DEFINITIONS_DESTINATION)[T]['secretsGeneres'][number],
+      { libelle: string; aide: string }
+    >
+  >;
 }

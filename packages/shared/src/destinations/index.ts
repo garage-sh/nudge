@@ -87,7 +87,11 @@ export interface DestinationVu {
   readonly id: string;
   readonly projetId: string;
   readonly nom: string;
-  readonly type: TypeDestination;
+  /**
+   * Un `TypeDestination` en principe ; une chaîne quelconque pour une Destination
+   * d'un type que cette Instance ne sert plus (le dashboard la liste sans l'éditer).
+   */
+  readonly type: string;
   readonly config: Readonly<Record<string, unknown>>;
   readonly filtre: FiltreVu;
   readonly etat: EtatDestination;

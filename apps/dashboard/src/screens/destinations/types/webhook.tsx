@@ -4,7 +4,7 @@ import type { FormulaireTypeDestination } from './type-destination.js';
 const url = (config: Readonly<Record<string, unknown>>) =>
   typeof config.url === 'string' ? config.url : '';
 
-export const formulaireWebhook: FormulaireTypeDestination = {
+export const formulaireWebhook: FormulaireTypeDestination<'webhook'> = {
   libelle: 'Webhook',
   configInitiale: { url: '' },
   Champs: ({ idPrefixe, config, setConfig }) => (

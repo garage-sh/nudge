@@ -1,4 +1,5 @@
 import {
+  estTypeDestination,
   FILTRE_TOUT,
   TYPES_DESTINATION,
   type DestinationVu,
@@ -39,6 +40,12 @@ interface SecretsMontres {
   readonly secrets: Readonly<Record<string, string>>;
 }
 
+/** Montre les secrets qu'une création ou une régénération vient de générer. */
+type MontrerSecrets = (
+  destination: DestinationVu,
+  secrets: Readonly<Record<string, string>>,
+) => void;
+
 export function Destinations() {
   const projetId = useParams().id ?? '';
   const projet = useProjet(projetId);
@@ -47,7 +54,7 @@ export function Destinations() {
   if (projet.isPending || destinations.isPending) return <Loading />;
   if (projet.isError) return <ErrorMessage erreur={projet.error} />;
   if (destinations.isError) return <ErrorMessage erreur={destinations.error} />;
-  const montrer = (destination: DestinationVu, secrets: Readonly<Record<string, string>>) =>
+  const montrer: MontrerSecrets = (destination, secrets) =>
     setSecretsMontres(
       Object.keys(secrets).length > 0
         ? { type: destination.type, nom: destination.nom, secrets }
@@ -77,12 +84,13 @@ export function Destinations() {
 }
 
 function SecretsGeneres({ type, nom, secrets }: SecretsMontres) {
-  const formulaire = formulaireDe(type);
+  const descriptions: Readonly<Record<string, { libelle: string; aide: string }>> =
+    formulaireDe(type)?.secretsGeneres ?? {};
   return (
     <div className="avertissement encadre" role="status">
       <p>Copiez maintenant le secret de « {nom} » : il ne sera plus jamais affiché.</p>
       {Object.entries(secrets).map(([cle, valeur]) => {
-        const description = formulaire?.secretsGeneres[cle];
+        const description = descriptions[cle];
         return (
           <div key={cle}>
             <h3>{description?.libelle ?? cle}</h3>
@@ -105,7 +113,7 @@ function CarteDestination({
   montrer,
 }: {
   destination: DestinationVu;
-  montrer: (destination: DestinationVu, secrets: Readonly<Record<string, string>>) => void;
+  montrer: MontrerSecrets;
 }) {
   const [enEdition, setEnEdition] = useState(false);
   const formulaire = formulaireDe(destination.type);
@@ -114,7 +122,7 @@ function CarteDestination({
   const regeneration = useRegenerationSecretsGeneres(destination.projetId, destination.id);
   const test = useTestDestination(destination.id);
 
-  if (enEdition && formulaire) {
+  if (enEdition && estTypeDestination(destination.type)) {
     return (
       <FormulaireDestination
         titre={`Modifier ${destination.nom}`}
@@ -130,7 +138,7 @@ function CarteDestination({
             {
               nom,
               config,
-              filtre: { ...filtre, types: [...filtre.types] },
+              filtre,
               ...(secrets ? { secrets } : {}),
             },
             { onSuccess: () => setEnEdition(false) },
@@ -207,20 +215,14 @@ function ResultatTest({ resultat }: { resultat: ResultatTestDestination }) {
   );
 }
 
-function Ajout({
-  projetId,
-  montrer,
-}: {
-  projetId: string;
-  montrer: (destination: DestinationVu, secrets: Readonly<Record<string, string>>) => void;
-}) {
+function Ajout({ projetId, montrer }: { projetId: string; montrer: MontrerSecrets }) {
   const creation = useCreationDestination(projetId);
-  // Remonté après chaque ajout : le formulaire repart vide.
-  const [cle, setCle] = useState(0);
+  // Chaque ajout remonte le formulaire, qui repart vide.
+  const [ajouts, setAjouts] = useState(0);
   const type = TYPES_DESTINATION[0];
   return (
     <FormulaireDestination
-      key={cle}
+      key={ajouts}
       titre="Ajouter une Destination"
       initiales={{
         type,
@@ -233,15 +235,12 @@ function Ajout({
       enCours={creation.isPending}
       erreur={creation.error}
       onSubmit={(valeurs) =>
-        creation.mutate(
-          { ...valeurs, filtre: { ...valeurs.filtre, types: [...valeurs.filtre.types] } },
-          {
-            onSuccess: (resultat) => {
-              montrer(resultat.destination, resultat.secretsGeneres);
-              setCle((n) => n + 1);
-            },
+        creation.mutate(valeurs, {
+          onSuccess: (resultat) => {
+            montrer(resultat.destination, resultat.secretsGeneres);
+            setAjouts((n) => n + 1);
           },
-        )
+        })
       }
     />
   );

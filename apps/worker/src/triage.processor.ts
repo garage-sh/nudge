@@ -25,6 +25,8 @@ import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
 
 const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
 
+type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 /**
  * Triage puis création des Envois. Chaque transition est persistée et
  * conditionnelle sur l'état courant : un job rejoué reprend là où il s'était arrêté.
@@ -55,7 +57,7 @@ export class TriageProcessor {
     }
     const etat = (await this.readEtat(retourId)) ?? retour.etat;
     if (etat === 'trie' || etat === 'dispatche') {
-      await this.dispatcher(retourId, retour.projetId);
+      await this.dispatcher(retourId, retour.projetId, etat);
     }
   }
 
@@ -133,50 +135,54 @@ export class TriageProcessor {
    * Un Envoi par Destination du Projet dont le Filtre retient le Verdict ; le Retour
    * passe Dispatché dès qu'il en a un, et reste Trié si aucun Filtre ne le retient.
    * L'Envoi est unique par (Retour, Destination) : un job rejoué n'en crée pas d'autre.
+   * Un Retour déjà Dispatché ne reçoit plus de nouvel Envoi (pas d'effet rétroactif
+   * d'une Destination ajoutée ou d'un Filtre modifié depuis) : le job rejoué remet
+   * seulement en queue ses Envois encore en attente.
    */
-  private async dispatcher(retourId: string, projetId: string): Promise<void> {
+  private async dispatcher(
+    retourId: string,
+    projetId: string,
+    etat: 'trie' | 'dispatche',
+  ): Promise<void> {
     const aEnvoyer = await this.db.transaction(async (tx) => {
-      const [verdict] = await tx
-        .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
-        .from(verdicts)
-        .where(eq(verdicts.retourId, retourId));
-      if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
-      const destinationsDuProjet = await tx
-        .select({
-          id: destinations.id,
-          filtreTypes: destinations.filtreTypes,
-          filtreGraviteMinimale: destinations.filtreGraviteMinimale,
-        })
-        .from(destinations)
-        .where(eq(destinations.projetId, projetId));
-      const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
-      if (cibles.length > 0) {
-        await tx
-          .insert(envois)
-          .values(cibles.map((d) => ({ retourId, destinationId: d.id })))
-          .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] });
-      }
-      const enAttente = await tx
+      if (etat === 'trie') await this.creerEnvois(tx, retourId, projetId);
+      return tx
         .select({ id: envois.id })
         .from(envois)
         .where(and(eq(envois.retourId, retourId), eq(envois.statut, 'en_attente')));
-      const tous = await tx
-        .select({ id: envois.id })
-        .from(envois)
-        .where(eq(envois.retourId, retourId));
-      if (tous.length > 0) {
-        await tx
-          .update(retours)
-          .set({ etat: 'dispatche' })
-          .where(and(eq(retours.id, retourId), eq(retours.etat, 'trie')));
-      }
-      return enAttente;
     });
 
     // Après le commit : le job de dispatch lit un Envoi qui existe. jobId = id de l'Envoi.
     await this.dispatchQueue.addBulk(
       aEnvoyer.map(({ id }) => ({ name: 'dispatch', data: { envoiId: id }, opts: { jobId: id } })),
     );
+  }
+
+  /** Les Envois des Destinations dont le Filtre retient le Verdict ; Dispatché s'il y en a. */
+  private async creerEnvois(tx: Transaction, retourId: string, projetId: string): Promise<void> {
+    const [verdict] = await tx
+      .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
+      .from(verdicts)
+      .where(eq(verdicts.retourId, retourId));
+    if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
+    const destinationsDuProjet = await tx
+      .select({
+        id: destinations.id,
+        filtreTypes: destinations.filtreTypes,
+        filtreGraviteMinimale: destinations.filtreGraviteMinimale,
+      })
+      .from(destinations)
+      .where(eq(destinations.projetId, projetId));
+    const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
+    if (cibles.length === 0) return;
+    await tx
+      .insert(envois)
+      .values(cibles.map((d) => ({ retourId, destinationId: d.id })))
+      .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] });
+    await tx
+      .update(retours)
+      .set({ etat: 'dispatche' })
+      .where(and(eq(retours.id, retourId), eq(retours.etat, 'trie')));
   }
 
   private async readEtat(retourId: string) {
