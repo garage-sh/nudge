@@ -46,6 +46,35 @@ describe('Filtre des Destinations', () => {
     expect(suggestions.fake.attempts).toHaveLength(0);
   });
 
+  it('un Retour part vers toutes les Destinations dont le Filtre le retient, et y est livré', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Plusieurs outils' });
+    const bugsGraves = await pipeline.createDestination(projet.id, {
+      nom: 'Bugs graves',
+      filtre: { types: ['bug'], graviteMinimale: 'majeure' },
+    });
+    const tout = await pipeline.createDestination(projet.id, { nom: 'Tout' });
+    const suggestions = await pipeline.createDestination(projet.id, {
+      nom: 'Suggestions',
+      filtre: { types: ['suggestion'], graviteMinimale: null },
+    });
+    pipeline.juge.script({ type: 'bug', gravite: 'bloquante' });
+
+    const id = await poster(cleSecrete, 'Le site est inaccessible');
+
+    const retour = await pipeline.waitForRetour(
+      id,
+      (r) => r.envois.length === 2 && r.envois.every((e) => e.statut === 'livre'),
+    );
+    expect(retour.etat).toBe('dispatche');
+    expect(retour.envois.map((e) => e.destinationId).sort()).toEqual(
+      [bugsGraves.destination.id, tout.destination.id].sort(),
+    );
+    for (const { fake } of [bugsGraves, tout]) {
+      expect(fake.envois.map((envoi) => envoi.retour.id)).toEqual([id]);
+    }
+    expect(suggestions.fake.attempts).toHaveLength(0);
+  });
+
   it('la Gravité minimale est un seuil inclusif', async () => {
     const { cleSecrete, bugsGraves } = await projetADeuxDestinations('Seuil');
     pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
