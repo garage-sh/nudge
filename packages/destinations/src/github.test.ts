@@ -302,6 +302,23 @@ describe('Adaptateur GitHub Issues', () => {
       expect(premier?.content.endsWith('…\n')).toBe(true);
     });
 
+    it('reste sous la limite même quand la clôture s’allonge (longue suite d’accents graves)', async () => {
+      const texte = `${'`'.repeat(40_000)}\n${'a'.repeat(40_000)}`;
+      const { body } = await issue(texte);
+
+      expect(body.length).toBeLessThanOrEqual(65_536);
+      const [premier] = md.parse(body, {});
+      expect(premier?.type).toBe('fence');
+      expect(md.parse(body, {}).filter((j) => j.type === 'fence')).toHaveLength(1);
+    });
+
+    it('coupe les mentions du titre, qui reprend la première ligne', async () => {
+      const { title } = await issue('@everyone @octocat le panier se vide');
+
+      expect(title).not.toMatch(/@(everyone|octocat)/);
+      expect(title.replaceAll('\u200b', '')).toBe('Bug · @everyone @octocat le panier se vide');
+    });
+
     it('échappe le nom du Projet : ni lien, ni mention', async () => {
       const { body } = await issue('Bonjour', {
         ...ENVOI.projet,

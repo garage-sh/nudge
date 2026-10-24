@@ -19,7 +19,7 @@ import {
   messageErreur,
 } from './http.js';
 import { echapperPonctuation, lienSur } from './markdown.js';
-import { premiereLigne, tronquer } from './texte.js';
+import { titreAvecType, tronquer } from './texte.js';
 
 export interface OptionsLinear {
   readonly fetch?: typeof globalThis.fetch;
@@ -169,7 +169,7 @@ export function adaptateurLinear(
       const creation = await graphql<DonneesCreation>(MUTATION_ISSUE, {
         entree: {
           teamId: cible.data.equipeId,
-          title: titre(envoi),
+          title: titreAvecType(envoi, TITRE_MAX),
           description: description(envoi),
           labelIds: cible.data.labelIds,
         },
@@ -222,15 +222,8 @@ interface DonneesCreation {
   };
 }
 
-/** Longueur maximale du titre d'une issue, en unités UTF-16. */
+/** Longueur maximale du titre d'une issue (texte brut chez Linear), en unités UTF-16. */
 const TITRE_MAX = 120;
-
-/** Titre (texte brut chez Linear) : le Type et la première ligne non vide du texte. */
-function titre({ essai, retour }: EnvoiASortir): string {
-  const ligne = premiereLigne(retour.texte);
-  const entete = `${essai ? 'Essai · ' : ''}${LIBELLES_TYPE[retour.typeRetenu]}`;
-  return tronquer(ligne ? `${entete} · ${ligne}` : entete, TITRE_MAX);
-}
 
 /**
  * Description (markdown) : le texte de l'Auteur échappé, puis un pied écrit par nudge.

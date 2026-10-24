@@ -17,9 +17,10 @@ import {
   echecHttp,
   messageErreur,
   messageEchec,
+  texteReponse,
 } from './http.js';
 import { echapperPonctuation, lienSur } from './markdown.js';
-import { premiereLigne, tronquer } from './texte.js';
+import { titreAvecType, tronquer } from './texte.js';
 
 export interface OptionsGitHub {
   readonly fetch?: typeof globalThis.fetch;
@@ -148,22 +149,17 @@ async function echecGitHub(reponse: Response): Promise<{ classe: ClasseEchec; me
 async function limiteDeDebit(reponse: Response): Promise<boolean> {
   if (reponse.headers.get('x-ratelimit-remaining') === '0') return true;
   if (reponse.headers.has('retry-after')) return true;
-  const texte = await reponse
-    .clone()
-    .text()
-    .catch(() => '');
-  return /rate limit/i.test(texte);
+  return /rate limit/i.test(await texteReponse(reponse));
 }
 
 /** Longueur maximale du titre d'une issue, en unités UTF-16. */
 const TITRE_MAX = 120;
 
-/** Titre : le Type et la première ligne non vide du texte. */
-function titre({ essai, retour }: EnvoiASortir): string {
-  const ligne = premiereLigne(retour.texte);
-  const entete = `${essai ? 'Essai · ' : ''}${LIBELLES_TYPE[retour.typeRetenu]}`;
-  return tronquer(ligne ? `${entete} · ${ligne}` : entete, TITRE_MAX);
-}
+/**
+ * Titre (texte brut chez GitHub) : le Type et la première ligne du texte, ses `@`
+ * coupés d'un espace sans chasse pour ne mentionner personne.
+ */
+const titre = (envoi: EnvoiASortir) => sansMention(titreAvecType(envoi, TITRE_MAX));
 
 /** Corps (markdown GitHub) : le texte de l'Auteur, puis un pied écrit par nudge. */
 function corps({ projet, retour }: EnvoiASortir): string {
@@ -191,6 +187,9 @@ const CORPS_MAX = 65_536;
 /** Place laissée au pied écrit par nudge (nom du Projet compris, 100 caractères). */
 const PIED_MAX = 1_000;
 
+/** Place du bloc de code du texte de l'Auteur, clôtures comprises. */
+const TEXTE_MAX = CORPS_MAX - PIED_MAX;
+
 /**
  * Le texte de l'Auteur dans un bloc de code clôturé : son contenu est littéral (GFM,
  * https://github.github.com/gfm/#fenced-code-blocks), sans mise en forme, lien, image,
@@ -198,11 +197,24 @@ const PIED_MAX = 1_000;
  * la plus longue suite du texte, qui ne peut donc pas la refermer.
  */
 function blocDeCode(texte: string): string {
-  const lignes = tronquer(texte.replace(/\r\n?/g, '\n'), CORPS_MAX - PIED_MAX);
-  const plusLongue = Math.max(0, ...(lignes.match(/`+/g) ?? []).map((suite) => suite.length));
-  const cloture = '`'.repeat(Math.max(3, plusLongue + 1));
+  let lignes = texte.replace(/\r\n?/g, '\n');
+  let cloture = '';
+  // La clôture dépend du texte gardé ; tronquer ne fait que la raccourcir : la boucle
+  // s'arrête dès que texte et clôtures tiennent ensemble.
+  for (;;) {
+    const plusLongue = (lignes.match(/`+/g) ?? []).reduce(
+      (max, suite) => Math.max(max, suite.length),
+      0,
+    );
+    cloture = '`'.repeat(Math.max(3, plusLongue + 1));
+    const place = TEXTE_MAX - 2 * (cloture.length + 1);
+    if (lignes.length <= place) break;
+    lignes = tronquer(lignes, place);
+  }
   return `${cloture}\n${lignes}\n${cloture}`;
 }
 
 /** Un texte du Membre (nom du Projet) en markdown : littéral, et sans mention. */
-const echapperMarkdown = (texte: string) => echapperPonctuation(texte).replaceAll('@', '@\u200b');
+const echapperMarkdown = (texte: string) => sansMention(echapperPonctuation(texte));
+
+const sansMention = (texte: string) => texte.replaceAll('@', '@\u200b');

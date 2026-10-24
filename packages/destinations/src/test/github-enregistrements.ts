@@ -3,11 +3,11 @@
  * l'adaptateur GitHub Issues.
  *
  * Chaque enregistrement dit d'où il vient :
- * - `documentation` : statut, en-têtes et sens donnés par la documentation (URL dans
- *   `source`) ; elle ne donne aucun corps d'erreur en exemple, le corps suit donc la
- *   forme `message` / `documentation_url` des erreurs de l'API REST ;
- * - `reconstituee` : corps de succès écrit pour nos requêtes en suivant le schéma
- *   documenté (la documentation n'en donne que le schéma).
+ * - `documentation` : forme reprise telle quelle de la documentation (URL dans `source`) ;
+ * - `reconstituee` : écrit pour nos requêtes en suivant le schéma documenté, ou réponse
+ *   d'erreur dont le statut et les en-têtes sont documentés mais dont la documentation
+ *   ne donne aucun corps en exemple : le corps suit la forme `message` /
+ *   `documentation_url` des erreurs de l'API REST, le message est vraisemblable.
  *
  * Aucune n'a été obtenue par un appel réel : la documentation fait foi. Lue le 2026-10-24 :
  * - https://docs.github.com/en/rest/issues/issues#create-an-issue (201, 400, 403, 404,
@@ -102,33 +102,33 @@ export const GITHUB = {
     },
   },
   identifiantsInvalides: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: AUTH,
     status: 401,
     corps: erreur('Bad credentials', { status: '401' }),
   },
   /** Jeton sans la permission « Issues : écriture » sur ce dépôt. */
   permissionRefusee: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: AUTH,
     status: 403,
     corps: erreur('Resource not accessible by personal access token', { status: '403' }),
   },
   /** Dépôt inexistant, ou hors de portée du jeton. */
   introuvable: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: `${ISSUES} ; ${AUTH}`,
     status: 404,
     corps: erreur('Not Found', { status: '404' }),
   },
   issuesDesactivees: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: ISSUES,
     status: 410,
     corps: erreur('Issues are disabled for this repo', { status: '410' }),
   },
   validationEchouee: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: `${ISSUES} ; ${DEPANNAGE}`,
     status: 422,
     corps: erreur('Validation Failed', {
@@ -137,20 +137,20 @@ export const GITHUB = {
     }),
   },
   requeteInvalide: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: ISSUES,
     status: 400,
     corps: erreur('Problems parsing JSON', { status: '400' }),
   },
   limitePrimaire: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: LIMITES,
     status: 403,
     corps: erreur('API rate limit exceeded for user ID 1.', { status: '403' }),
     entetes: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1792834200' },
   },
   limiteSecondaire: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: LIMITES,
     status: 403,
     corps: erreur('You have exceeded a secondary rate limit. Please wait a few minutes.', {
@@ -159,21 +159,21 @@ export const GITHUB = {
     entetes: { 'retry-after': '60', 'x-ratelimit-remaining': '4990' },
   },
   limite429: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: LIMITES,
     status: 429,
     corps: erreur('You have exceeded a secondary rate limit.', { status: '429' }),
     entetes: { 'retry-after': '30' },
   },
   indisponible: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: ISSUES,
     status: 503,
     corps: erreur('Service unavailable', { status: '503' }),
   },
   /** Dépôt renommé ou transféré. */
   deplace: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: DEPOT,
     status: 301,
     corps: erreur('Moved Permanently', { url: 'https://api.github.com/repositories/1296269' }),

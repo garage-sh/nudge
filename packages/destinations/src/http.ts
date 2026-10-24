@@ -43,6 +43,16 @@ export async function messageEchec(reponse: Response): Promise<string> {
   return extrait ? `HTTP ${reponse.status} : ${extrait}` : `HTTP ${reponse.status}`;
 }
 
+/** Le corps d'une réponse en texte, lu sur une copie (le corps reste lisible), ou `''`. */
+export async function texteReponse(reponse: Response): Promise<string> {
+  return (
+    await reponse
+      .clone()
+      .text()
+      .catch(() => '')
+  ).trim();
+}
+
 /** Message d'une exception de `fetch` (réseau, délai dépassé). */
 export const messageErreur = (erreur: unknown): string =>
   erreur instanceof Error ? erreur.message : String(erreur);

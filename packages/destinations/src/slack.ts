@@ -10,7 +10,13 @@ import {
   lireWebhookSlack,
   type SecretsSlack,
 } from '@nudge/shared';
-import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
+import {
+  DELAI_HTTP_PAR_DEFAUT_MS,
+  classerStatut,
+  echecHttp,
+  messageErreur,
+  texteReponse,
+} from './http.js';
 
 export interface OptionsSlack {
   readonly fetch?: typeof globalThis.fetch;
@@ -65,12 +71,7 @@ export function adaptateurSlack(
       } catch (erreur) {
         return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
       }
-      const code = (
-        await reponse
-          .clone()
-          .text()
-          .catch(() => '')
-      ).trim();
+      const code = await texteReponse(reponse);
       if (reponse.ok || (reponse.status === 400 && CODES_MESSAGE_VIDE.has(code))) {
         await reponse.body?.cancel();
         return { joignable: true };
@@ -110,12 +111,7 @@ const CODES_MESSAGE_VIDE = new Set(['no_text', 'invalid_payload']);
  * 4xx (`invalid_payload`, `no_text`…) visent ce message.
  */
 async function echecSlack(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
-  const code = (
-    await reponse
-      .clone()
-      .text()
-      .catch(() => '')
-  ).trim();
+  const code = await texteReponse(reponse);
   return echecHttp(reponse, (status) =>
     CODES_WEBHOOK_REFUSE.has(code) || status === 404 || status === 410
       ? 'auth'
@@ -126,11 +122,11 @@ async function echecSlack(reponse: Response): Promise<{ classe: ClasseEchec; mes
 function corpsSlack({ essai, projet, retour }: EnvoiASortir) {
   const type = LIBELLES_TYPE[retour.typeRetenu];
   const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
-  const nomProjet = echapper(projet.nom);
+  const nomProjet = echapperControles(projet.nom);
   const titre = `${essai ? 'Essai · ' : ''}${type} · ${nomProjet}`;
   const pied = [
     retour.incertain ? 'nudge · Verdict incertain' : 'nudge',
-    ...(lienSur(retour.lienDashboard)
+    ...(lienSurSlack(retour.lienDashboard)
       ? [`<${retour.lienDashboard}|Voir le Retour dans nudge>`]
       : []),
   ];
@@ -161,7 +157,7 @@ function corpsSlack({ essai, projet, retour }: EnvoiASortir) {
 const mrkdwn = (text: string) => ({ type: 'mrkdwn', text, verbatim: true });
 
 /** Un lien du dashboard qu'on peut écrire tel quel dans `<url|texte>`. */
-const lienSur = (lien: string | null): lien is string =>
+const lienSurSlack = (lien: string | null): lien is string =>
   lien !== null && /^https?:\/\/[^\s<>|]+$/.test(lien);
 
 /** Longueur maximale du texte d'une section (docs.slack.dev, Section block). */
@@ -181,10 +177,10 @@ const FERMETURE = '\n```';
  */
 function blocDeCode(texte: string): string {
   const max = SECTION_MAX - OUVERTURE.length - FERMETURE.length;
-  const encode = neutraliser(texte).replace(/`(?=`)/g, `\`${SANS_CHASSE}`);
+  const encode = neutraliserMentionsGenerales(texte).replace(/`(?=`)/g, `\`${SANS_CHASSE}`);
   let borne = '';
   for (const caractere of encode) {
-    const morceau = echapper(caractere);
+    const morceau = echapperControles(caractere);
     if (borne.length + morceau.length > max - 1) {
       borne += '…';
       break;
@@ -195,8 +191,8 @@ function blocDeCode(texte: string): string {
 }
 
 /** Échappement des caractères de contrôle de Slack (docs.slack.dev, Formatting message text). */
-const echapper = (texte: string) =>
+const echapperControles = (texte: string) =>
   texte.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-const neutraliser = (texte: string) =>
+const neutraliserMentionsGenerales = (texte: string) =>
   texte.replace(/@(channel|here|everyone)/gi, `@${SANS_CHASSE}$1`);
