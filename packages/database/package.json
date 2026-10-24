@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@nudge/core": "workspace:*",
-    "@nudge/judge": "workspace:*",
     "@nudge/shared": "workspace:*",
     "@types/pg": "^8.15.0",
     "drizzle-orm": "^0.45.2",

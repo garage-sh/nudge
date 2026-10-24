@@ -15,7 +15,7 @@ export interface ConfigJuge {
 }
 
 /** L'adaptateur du fournisseur choisi. Lève si la configuration est incomplète. */
-export function creerJuge(
+export function createJuge(
   config: ConfigJuge,
   dependances: { readonly fetch?: typeof globalThis.fetch } = {},
 ): Juge {
@@ -42,7 +42,7 @@ const estFournisseur = (valeur: string): valeur is FournisseurJuge =>
  * `NUDGE_JUDGE_BASE_URL`. Sans fournisseur : `null` (mode dégradé). Une
  * configuration invalide lève, pour échouer au démarrage plutôt qu'au premier Triage.
  */
-export function configJugeDepuisEnv(
+export function configJugeFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): ConfigJuge | null {
   const fournisseur = env.NUDGE_JUDGE_PROVIDER?.trim();

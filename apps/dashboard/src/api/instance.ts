@@ -1,4 +1,4 @@
-import type { JugeInstance, JugeInstanceVu } from '@nudge/shared';
+import type { ChoixJuge, JugeInstanceVu } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
 
@@ -11,7 +11,7 @@ export const useJugeInstance = () =>
 export function useChoixJuge() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (choix: JugeInstance) => api.put<JugeInstanceVu>(CHEMIN_JUGE, choix),
+    mutationFn: (choix: ChoixJuge) => api.put<JugeInstanceVu>(CHEMIN_JUGE, choix),
     onSuccess: (juge) => client.setQueryData(CLE_JUGE, juge),
   });
 }

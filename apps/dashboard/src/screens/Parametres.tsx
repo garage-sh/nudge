@@ -4,7 +4,7 @@ import {
   FOURNISSEURS_JUGE,
   MODELES_JUGE_PAR_DEFAUT,
   type FournisseurJuge,
-  type JugeInstance,
+  type ChoixJuge,
   type JugeInstanceVu,
 } from '@nudge/shared';
 import { useState, type FormEvent } from 'react';
@@ -39,7 +39,7 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
 
   const soumettre = (evenement: FormEvent) => {
     evenement.preventDefault();
-    const corps: JugeInstance = fournisseur
+    const corps: ChoixJuge = fournisseur
       ? {
           fournisseur,
           modele: modele || null,

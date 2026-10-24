@@ -157,7 +157,7 @@ const urlJuge = facultatif(LIMITES_DASHBOARD.urlJuge).refine(
  * les variables `NUDGE_JUDGE_*`, sinon mode dégradé). `cleApi` absente : la clé
  * enregistrée est gardée si le fournisseur ne change pas ; `null` l'efface.
  */
-export const schemaJugeInstance = z
+export const schemaChoixJuge = z
   .strictObject({
     fournisseur: z.enum(FOURNISSEURS_JUGE).nullable(),
     modele: facultatif(LIMITES_DASHBOARD.modeleJuge).optional(),
@@ -173,7 +173,7 @@ export const schemaJugeInstance = z
       });
     }
   });
-export type JugeInstance = z.input<typeof schemaJugeInstance>;
+export type ChoixJuge = z.input<typeof schemaChoixJuge>;
 
 /** Le Juge de l'Instance tel que le dashboard le lit : la clé n'est jamais rendue. */
 export interface JugeInstanceVu {

@@ -9,5 +9,5 @@ export interface OptionsAdaptateur {
 }
 
 /** `https://hote/prefixe/` + `/v1/x` → `https://hote/prefixe/v1/x`. */
-export const joindre = (base: string, chemin: string): string =>
+export const joinUrl = (base: string, chemin: string): string =>
   `${base.replace(/\/+$/, '')}${chemin}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configJugeDepuisEnv, creerJuge, type ConfigJuge } from './config.js';
+import { configJugeFromEnv, createJuge, type ConfigJuge } from './config.js';
 import { noul } from './port.js';
 import { TYPESAFE } from './test/enregistrements.js';
 
@@ -25,7 +25,7 @@ describe('Juge choisi par configuration', () => {
     const espion = fetchEspion();
     const config: ConfigJuge = { fournisseur, cleApi: 'cle-factice', modele: null, urlBase: null };
 
-    await creerJuge(config, { fetch: espion.fetch }).juger(requete);
+    await createJuge(config, { fetch: espion.fetch }).juger(requete);
 
     expect(espion.urls).toEqual([url]);
     expect(espion.entetes[0]!.get('authorization')).toBe('Bearer cle-factice');
@@ -33,7 +33,7 @@ describe('Juge choisi par configuration', () => {
 
   it('auto_heberge : appelle le serveur configuré, sans clé', async () => {
     const espion = fetchEspion();
-    await creerJuge(
+    await createJuge(
       { fournisseur: 'auto_heberge', cleApi: null, modele: null, urlBase: 'http://decider:8080' },
       { fetch: espion.fetch },
     ).juger(requete);
@@ -44,10 +44,10 @@ describe('Juge choisi par configuration', () => {
 
   it('refuse une configuration incomplète', () => {
     expect(() =>
-      creerJuge({ fournisseur: 'typesafe', cleApi: null, modele: null, urlBase: null }),
+      createJuge({ fournisseur: 'typesafe', cleApi: null, modele: null, urlBase: null }),
     ).toThrow(/clé/);
     expect(() =>
-      creerJuge({ fournisseur: 'auto_heberge', cleApi: null, modele: null, urlBase: null }),
+      createJuge({ fournisseur: 'auto_heberge', cleApi: null, modele: null, urlBase: null }),
     ).toThrow(/URL/);
   });
 });
@@ -55,7 +55,7 @@ describe('Juge choisi par configuration', () => {
 describe('Juge par variables d’environnement (repli)', () => {
   it('lit NUDGE_JUDGE_PROVIDER, _API_KEY, _MODEL et _BASE_URL', () => {
     expect(
-      configJugeDepuisEnv({
+      configJugeFromEnv({
         NUDGE_JUDGE_PROVIDER: 'openrouter',
         NUDGE_JUDGE_API_KEY: 'sk-or-factice',
         NUDGE_JUDGE_MODEL: 'typesafe/jev-1.14',
@@ -67,7 +67,7 @@ describe('Juge par variables d’environnement (repli)', () => {
       urlBase: null,
     });
     expect(
-      configJugeDepuisEnv({
+      configJugeFromEnv({
         NUDGE_JUDGE_PROVIDER: 'auto_heberge',
         NUDGE_JUDGE_BASE_URL: 'http://decider:8080',
       }),
@@ -80,18 +80,18 @@ describe('Juge par variables d’environnement (repli)', () => {
   });
 
   it('sans NUDGE_JUDGE_PROVIDER, pas de Juge (mode dégradé)', () => {
-    expect(configJugeDepuisEnv({})).toBeNull();
-    expect(configJugeDepuisEnv({ NUDGE_JUDGE_PROVIDER: '' })).toBeNull();
+    expect(configJugeFromEnv({})).toBeNull();
+    expect(configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: '' })).toBeNull();
   });
 
   it('refuse au démarrage un fournisseur inconnu ou une configuration incomplète', () => {
-    expect(() => configJugeDepuisEnv({ NUDGE_JUDGE_PROVIDER: 'gpt' })).toThrow(
+    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'gpt' })).toThrow(
       /NUDGE_JUDGE_PROVIDER/,
     );
-    expect(() => configJugeDepuisEnv({ NUDGE_JUDGE_PROVIDER: 'typesafe' })).toThrow(
+    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'typesafe' })).toThrow(
       /NUDGE_JUDGE_API_KEY/,
     );
-    expect(() => configJugeDepuisEnv({ NUDGE_JUDGE_PROVIDER: 'auto_heberge' })).toThrow(
+    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'auto_heberge' })).toThrow(
       /NUDGE_JUDGE_BASE_URL/,
     );
   });

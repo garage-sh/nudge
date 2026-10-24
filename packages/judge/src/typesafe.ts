@@ -1,7 +1,7 @@
 import { MODELES_JUGE_PAR_DEFAUT } from '@nudge/shared';
 import { jugeDecisions } from './decisions-http.js';
 import type { Juge } from './port.js';
-import { joindre, type OptionsAdaptateur } from './url.js';
+import { joinUrl, type OptionsAdaptateur } from './url.js';
 
 /** Hôte de l'API TypeSafe (https://docs.typesafe.ai/api/system-one). */
 export const URL_TYPESAFE = 'https://api.typesafe.ai';
@@ -10,9 +10,9 @@ export const URL_TYPESAFE = 'https://api.typesafe.ai';
 export function jugeTypeSafe(options: OptionsAdaptateur & { readonly cleApi: string }): Juge {
   return jugeDecisions({
     fournisseur: 'TypeSafe',
-    url: joindre(options.urlBase ?? URL_TYPESAFE, '/v1/systemone'),
+    url: joinUrl(options.urlBase ?? URL_TYPESAFE, '/v1/systemone'),
     modele: options.modele ?? MODELES_JUGE_PAR_DEFAUT.typesafe,
     cleApi: options.cleApi,
-    ...(options.fetch ? { fetch: options.fetch } : {}),
+    fetch: options.fetch,
   });
 }

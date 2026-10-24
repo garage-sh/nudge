@@ -1,6 +1,6 @@
 import { Inject, Module, type DynamicModule, type OnApplicationShutdown } from '@nestjs/common';
 import {
-  chiffreurDepuisCle,
+  createSecretCipher,
   DEFAULT_QUEUE_PREFIX,
   jobOptions,
   TRIAGE_QUEUE,
@@ -9,7 +9,7 @@ import {
 import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { CHIFFREUR, DB, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import { SECRET_CIPHER, DB, TRIAGE_QUEUE_TOKEN } from './tokens.js';
 
 export interface InfraOptions {
   readonly databaseUrl: string;
@@ -40,7 +40,7 @@ export class InfraModule implements OnApplicationShutdown {
       providers: [
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
-        { provide: CHIFFREUR, useFactory: () => chiffreurDepuisCle(options.cleChiffrement) },
+        { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.cleChiffrement) },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
@@ -56,7 +56,7 @@ export class InfraModule implements OnApplicationShutdown {
           inject: [REDIS],
         },
       ],
-      exports: [DB, TRIAGE_QUEUE_TOKEN, CHIFFREUR],
+      exports: [DB, TRIAGE_QUEUE_TOKEN, SECRET_CIPHER],
     };
   }
 

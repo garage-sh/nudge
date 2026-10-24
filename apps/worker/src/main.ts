@@ -1,7 +1,7 @@
 import 'reflect-metadata';
-import { VARIABLE_CLE_CHIFFREMENT } from '@nudge/core';
+import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
 import { resolveDestinationAdapter } from '@nudge/destinations';
-import { configJugeDepuisEnv } from '@nudge/judge';
+import { configJugeFromEnv } from '@nudge/judge';
 import { createWorker } from './worker.js';
 
 function requireEnv(nom: string): string {
@@ -14,9 +14,9 @@ async function main() {
   const app = await createWorker({
     databaseUrl: requireEnv('DATABASE_URL'),
     redisUrl: requireEnv('REDIS_URL'),
-    cleChiffrement: requireEnv(VARIABLE_CLE_CHIFFREMENT),
+    cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
     // Repli quand l'Instance n'a pas choisi de Juge dans le dashboard.
-    jugeParDefaut: configJugeDepuisEnv(process.env),
+    jugeParDefaut: configJugeFromEnv(process.env),
     resolveDestinationAdapter,
   });
   app.enableShutdownHooks();

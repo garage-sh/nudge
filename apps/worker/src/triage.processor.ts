@@ -10,11 +10,16 @@ import {
   type TriageJob,
 } from '@nudge/core';
 import { destinations, envois, retours, verdicts, type Db } from '@nudge/database';
-import { ErreurJugeTransitoire, type Juge, type RequeteJuge } from '@nudge/judge';
+import {
+  ErreurJugeRefusee,
+  ErreurJugeTransitoire,
+  type Juge,
+  type RequeteJuge,
+} from '@nudge/judge';
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
-import { JugeInstance } from './juge-instance.js';
+import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
 
 const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
@@ -29,7 +34,7 @@ export class TriageProcessor {
 
   constructor(
     @Inject(DB) private readonly db: Db,
-    private readonly jugeInstance: JugeInstance,
+    private readonly jugeResolver: JugeResolver,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
@@ -61,9 +66,9 @@ export class TriageProcessor {
     projet: { description: string | null };
   }): Promise<void> {
     // Une erreur du Juge remonte : BullMQ retente avec backoff, le Retour reste Reçu.
-    const juge = await this.jugeInstance.courant();
+    const juge = await this.jugeResolver.courant();
     const reponses = juge
-      ? await this.jugerAvecDelai(juge, {
+      ? await this.jugerAvecDelai(juge, retour.id, {
           instructions: TRIAGE_INSTRUCTIONS,
           state: buildTriageState({
             texte: retour.texte,
@@ -94,6 +99,7 @@ export class TriageProcessor {
    */
   private async jugerAvecDelai(
     juge: Juge,
+    retourId: string,
     requete: RequeteJuge<typeof triageQuestions>,
   ): Promise<TriageAnswers> {
     const delaiMs = this.options.delaiJugeMs ?? DELAI_JUGE_PAR_DEFAUT_MS;
@@ -108,6 +114,15 @@ export class TriageProcessor {
     });
     try {
       return await Promise.race([juge.juger(requete, { signal: annulation.signal }), expiration]);
+    } catch (erreur) {
+      // Un refus durable (clé refusée, requête rejetée) ne se résout pas seul : il est
+      // retenté comme le reste, mais signalé pour qu'un Membre corrige la configuration.
+      if (erreur instanceof ErreurJugeRefusee) {
+        this.logger.error(
+          `Juge : refus « ${erreur.motif} » pour le Retour ${retourId} : ${erreur.message}`,
+        );
+      }
+      throw erreur;
     } finally {
       clearTimeout(minuteur);
     }

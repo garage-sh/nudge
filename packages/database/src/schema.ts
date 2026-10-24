@@ -179,7 +179,7 @@ export const parametresInstance = pgTable(
     jugeFournisseur: fournisseurJugeEnum('juge_fournisseur'),
     jugeModele: text('juge_modele'),
     jugeUrlBase: text('juge_url_base'),
-    /** Clé API du Juge, chiffrée par la clé d'Instance (`CONTEXTE_CLE_JUGE`). */
+    /** Clé API du Juge, chiffrée par la clé d'Instance (`JUGE_KEY_CONTEXT`). */
     jugeCleChiffree: text('juge_cle_chiffree'),
     ...timestamps,
   },

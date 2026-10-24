@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { VARIABLE_CLE_CHIFFREMENT } from '@nudge/core';
+import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
 import { createApi } from './api.js';
 
 function requireEnv(nom: string): string {
@@ -12,7 +12,7 @@ async function main() {
   const app = await createApi({
     databaseUrl: requireEnv('DATABASE_URL'),
     redisUrl: requireEnv('REDIS_URL'),
-    cleChiffrement: requireEnv(VARIABLE_CLE_CHIFFREMENT),
+    cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
     sessionCookieSecure: process.env.NUDGE_COOKIE_SECURE !== 'false',
   });
   app.enableShutdownHooks();

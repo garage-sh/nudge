@@ -1,9 +1,10 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import type { Chiffreur } from '@nudge/core';
+import type { SecretCipher } from '@nudge/core';
 import {
-  CONTEXTE_CLE_JUGE,
-  enregistrerJugeInstance,
-  lireJugeInstance,
+  AUCUN_JUGE,
+  JUGE_KEY_CONTEXT,
+  readJugeInstance,
+  writeJugeInstance,
   type Db,
   type JugeEnregistre,
 } from '@nudge/database';
@@ -11,12 +12,12 @@ import {
   exigeCleApi,
   type ApiErrorBody,
   type JugeInstanceVu,
-  type schemaJugeInstance,
+  type schemaChoixJuge,
 } from '@nudge/shared';
 import type { z } from 'zod';
-import { CHIFFREUR, DB } from '../../infra/tokens.js';
+import { DB, SECRET_CIPHER } from '../../infra/tokens.js';
 
-type ChoixJuge = z.output<typeof schemaJugeInstance>;
+type ChoixJuge = z.output<typeof schemaChoixJuge>;
 
 const vu = (juge: JugeEnregistre): JugeInstanceVu => ({
   fournisseur: juge.fournisseur,
@@ -30,15 +31,15 @@ const vu = (juge: JugeEnregistre): JugeInstanceVu => ({
 export class JugeInstanceService {
   constructor(
     @Inject(DB) private readonly db: Db,
-    @Inject(CHIFFREUR) private readonly chiffreur: Chiffreur,
+    @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
   ) {}
 
   async lire(): Promise<JugeInstanceVu> {
-    return vu(await lireJugeInstance(this.db));
+    return vu(await readJugeInstance(this.db));
   }
 
   async choisir(choix: ChoixJuge): Promise<JugeInstanceVu> {
-    const actuel = await lireJugeInstance(this.db);
+    const actuel = await readJugeInstance(this.db);
     const juge: JugeEnregistre = choix.fournisseur
       ? {
           fournisseur: choix.fournisseur,
@@ -46,7 +47,7 @@ export class JugeInstanceService {
           urlBase: choix.urlBase ?? null,
           cleChiffree: this.cleApres(choix, actuel),
         }
-      : { fournisseur: null, modele: null, urlBase: null, cleChiffree: null };
+      : AUCUN_JUGE;
 
     if (juge.fournisseur && exigeCleApi(juge.fournisseur) && !juge.cleChiffree) {
       const refus: ApiErrorBody = {
@@ -57,20 +58,21 @@ export class JugeInstanceService {
       };
       throw new BadRequestException(refus);
     }
-    await enregistrerJugeInstance(this.db, juge);
+    await writeJugeInstance(this.db, juge);
     return vu(juge);
   }
 
   /**
-   * Une clé fournie est chiffrée ; `null` l'efface ; absente, la clé enregistrée est
-   * gardée tant que le fournisseur ne change pas (elle ne vaut que chez lui).
+   * Une clé fournie est chiffrée ; `null` l'efface. Absente, la clé enregistrée n'est
+   * gardée que pour le même fournisseur à la même adresse : elle ne doit jamais partir
+   * vers un hôte qu'on vient de changer.
    */
   private cleApres(choix: ChoixJuge, actuel: JugeEnregistre): string | null {
     if (choix.cleApi !== undefined) {
-      return choix.cleApi === null
-        ? null
-        : this.chiffreur.chiffrer(choix.cleApi, CONTEXTE_CLE_JUGE);
+      return choix.cleApi === null ? null : this.cipher.encrypt(choix.cleApi, JUGE_KEY_CONTEXT);
     }
-    return choix.fournisseur === actuel.fournisseur ? actuel.cleChiffree : null;
+    const memeServeur =
+      choix.fournisseur === actuel.fournisseur && (choix.urlBase ?? null) === actuel.urlBase;
+    return memeServeur ? actuel.cleChiffree : null;
   }
 }

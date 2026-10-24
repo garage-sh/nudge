@@ -81,7 +81,7 @@ describe('Juge choisi pour l’Instance', () => {
     expect(appel?.corps.model).toBe('jev-latest');
   });
 
-  it('ne rend jamais la clé ; la garde si seul le modèle change, l’oublie si le fournisseur change', async () => {
+  it('ne rend jamais la clé ; la garde si seul le modèle change, l’oublie si le fournisseur ou l’hôte change', async () => {
     const dashboard = await pipeline.signIn();
     await dashboard.put('/api/instance/juge', {
       fournisseur: 'openrouter',
@@ -96,6 +96,13 @@ describe('Juge choisi pour l’Instance', () => {
     expect(JSON.stringify((await dashboard.get('/api/instance/juge')).body)).not.toContain(
       'sk-or-secret',
     );
+
+    // La clé ne suit pas un changement d'hôte : elle partirait vers un serveur inconnu.
+    const autreHote = await dashboard.put('/api/instance/juge', {
+      fournisseur: 'openrouter',
+      urlBase: 'https://ailleurs.exemple',
+    });
+    expect(autreHote.status).toBe(400);
 
     const autre = await dashboard.put('/api/instance/juge', { fournisseur: 'typesafe' });
     expect(autre.status).toBe(400);

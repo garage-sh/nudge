@@ -25,7 +25,7 @@ export class FakeJuge implements Juge {
   /** Toutes les requêtes reçues, dans l'ordre. */
   readonly requests: RequeteJuge[] = [];
   /** Les requêtes que l'appelant a annulées (signal) pendant qu'elles étaient retenues. */
-  readonly annulations: RequeteJuge[] = [];
+  readonly cancelled: RequeteJuge[] = [];
   private current: Script = {};
   private confidence = 0.9;
   private remainingFailures = 0;
@@ -81,7 +81,7 @@ export class FakeJuge implements Juge {
     if (!signal) return held;
     return new Promise<void>((resolve, reject) => {
       const annuler = () => {
-        this.annulations.push(requete);
+        this.cancelled.push(requete);
         reject(new ErreurJugeTransitoire('FakeJuge : requête annulée'));
       };
       if (signal.aborted) return annuler();

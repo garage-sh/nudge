@@ -1,7 +1,7 @@
 import { MODELES_JUGE_PAR_DEFAUT } from '@nudge/shared';
 import { jugeDecisions } from './decisions-http.js';
 import type { Juge } from './port.js';
-import { joindre, type OptionsAdaptateur } from './url.js';
+import { joinUrl, type OptionsAdaptateur } from './url.js';
 
 /**
  * pplx-decider auto-hébergé : tout serveur exposant l'API Decisions de Perplexity,
@@ -14,9 +14,9 @@ export function jugeAutoHeberge(
 ): Juge {
   return jugeDecisions({
     fournisseur: 'Serveur Decisions',
-    url: joindre(options.urlBase, '/v1/decisions'),
+    url: joinUrl(options.urlBase, '/v1/decisions'),
     modele: options.modele ?? MODELES_JUGE_PAR_DEFAUT.auto_heberge,
     cleApi: options.cleApi ?? null,
-    ...(options.fetch ? { fetch: options.fetch } : {}),
+    fetch: options.fetch,
   });
 }

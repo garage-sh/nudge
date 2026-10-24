@@ -6,6 +6,7 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import {
+  createSecretCipher,
   jobOptions,
   BALAYAGE_RECUS_JOB,
   DISPATCH_QUEUE,
@@ -23,11 +24,12 @@ import { DispatchProcessor } from './dispatch.processor.js';
 import {
   DB,
   OPTIONS,
+  SECRET_CIPHER,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
   TRIAGE_QUEUE_TOKEN,
 } from './tokens.js';
-import { JugeInstance } from './juge-instance.js';
+import { JugeResolver } from './juge-resolver.js';
 import { BALAYAGE_PAR_DEFAUT, type WorkerOptions } from './options.js';
 import { TriageProcessor } from './triage.processor.js';
 
@@ -60,6 +62,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
+        { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.cleChiffrement) },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
@@ -94,7 +97,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
             }),
           inject: [REDIS],
         },
-        JugeInstance,
+        JugeResolver,
         TriageProcessor,
         DispatchProcessor,
         BalayageProcessor,

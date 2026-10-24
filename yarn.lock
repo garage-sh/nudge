@@ -1513,7 +1513,6 @@ __metadata:
   resolution: "@nudge/database@workspace:packages/database"
   dependencies:
     "@nudge/core": "workspace:*"
-    "@nudge/judge": "workspace:*"
     "@nudge/shared": "workspace:*"
     "@nudge/tsup-config": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
