@@ -5,7 +5,8 @@ import {
   type EtatRetour,
   type RetourResumeVu,
 } from '@nudge/shared';
-import { Link, useSearchParams } from 'react-router';
+import { createContext, useEffect, useRef } from 'react';
+import { Link, Outlet, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useAlertes } from '../api/alertes.js';
 import { useProjets } from '../api/projets.js';
 import {
@@ -14,7 +15,7 @@ import {
   type FiltresRetours,
   type NomFiltre,
 } from '../api/retours.js';
-import { EmptyState, ErrorMessage, Loading, PageHeader } from '../layout/ui.js';
+import { EmptyState, ErrorMessage, Loading, PageHeader, useMediaQuery } from '../layout/ui.js';
 import {
   formatDate,
   formatDateRelative,
@@ -27,7 +28,24 @@ import { BadgeIncertain, JaugeGravite, PastilleEtat } from './retour-badges.js';
 
 /** L'état de navigation qu'un Retour ouvert depuis la liste reçoit : la liste, pour Précédent / Suivant. */
 export interface ListeState {
-  readonly liste?: { readonly ids: readonly string[]; readonly recherche: string };
+  readonly liste?: { readonly ids: readonly string[] };
+}
+
+/**
+ * Présent quand le Retour s'affiche dans le volet de la Boîte de réception, à côté de
+ * la liste : la fiche se ferme au lieu de ramener à la liste.
+ */
+export const VoletRetour = createContext<{ readonly fermer: string } | null>(null);
+
+/** Largeur à partir de laquelle un Retour s'ouvre à côté de la liste. */
+const LARGEUR_VOLETS = '(min-width: 1200px)';
+
+/** La Boîte de réception, et le Retour ouvert : à côté de la liste si l'écran le permet. */
+export function Retours() {
+  const large = useMediaQuery(LARGEUR_VOLETS);
+  const ouvert = useMatch('/retours/:id')?.params.id;
+  if (ouvert && !large) return <Outlet />;
+  return <BoiteDeReception ouvert={large ? ouvert : undefined} />;
 }
 
 /** Les vues de la boîte de réception : un raccourci vers le filtre d'État. */
@@ -40,9 +58,13 @@ const VUES: readonly { readonly etat: EtatRetour | null; readonly libelle: strin
   { etat: 'ecarte', libelle: 'Écartés' },
 ];
 
-/** Boîte de réception : les Retours de tous les Projets ; les filtres vivent dans l'URL. */
-export function Retours() {
+/**
+ * Boîte de réception : les Retours de tous les Projets ; les filtres vivent dans l'URL.
+ * `ouvert` : le Retour affiché dans le volet, à côté de la liste.
+ */
+function BoiteDeReception({ ouvert }: { ouvert: string | undefined }) {
   const [parametres, setParametres] = useSearchParams();
+  const navigate = useNavigate();
   const filtres: FiltresRetours = Object.fromEntries(
     FILTRES_RETOURS.flatMap((nom) => {
       const valeur = parametres.get(nom);
@@ -63,14 +85,30 @@ export function Retours() {
   const retours = useRetours(filtres);
   const lignes = retours.data?.pages.flatMap((page) => page.retours) ?? [];
   const filtresHorsVue = Object.keys(filtres).filter((nom) => nom !== 'etat');
-  const liste: ListeState['liste'] = {
-    ids: lignes.map((retour) => retour.id),
-    recherche: parametres.toString(),
-  };
+  const liste: ListeState['liste'] = { ids: lignes.map((retour) => retour.id) };
+  const recherche = parametres.toString() ? `?${parametres.toString()}` : '';
+  const versRetour = (id: string) => `/retours/${id}${recherche}`;
 
-  return (
-    <section>
-      <PageHeader titre="Boîte de réception" />
+  // Comme une boîte mail : J / K passent au Retour suivant / précédent, Échap ferme.
+  useEffect(() => {
+    if (!ouvert) return;
+    const clavier = (e: KeyboardEvent) => {
+      const cible = e.target as HTMLElement;
+      if (e.metaKey || e.ctrlKey || e.altKey || cible.closest('input, textarea, select')) return;
+      const position = liste.ids.indexOf(ouvert);
+      const aller = (id: string | undefined) => {
+        if (id) void navigate(versRetour(id), { state: { liste } satisfies ListeState });
+      };
+      if (e.key === 'j') aller(liste.ids[position + 1]);
+      else if (e.key === 'k') aller(position > 0 ? liste.ids[position - 1] : undefined);
+      else if (e.key === 'Escape') void navigate(`/retours${recherche}`);
+    };
+    document.addEventListener('keydown', clavier);
+    return () => document.removeEventListener('keydown', clavier);
+  });
+
+  const listeRetours = (
+    <>
       <Vues etat={filtres.etat} parametres={parametres} />
       <Filtres filtres={filtres} filtrer={filtrer} />
       {retours.isFetchNextPageError ? null : (
@@ -112,7 +150,13 @@ export function Retours() {
               <h2 className="groupe-jour">{jour}</h2>
               <ul className="lignes-retours">
                 {duJour.map((retour) => (
-                  <LigneRetour key={retour.id} retour={retour} liste={liste} />
+                  <LigneRetour
+                    key={retour.id}
+                    retour={retour}
+                    liste={liste}
+                    vers={versRetour(retour.id)}
+                    ouvert={retour.id === ouvert}
+                  />
                 ))}
               </ul>
             </section>
@@ -131,6 +175,27 @@ export function Retours() {
       ) : null}
       {retours.isFetchNextPageError ? (
         <ErrorMessage erreur={retours.error} onRetry={() => void retours.fetchNextPage()} />
+      ) : null}
+      {ouvert ? (
+        <p className="raccourcis">
+          <kbd>J</kbd> <kbd>K</kbd> Retour suivant ou précédent, <kbd>Échap</kbd> fermer
+        </p>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section className="boite" data-volets={Boolean(ouvert)}>
+      <div className="boite-liste">
+        <PageHeader titre="Boîte de réception" />
+        {listeRetours}
+      </div>
+      {ouvert ? (
+        <VoletRetour.Provider value={{ fermer: `/retours${recherche}` }}>
+          <aside className="volet-retour" aria-label="Retour ouvert">
+            <Outlet />
+          </aside>
+        </VoletRetour.Provider>
       ) : null}
     </section>
   );
@@ -242,15 +307,39 @@ function Filtres({
   );
 }
 
-function LigneRetour({ retour, liste }: { retour: RetourResumeVu; liste: ListeState['liste'] }) {
+function LigneRetour({
+  retour,
+  liste,
+  vers,
+  ouvert,
+}: {
+  retour: RetourResumeVu;
+  liste: ListeState['liste'];
+  vers: string;
+  ouvert: boolean;
+}) {
   const { verdict } = retour;
   const state: ListeState = { liste };
+  const lien = useRef<HTMLAnchorElement>(null);
+  // Ouverte par J / K : la ligne vient dans la vue, et prend le focus s'il était dans la liste.
+  useEffect(() => {
+    const element = lien.current;
+    if (!ouvert || !element) return;
+    element.scrollIntoView?.({ block: 'nearest' });
+    if (document.activeElement?.closest('.liste-retours')) element.focus();
+  }, [ouvert]);
   return (
-    <li className="ligne-retour" data-etat={retour.etat}>
+    <li className="ligne-retour" data-etat={retour.etat} data-ouvert={ouvert}>
       <JaugeGravite gravite={verdict?.gravite} />
       <p className="corps">
         <strong className="type">{verdict ? LIBELLES_TYPE[verdict.typeRetenu] : 'Non trié'}</strong>
-        <Link to={`/retours/${retour.id}`} state={state} className="apercu">
+        <Link
+          ref={lien}
+          to={vers}
+          state={state}
+          className="apercu"
+          aria-current={ouvert ? 'true' : undefined}
+        >
           {retour.apercu}
         </Link>
       </p>

@@ -15,20 +15,21 @@ Les tokens et les classes sont dans `apps/dashboard/src/styles.css`, les primiti
 
 ### Couleur
 
-| Token                           | Clair                 | Rôle                                              |
-| ------------------------------- | --------------------- | ------------------------------------------------- |
-| `--toile`                       | `#f3f5f4`             | Fond de l'app, barre latérale                     |
-| `--surface`                     | `#ffffff`             | Listes, panneaux, champs                          |
-| `--surface-2`                   | `#f8faf9`             | Survol, code, pastille neutre                     |
-| `--texte`                       | `#16201c`             | Texte principal (16,7:1)                          |
-| `--discret`                     | `#5b6762`             | Métadonnées, aides (5,9:1)                        |
-| `--bordure` / `--bordure-forte` | `#dce2df` / `#c4ccc8` | Séparateurs / contours des contrôles              |
-| `--accent`                      | `#176a52`             | Action principale, sélection, liens (6,5:1)       |
-| `--revue`                       | `#5a48c8`             | Attend une décision humaine : En revue, Incertain |
-| `--succes`                      | `#1c7a4a`             | Dispatché, Livré, Active                          |
-| `--danger`                      | `#b42318`             | Échec, erreur, suppression                        |
-| `--retenu`                      | `#9a5b00`             | Suspendue, Retenu, avertissement                  |
-| `--gravite-1…4`                 | `#87938e` → `#b4161b` | Jauge : Cosmétique, Mineure, Majeure, Bloquante   |
+| Token                           | Clair                 | Rôle                                                                          |
+| ------------------------------- | --------------------- | ----------------------------------------------------------------------------- |
+| `--cadre`                       | `#e3e9e6`             | Le cadre de l'app : barre latérale, fond derrière la feuille                  |
+| `--toile`                       | `#f6f8f7`             | La feuille : le contenu, posé sur le cadre avec un filet et un rayon de 12 px |
+| `--surface`                     | `#ffffff`             | Listes, panneaux, champs, volet d'un Retour                                   |
+| `--surface-2`                   | `#f1f4f2`             | Survol, code, pastille neutre                                                 |
+| `--texte`                       | `#16201c`             | Texte principal (16,7:1)                                                      |
+| `--discret`                     | `#5b6762`             | Métadonnées, aides (5,9:1)                                                    |
+| `--bordure` / `--bordure-forte` | `#dce2df` / `#c4ccc8` | Séparateurs / contours des contrôles                                          |
+| `--accent`                      | `#176a52`             | Action principale, sélection, liens (6,5:1)                                   |
+| `--revue`                       | `#5a48c8`             | Attend une décision humaine : En revue, Incertain                             |
+| `--succes`                      | `#1c7a4a`             | Dispatché, Livré, Active                                                      |
+| `--danger`                      | `#b42318`             | Échec, erreur, suppression                                                    |
+| `--retenu`                      | `#9a5b00`             | Suspendue, Retenu, avertissement                                              |
+| `--gravite-1…4`                 | `#87938e` → `#b4161b` | Jauge : Cosmétique, Mineure, Majeure, Bloquante                               |
 
 Chaque couleur sémantique a sa variante `-doux` pour les fonds. Le mode sombre (`prefers-color-scheme: dark`) redéfinit chaque token avec ses propres valeurs ; aucun composant n'utilise de couleur littérale.
 
@@ -63,7 +64,8 @@ Chaque couleur sémantique a sa variante `-doux` pour les fonds. Le mode sombre 
 └────────────────────┴────────────────────────────────────────────┘
 ```
 
-- `Layout` : barre latérale de 232 px, sticky. Sous 860 px, elle devient un tiroir ouvert par « Menu » (fermé par Échap, le voile ou une navigation).
+- Trois plans, du plus sombre au plus clair : le cadre, la feuille, puis les surfaces. Un objet se détache de ce qui l'entoure en passant au plan suivant, jamais par une ombre.
+- `Layout` : barre latérale de 232 px, sticky, sur le cadre ; le contenu est une feuille posée à côté. Sous 860 px, la feuille occupe tout l'écran. Sous 860 px, elle devient un tiroir ouvert par « Menu » (fermé par Échap, le voile ou une navigation).
 - Les entrées fixes sont dans `layout/navigation.ts` ; les Projets sont lus depuis l'API.
 - Les alertes (`Alertes`) vivent dans la barre latérale : En revue en violet, Destination suspendue en ambre.
 - `PublicPage` : écrans sans session (setup, connexion, invitation), colonne de 400 px centrée.
@@ -112,6 +114,14 @@ Chaque écran connecté commence par `PageHeader`. Les motifs ci-dessous sont le
   - toute la ligne ouvre l'élément : un lien étiré par `::after`.
 
   Un résultat vide propose « Effacer les filtres ».
+
+- **Lecture en volet** (Boîte de réception, au-dessus de 1200 px) :
+  - comme une boîte mail, le Retour s'ouvre dans un volet (`.volet-retour`) à côté de la liste, qui se resserre ;
+  - la route reste `/retours/:id`, imbriquée sous `/retours` ; les filtres suivent dans l'URL ;
+  - la fiche sait qu'elle est dans le volet par le contexte `VoletRetour` : elle propose « Fermer », et son titre devient un `h2` ;
+  - J et K passent au Retour suivant ou précédent, et Échap ferme le volet ;
+  - lignes et fiche s'adaptent à la place qu'elles ont, par des container queries (`liste`, `fiche`) plutôt que par la largeur de l'écran.
+    Sous 1200 px, le Retour s'ouvre en pleine page.
 
 - **Fiche d'un élément** (détail d'un Retour, `screens/Retour.tsx`) :
   - `.fil` : retour à la liste d'origine, avec ses filtres, et Précédent / Suivant d'après l'état de navigation `ListeState` ;

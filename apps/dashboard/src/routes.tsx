@@ -26,8 +26,10 @@ export function AppRoutes() {
       <Route element={<RequireSession />}>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/retours" replace />} />
-          <Route path="retours" element={<Retours />} />
-          <Route path="retours/:id" element={<Retour />} />
+          {/* Un Retour s'ouvre dans la Boîte : à côté de la liste sur grand écran, seul sinon. */}
+          <Route path="retours" element={<Retours />}>
+            <Route path=":id" element={<Retour />} />
+          </Route>
           <Route path="projets" element={<Projets />} />
           <Route path="projets/:id" element={<Projet />} />
           <Route path="projets/:id/destinations" element={<Destinations />} />

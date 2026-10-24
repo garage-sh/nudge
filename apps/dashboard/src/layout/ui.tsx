@@ -3,11 +3,26 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   type InputHTMLAttributes,
   type ReactNode,
 } from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../api/client.js';
+
+/** Vrai tant que la media query correspond ; faux là où `matchMedia` n'existe pas. */
+export function useMediaQuery(requete: string): boolean {
+  return useSyncExternalStore(
+    (prevenir: () => void) => {
+      if (typeof window.matchMedia !== 'function') return () => {};
+      const liste = window.matchMedia(requete);
+      liste.addEventListener('change', prevenir);
+      return () => liste.removeEventListener('change', prevenir);
+    },
+    () => typeof window.matchMedia === 'function' && window.matchMedia(requete).matches,
+    () => false,
+  );
+}
 
 const MESSAGES: Record<string, string> = {
   identifiants_invalides: 'Email ou mot de passe incorrect.',
@@ -250,7 +265,10 @@ export function Confirmation({
       role="group"
       aria-label={question}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') onAnnuler();
+        if (e.key !== 'Escape') return;
+        // Échap ferme la confirmation, pas ce qui l'entoure (le volet d'un Retour).
+        e.stopPropagation();
+        onAnnuler();
       }}
     >
       <span>{question}</span>

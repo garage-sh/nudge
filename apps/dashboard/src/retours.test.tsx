@@ -1,7 +1,7 @@
 import type { PageRetours, ProjetVu, RetourDetailVu, RetourResumeVu } from '@nudge/shared';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CONNECTE, fakeApi } from './test/fake-api.js';
 import { renderDashboard } from './test/render.js';
 
@@ -187,6 +187,59 @@ const DETAIL: RetourDetailVu = {
   ],
   createdAt: '2026-10-24T09:00:00.000Z',
 };
+
+describe('Boîte de réception sur grand écran', () => {
+  /** Un écran assez large pour ouvrir un Retour à côté de la liste. */
+  const ecranLarge = () =>
+    vi.stubGlobal('matchMedia', (requete: string) => ({
+      matches: true,
+      media: requete,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+
+  const routes = () => ({
+    'GET /api/session': CONNECTE,
+    'GET /api/projets': PROJETS,
+    'GET /api/retours': page([RETOUR, { ...RETOUR, id: 'retour-2', apercu: 'Le second' }]),
+    'GET /api/retours/retour-1': { status: 200, body: DETAIL },
+    'GET /api/retours/retour-2': {
+      status: 200,
+      body: { ...DETAIL, id: 'retour-2', texte: 'Le second' },
+    },
+  });
+
+  it('ouvre le Retour à côté de la liste, comme une boîte mail', async () => {
+    ecranLarge();
+    fakeApi(routes());
+    renderDashboard('/retours');
+
+    await userEvent.click(await screen.findByRole('link', { name: 'Le paiement plante' }));
+
+    const volet = await screen.findByRole('complementary', { name: 'Retour ouvert' });
+    expect(within(volet).getByLabelText('Texte du Retour').textContent).toMatch(/paiement/);
+    expect(screen.getByRole('heading', { level: 1, name: 'Boîte de réception' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Le paiement plante' }).getAttribute('aria-current'),
+    ).toBe('true');
+  });
+
+  it('passe au Retour suivant avec J et ferme le volet avec Échap', async () => {
+    ecranLarge();
+    fakeApi(routes());
+    renderDashboard('/retours');
+    await userEvent.click(await screen.findByRole('link', { name: 'Le paiement plante' }));
+    await screen.findByRole('complementary', { name: 'Retour ouvert' });
+
+    await userEvent.keyboard('j');
+    const volet = screen.getByRole('complementary', { name: 'Retour ouvert' });
+    expect((await within(volet).findByLabelText('Texte du Retour')).textContent).toBe('Le second');
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('complementary', { name: 'Retour ouvert' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Boîte de réception' })).toBeTruthy();
+  });
+});
 
 describe('Détail d’un Retour', () => {
   it('montre le texte, l’Auteur, le contexte, le Verdict et les Envois', async () => {

@@ -15,7 +15,7 @@ import {
   type TypeRetour,
   type VerdictVu,
 } from '@nudge/shared';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useContext, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import {
   useCorrectionVerdict,
@@ -48,7 +48,7 @@ import {
   PastilleEtatDestination,
   PastilleStatutEnvoi,
 } from './retour-badges.js';
-import type { ListeState } from './Retours.js';
+import { VoletRetour, type ListeState } from './Retours.js';
 
 /**
  * Détail d'un Retour. Tout ce que l'Auteur a fourni (texte, identité, contexte)
@@ -61,13 +61,15 @@ export function Retour() {
   const [suivreJusqua, setSuivreJusqua] = useState(0);
   const suivre = () => setSuivreJusqua(Date.now() + SUIVI_APRES_ACTION_MS);
   const retour = useRetour(id, { suivreJusqua });
-  const liste = (useLocation().state as ListeState | null)?.liste;
-  const versListe = liste?.recherche ? `/retours?${liste.recherche}` : '/retours';
+  const location = useLocation();
+  const liste = (location.state as ListeState | null)?.liste;
+  const volet = useContext(VoletRetour);
+  const versListe = volet?.fermer ?? `/retours${location.search}`;
   if (retour.isPending) return <Loading />;
   if (retour.isError) {
     return (
       <>
-        <Fil versListe={versListe} />
+        <Fil versListe={versListe} dansVolet={Boolean(volet)} />
         <ErrorMessage erreur={retour.error} onRetry={() => void retour.refetch()} />
       </>
     );
@@ -76,10 +78,10 @@ export function Retour() {
   const { verdict } = detail;
   return (
     <article className="retour">
-      <Fil versListe={versListe} id={detail.id} liste={liste} />
-      <h1 className="visuellement-cache">
+      <Fil versListe={versListe} id={detail.id} liste={liste} dansVolet={Boolean(volet)} />
+      <Titre niveau={volet ? 2 : 1} className="visuellement-cache">
         Retour : {detail.texte.length > 80 ? `${detail.texte.slice(0, 80)}…` : detail.texte}
-      </h1>
+      </Titre>
       <div className="retour-grille">
         <div className="retour-principal">
           <header className="titre-retour">
@@ -146,11 +148,14 @@ function Fil({
   versListe,
   id,
   liste,
+  dansVolet,
 }: {
   versListe: string;
   id?: string;
   liste?: ListeState['liste'];
+  dansVolet: boolean;
 }) {
+  const { search } = useLocation();
   const position = id && liste ? liste.ids.indexOf(id) : -1;
   const precedent = position > 0 ? liste?.ids[position - 1] : undefined;
   const suivant = position >= 0 ? liste?.ids[position + 1] : undefined;
@@ -158,7 +163,7 @@ function Fil({
   return (
     <nav className="fil" aria-label="Fil">
       <Link to={versListe} className="retour-lien">
-        ← Boîte de réception
+        {dansVolet ? 'Fermer' : '← Boîte de réception'}
       </Link>
       {position >= 0 && liste ? (
         <span className="precedent-suivant">
@@ -166,14 +171,14 @@ function Fil({
             {position + 1} sur {liste.ids.length}
           </span>
           {precedent ? (
-            <Link to={`/retours/${precedent}`} state={state}>
+            <Link to={`/retours/${precedent}${search}`} state={state}>
               Précédent
             </Link>
           ) : (
             <span aria-disabled="true">Précédent</span>
           )}
           {suivant ? (
-            <Link to={`/retours/${suivant}`} state={state}>
+            <Link to={`/retours/${suivant}${search}`} state={state}>
               Suivant
             </Link>
           ) : (
@@ -182,6 +187,23 @@ function Fil({
         </span>
       ) : null}
     </nav>
+  );
+}
+
+/** Le titre du Retour : `h1` en pleine page, `h2` dans le volet (la Boîte a son `h1`). */
+function Titre({
+  niveau,
+  className,
+  children,
+}: {
+  niveau: 1 | 2;
+  className: string;
+  children: ReactNode;
+}) {
+  return niveau === 1 ? (
+    <h1 className={className}>{children}</h1>
+  ) : (
+    <h2 className={className}>{children}</h2>
   );
 }
 
@@ -237,7 +259,12 @@ function Revue({ retour, apresAction }: { retour: RetourDetailVu; apresAction: (
  */
 function Suppression({ retour }: { retour: RetourDetailVu }) {
   const navigate = useNavigate();
-  const suppression = useSuppressionRetour(retour.id, () => void navigate('/retours'));
+  const volet = useContext(VoletRetour);
+  const { search } = useLocation();
+  const suppression = useSuppressionRetour(
+    retour.id,
+    () => void navigate(volet?.fermer ?? `/retours${search}`),
+  );
   return (
     <>
       <p className="aide">
