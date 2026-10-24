@@ -1,7 +1,7 @@
 import type { DestinationVu, ProjetVu } from '@nudge/shared';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CONNECTE, fakeApi } from './test/fake-api.js';
 import { renderDashboard } from './test/render.js';
 
@@ -98,6 +98,80 @@ describe('Destinations d’un Projet', () => {
       config: { url: 'https://recepteur.test/nudge' },
       filtre: { types: ['bug', 'question'], graviteMinimale: 'majeure' },
     });
+  });
+
+  it('ajoute un salon Discord : l’URL du webhook part comme un secret', async () => {
+    const SALON: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Salon #bugs',
+      type: 'discord',
+      config: {},
+      secrets: ['url'],
+    };
+    const URL_WEBHOOK = 'https://discord.com/api/webhooks/223704706495545344/jeton-du-salon';
+    const api = fakeApi({
+      ...routesDeBase([]),
+      'POST /api/projets/projet-1/destinations': {
+        status: 201,
+        body: { destination: SALON, secretsGeneres: {} },
+      },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const formulaire = within(
+      (await screen.findByRole('heading', { name: 'Ajouter une Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.selectOptions(formulaire.getByLabelText('Type'), 'Discord');
+    await userEvent.type(formulaire.getByLabelText('Nom'), 'Salon #bugs');
+    const champUrl = formulaire.getByLabelText('URL du webhook') as HTMLInputElement;
+    expect(champUrl.type).toBe('password');
+    await userEvent.type(champUrl, URL_WEBHOOK);
+    await userEvent.click(formulaire.getByRole('button', { name: 'Ajouter' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.appels.find((a) => a.route === 'POST /api/projets/projet-1/destinations')?.corps,
+      ).toEqual({
+        type: 'discord',
+        nom: 'Salon #bugs',
+        config: {},
+        secrets: { url: URL_WEBHOOK },
+        filtre: { types: ['bug', 'suggestion', 'avis', 'question'], graviteMinimale: null },
+      }),
+    );
+  });
+
+  it('modifie un salon Discord sans ressaisir l’URL enregistrée', async () => {
+    const SALON: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Salon #bugs',
+      type: 'discord',
+      config: {},
+      secrets: ['url'],
+    };
+    const api = fakeApi({
+      ...routesDeBase([SALON]),
+      'PATCH /api/destinations/destination-1': { status: 200, body: SALON },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const salon = await carte('Salon #bugs');
+    expect(salon.getByText('Discord')).toBeTruthy();
+    await userEvent.click(salon.getByRole('button', { name: 'Modifier' }));
+    const formulaire = within(screen.getByRole('form', { name: 'Modifier Salon #bugs' }));
+    const champUrl = formulaire.getByLabelText('URL du webhook') as HTMLInputElement;
+    expect(champUrl.value).toBe('');
+    expect(champUrl.required).toBe(false);
+    expect(formulaire.getByText(/enregistrée \(chiffrée\)/)).toBeTruthy();
+    await userEvent.click(formulaire.getByRole('button', { name: 'Enregistrer' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.appels.find((a) => a.route === 'PATCH /api/destinations/destination-1')?.corps,
+      ).not.toHaveProperty('secrets'),
+    );
   });
 
   it('affiche le refus de l’API à l’ajout', async () => {

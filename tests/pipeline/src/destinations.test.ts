@@ -92,6 +92,48 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(JSON.stringify([lue.body, liste.body])).not.toContain(secret);
   });
 
+  it('ajoute un salon Discord : l’URL du webhook, qui porte son jeton, est un secret validé', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'Discord' });
+    const jeton = 'jeton-du-salon-3d89bb7572e0fb30d8128367b3b1b44f';
+    const salon = (url?: string) => ({
+      type: 'discord',
+      nom: 'Salon #bugs',
+      config: {},
+      ...(url === undefined ? {} : { secrets: { url } }),
+    });
+
+    for (const url of [
+      undefined,
+      'https://hooks.slack.com/services/T000/B000/XXXX',
+      'http://discord.com/api/webhooks/223704706495545344/jeton',
+      'https://discord.com/api/webhooks/223704706495545344/jeton?thread_id=1',
+      'https://discord.com.piege.test/api/webhooks/223704706495545344/jeton',
+    ]) {
+      const refus = await membre.post(`/api/projets/${projet.id}/destinations`, salon(url));
+      expect(refus).toMatchObject({
+        status: 400,
+        body: {
+          erreur: 'requete_invalide',
+          details: [{ chemin: expect.stringMatching(/^secrets/) }],
+        },
+      });
+    }
+
+    const { destination, secretsGeneres } = await creer(
+      projet.id,
+      salon(`https://discord.com/api/webhooks/223704706495545344/${jeton}`),
+    );
+    expect(destination).toMatchObject({ type: 'discord', config: {}, secrets: ['url'] });
+    expect(secretsGeneres).toEqual({});
+    const ligne = await pipeline.ligneDestination(destination.id);
+    expect(JSON.stringify(ligne)).not.toContain(jeton);
+    const renomme = await membre.patch<DestinationVu>(`/api/destinations/${destination.id}`, {
+      nom: 'Salon #support',
+    });
+    expect(renomme.body).toMatchObject({ nom: 'Salon #support', secrets: ['url'] });
+    expect(JSON.stringify(renomme.body)).not.toContain(jeton);
+  });
+
   it('des secrets indéchiffrables (clé d’Instance changée) n’empêchent ni de lister ni de régénérer', async () => {
     const { projet } = await pipeline.createProjet({ nom: 'Clé changée' });
     const { destination } = await creer(projet.id);

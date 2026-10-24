@@ -4,27 +4,13 @@ import type {
   EtatDestination,
   EtatRetour,
   FournisseurJuge,
-  Gravite,
   Source,
   StatutEnvoi,
-  TypeRetour,
 } from '@nudge/shared';
 
 /** Libellés affichés des valeurs du domaine (vocabulaire de CONTEXT.md). */
 
-export const LIBELLES_TYPE: Record<TypeRetour, string> = {
-  bug: 'Bug',
-  suggestion: 'Suggestion',
-  avis: 'Avis',
-  question: 'Question',
-};
-
-export const LIBELLES_GRAVITE: Record<Gravite, string> = {
-  cosmetique: 'Cosmétique',
-  mineure: 'Mineure',
-  majeure: 'Majeure',
-  bloquante: 'Bloquante',
-};
+export { LIBELLES_GRAVITE, LIBELLES_TYPE } from '@nudge/shared';
 
 export const LIBELLES_ETAT: Record<EtatRetour, string> = {
   recu: 'Reçu',

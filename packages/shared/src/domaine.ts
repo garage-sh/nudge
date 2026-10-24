@@ -7,6 +7,21 @@ export type TypeRetour = (typeof TYPES_RETOUR)[number];
 export const GRAVITES = ['cosmetique', 'mineure', 'majeure', 'bloquante'] as const;
 export type Gravite = (typeof GRAVITES)[number];
 
+/** Libellés affichés d'un Type et d'une Gravité : dashboard et messages des Destinations. */
+export const LIBELLES_TYPE: Readonly<Record<TypeRetour, string>> = {
+  bug: 'Bug',
+  suggestion: 'Suggestion',
+  avis: 'Avis',
+  question: 'Question',
+};
+
+export const LIBELLES_GRAVITE: Readonly<Record<Gravite, string>> = {
+  cosmetique: 'Cosmétique',
+  mineure: 'Mineure',
+  majeure: 'Majeure',
+  bloquante: 'Bloquante',
+};
+
 /** `extension` est réservée au futur module de QA. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];

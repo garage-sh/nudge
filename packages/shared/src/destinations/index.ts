@@ -8,9 +8,11 @@ import {
   type TypeRetour,
 } from '../domaine.js';
 import type { DefinitionDestination } from './definition.js';
+import { definitionDiscord } from './discord.js';
 import { definitionWebhook } from './webhook.js';
 
 export { schemaUrlHttp, type DefinitionDestination } from './definition.js';
+export * from './discord.js';
 export * from './webhook.js';
 
 /**
@@ -21,6 +23,7 @@ export * from './webhook.js';
  */
 export const DEFINITIONS_DESTINATION = {
   webhook: definitionWebhook,
+  discord: definitionDiscord,
 } as const satisfies Record<string, DefinitionDestination>;
 
 export type TypeDestination = keyof typeof DEFINITIONS_DESTINATION;
