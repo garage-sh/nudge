@@ -17,7 +17,7 @@ import {
 } from '@nudge/database';
 import type { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { EchecTransitoire } from './dispatch.processor.js';
+import { EchecTransitoire } from './echec-transitoire.js';
 import type { WorkerOptions } from './options.js';
 import {
   ALERTES_QUEUE_TOKEN,

@@ -17,14 +17,10 @@ import {
   type DestinationRow,
 } from '@nudge/database';
 import { eq } from 'drizzle-orm';
+import { EchecTransitoire } from './echec-transitoire.js';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
-
-/** Échec transitoire : le job est relancé par BullMQ (backoff exponentiel et jitter). */
-export class EchecTransitoire extends Error {
-  override readonly name = 'EchecTransitoire';
-}
 
 @Injectable()
 export class DispatchProcessor {
