@@ -216,3 +216,67 @@ describe('Rate limit de l’ingestion par clé publique', () => {
     });
   });
 });
+
+describe('Rate limit par IP derrière un reverse proxy (`trust proxy`)', () => {
+  const posterDepuis = (pipeline: Pipeline, cle: string, ip: string) =>
+    fetch(`${pipeline.url}/v1/retours`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${cle}`,
+        origin: ORIGINE,
+        'x-forwarded-for': ip,
+      },
+      body: JSON.stringify({ texte: 'Derrière le proxy' }),
+    });
+
+  const limitesWidget = {
+    parIp: { limit: 1, windowMs: 60_000 },
+    parProjet: { limit: 100, windowMs: 60_000 },
+  };
+
+  describe('avec un proxy de confiance', () => {
+    let pipeline: Pipeline;
+
+    beforeAll(async () => {
+      pipeline = await startPipeline({ limitesWidget, trustProxy: 1 });
+    });
+
+    afterAll(async () => {
+      await pipeline?.stop();
+    });
+
+    it('compte chaque client par l’IP que le proxy transmet', async () => {
+      const { clePublique } = await pipeline.createProjet({
+        nom: 'Proxy',
+        originesAutorisees: [ORIGINE],
+      });
+
+      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(202);
+      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(429);
+      expect((await posterDepuis(pipeline, clePublique, '203.0.113.2')).status).toBe(202);
+    });
+  });
+
+  describe('sans proxy déclaré', () => {
+    let pipeline: Pipeline;
+
+    beforeAll(async () => {
+      pipeline = await startPipeline({ limitesWidget });
+    });
+
+    afterAll(async () => {
+      await pipeline?.stop();
+    });
+
+    it('ignore X-Forwarded-For : un client ne contourne pas sa limite en le changeant', async () => {
+      const { clePublique } = await pipeline.createProjet({
+        nom: 'Direct',
+        originesAutorisees: [ORIGINE],
+      });
+
+      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(202);
+      expect((await posterDepuis(pipeline, clePublique, '203.0.113.2')).status).toBe(429);
+    });
+  });
+});

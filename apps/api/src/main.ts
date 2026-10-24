@@ -1,27 +1,18 @@
 import 'reflect-metadata';
-import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
 import { resolveDestinationAdapter } from '@nudge/destinations';
-import { configStockageFromEnv, createStockage } from '@nudge/stockage';
+import { createStockage } from '@nudge/stockage';
 import { createApi } from './api.js';
-
-function requireEnv(nom: string): string {
-  const valeur = process.env[nom];
-  if (!valeur) throw new Error(`Variable d'environnement manquante : ${nom}`);
-  return valeur;
-}
+import { configApiFromEnv } from './env.js';
 
 async function main() {
+  const { port, stockage, ...config } = configApiFromEnv(process.env);
   const app = await createApi({
-    databaseUrl: requireEnv('DATABASE_URL'),
-    redisUrl: requireEnv('REDIS_URL'),
-    cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
-    sessionCookieSecure: process.env.NUDGE_COOKIE_SECURE !== 'false',
+    ...config,
     resolveDestinationAdapter,
-    // Le même stockage que du worker : un volume partagé, ou un bucket S3.
-    stockageCaptures: createStockage(configStockageFromEnv(process.env)),
+    stockageCaptures: createStockage(stockage),
   });
   app.enableShutdownHooks();
-  await app.listen(Number(process.env.NUDGE_API_PORT ?? 3000));
+  await app.listen(port);
 }
 
 void main();

@@ -1,27 +1,15 @@
 import 'reflect-metadata';
-import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
 import { resolveDestinationAdapter } from '@nudge/destinations';
-import { configStockageFromEnv, createStockage } from '@nudge/stockage';
-import { configJugeFromEnv } from '@nudge/judge';
+import { createStockage } from '@nudge/stockage';
+import { configWorkerFromEnv } from './env.js';
 import { createWorker } from './worker.js';
 
-function requireEnv(nom: string): string {
-  const valeur = process.env[nom];
-  if (!valeur) throw new Error(`Variable d'environnement manquante : ${nom}`);
-  return valeur;
-}
-
 async function main() {
+  const { stockage, ...config } = configWorkerFromEnv(process.env);
   const app = await createWorker({
-    databaseUrl: requireEnv('DATABASE_URL'),
-    redisUrl: requireEnv('REDIS_URL'),
-    cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
-    // Repli quand l'Instance n'a pas choisi de Juge dans le dashboard.
-    jugeParDefaut: configJugeFromEnv(process.env),
+    ...config,
     resolveDestinationAdapter,
-    // Le même stockage que de l'api : un volume partagé, ou un bucket S3.
-    stockageCaptures: createStockage(configStockageFromEnv(process.env)),
-    dashboardUrl: process.env.NUDGE_DASHBOARD_URL || null,
+    stockageCaptures: createStockage(stockage),
   });
   app.enableShutdownHooks();
 }

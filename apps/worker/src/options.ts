@@ -47,6 +47,9 @@ export interface WorkerOptions {
   readonly logger?: false | LogLevel[];
 }
 
+/** Délai d'une requête au Juge avant abandon : un dépassement est transitoire, retenté. */
+export const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
+
 export interface OptionsBalayage {
   /** Âge au-delà duquel un Retour encore Reçu est remis au Triage. */
   readonly delaiMs: number;

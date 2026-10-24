@@ -76,6 +76,8 @@ export interface PipelineOptions {
   readonly repliquesWorker?: number;
   /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
   readonly limitesWidget?: LimitesWidget;
+  /** Réglage `trust proxy` de l'api (`NUDGE_TRUST_PROXY`) ; aucun proxy sinon. */
+  readonly trustProxy?: boolean | number | string;
   /**
    * Stockage des Captures, partagé par l'api et le worker ; par défaut, un disque
    * local dans un dossier temporaire propre au pipeline, supprimé à l'arrêt.
@@ -270,6 +272,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     sessionCookieSecure: false,
     resolveDestinationAdapter,
     ...(options.limitesWidget ? { limitesWidget: options.limitesWidget } : {}),
+    ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
   });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();

@@ -20,11 +20,9 @@ import {
 import type { Queue } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
 import { AlertesService } from './alertes.service.js';
-import type { WorkerOptions } from './options.js';
+import { DELAI_JUGE_PAR_DEFAUT_MS, type WorkerOptions } from './options.js';
 import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
-
-const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
 
 type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
 

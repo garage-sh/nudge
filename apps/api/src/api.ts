@@ -15,6 +15,12 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
    * seulement pour un dashboard servi en HTTP (développement local, tests).
    */
   readonly sessionCookieSecure?: boolean;
+  /**
+   * Réglage `trust proxy` d'Express : derrière un reverse proxy, l'IP du client (rate
+   * limit du Widget, anti force brute de la connexion) se lit dans `X-Forwarded-For`.
+   * Absent ou `false` : l'IP de la connexion, que le client ne peut pas falsifier.
+   */
+  readonly trustProxy?: boolean | number | string;
   /** Adaptateurs de Destination (bouton « tester ») : ceux de `@nudge/destinations` en production. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
@@ -34,6 +40,7 @@ export async function createApi(options: ApiOptions): Promise<NestExpressApplica
       bodyParser: false,
     },
   );
+  app.set('trust proxy', options.trustProxy ?? false);
   // Un Retour peut porter une Capture (base64) : sa route seule accepte un corps lourd.
   app.use('/v1/retours', json({ limit: LIMITE_CORPS_RETOUR }));
   app.useBodyParser('json', { limit: '100kb' });
