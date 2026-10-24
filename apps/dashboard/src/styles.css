@@ -176,6 +176,7 @@ code {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1541,4 +1542,24 @@ fieldset.champ legend {
   background: none;
   box-shadow: none;
   color: var(--texte);
+}
+
+/* Écrans étroits, souvent tactiles : cibles de 44 px */
+@media (max-width: 860px) {
+  button,
+  .vues a,
+  .precedent-suivant > *,
+  .filtre select {
+    min-height: 44px;
+  }
+
+  .precedent-suivant > *,
+  .vues a {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+.filtre:focus-within {
+  border-color: var(--accent);
 }

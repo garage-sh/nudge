@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useProjets } from '../api/projets.js';
 import { useDeconnexion, useSession } from '../api/session.js';
@@ -12,11 +12,18 @@ import { NAVIGATION_INSTANCE, NAVIGATION_PRINCIPALE } from './navigation.js';
 export function Layout() {
   const [ouverte, setOuverte] = useState(false);
   const { pathname } = useLocation();
+  const menu = useRef<HTMLButtonElement>(null);
+  const laterale = useRef<HTMLElement>(null);
   useEffect(() => setOuverte(false), [pathname]);
   useEffect(() => {
     if (!ouverte) return;
+    // Le tiroir prend le focus ; fermé (Échap, voile), il le rend au bouton Menu.
+    laterale.current?.querySelector<HTMLElement>('a, button')?.focus();
     const fermer = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOuverte(false);
+      if (e.key === 'Escape') {
+        setOuverte(false);
+        menu.current?.focus();
+      }
     };
     document.addEventListener('keydown', fermer);
     return () => document.removeEventListener('keydown', fermer);
@@ -27,6 +34,7 @@ export function Layout() {
       <header className="barre-mobile">
         <Marque />
         <button
+          ref={menu}
           type="button"
           className="secondaire"
           aria-expanded={ouverte}
@@ -41,10 +49,14 @@ export function Layout() {
           type="button"
           className="voile"
           aria-label="Fermer le menu"
-          onClick={() => setOuverte(false)}
+          tabIndex={-1}
+          onClick={() => {
+            setOuverte(false);
+            menu.current?.focus();
+          }}
         />
       ) : null}
-      <aside id="barre-laterale" className="laterale" data-ouverte={ouverte}>
+      <aside ref={laterale} id="barre-laterale" className="laterale" data-ouverte={ouverte}>
         <Marque />
         <nav className="nav" aria-label="Navigation principale">
           {NAVIGATION_PRINCIPALE.map(({ chemin, libelle }) => (
@@ -66,7 +78,8 @@ export function Layout() {
           <Compte />
         </div>
       </aside>
-      <main className="contenu">
+      {/* Tiroir ouvert : le contenu derrière le voile sort de la tabulation. */}
+      <main className="contenu" inert={ouverte}>
         <Outlet />
       </main>
     </div>
@@ -84,13 +97,13 @@ function NavigationProjets() {
       </NavLink>
       {(projets.data ?? []).map((projet) => {
         const base = `/projets/${encodeURIComponent(projet.id)}`;
+        const courant = pathname === base || pathname.startsWith(`${base}/`);
         return (
           <NavLink
             key={projet.id}
             to={`${base}/destinations`}
-            className={() =>
-              pathname === base || pathname.startsWith(`${base}/`) ? 'active' : undefined
-            }
+            className={courant ? 'active' : undefined}
+            aria-current={courant ? 'page' : undefined}
           >
             {projet.nom}
           </NavLink>

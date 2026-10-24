@@ -32,9 +32,9 @@ export function Membres() {
             </p>
           </div>
         ) : (
-          <EmptyState titre="Aucune invitation en cours.">
+          <EmptyState titre="Aucun lien généré sur cette page.">
             Le lien généré s’affiche ici, prêt à copier. Il n’est envoyé à personne : transmettez-le
-            vous-même.
+            vous-même. Les liens générés auparavant restent valables jusqu’à leur expiration.
           </EmptyState>
         )}
       </div>

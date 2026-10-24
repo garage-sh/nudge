@@ -98,10 +98,36 @@ Chaque couleur sémantique a sa variante `-doux` pour les fonds. Le mode sombre 
 - `.fantome` : sans contour, pour Annuler et les actions de faible poids.
 - `.danger` : plein rouge, seulement pour confirmer une suppression (dans `ConfirmAction`).
 
+## Motifs d'écran
+
+Chaque écran connecté commence par `PageHeader`. Les motifs ci-dessous sont les formes déjà résolues : un nouvel écran de la même forme les reprend.
+
+- **Liste à trier** (Boîte de réception, `screens/Retours.tsx`) :
+  - `.vues` : raccourcis vers un filtre, en liens avec `aria-current` ;
+  - `.filtres` / `.filtre` : pastilles qui portent un `select` natif et passent en trait plein quand elles sont actives ;
+  - `.liste-retours` : une surface, des groupes par jour (`.groupe-jour`) et des lignes `.ligne-retour` en grille à colonnes fixes ;
+  - toute la ligne ouvre l'élément : un lien étiré par `::after`.
+
+  Un résultat vide propose « Effacer les filtres ».
+
+- **Fiche d'un élément** (détail d'un Retour, `screens/Retour.tsx`) :
+  - `.fil` : retour à la liste d'origine, avec ses filtres, et Précédent / Suivant d'après l'état de navigation `ListeState` ;
+  - `.retour-grille` : contenu et décision à gauche, propriétés à droite (`.retour-cote`, sections à plat séparées par des filets). Une seule colonne sous 1100 px ;
+  - une décision qui attend un Membre se met en bandeau (`.bandeau-revue`), au-dessus de tout le reste.
+- **Objet à onglets** (Projet, `EnteteProjet` dans `screens/Projet.tsx`) :
+  - un en-tête commun et des `.onglets` en `NavLink`, une route par onglet ;
+  - l'action principale de l'onglet va dans l'en-tête.
+- **Collection configurable** (Destinations, Projets) :
+  - une ligne par objet (`.destination`) ;
+  - l'ajout est l'action de l'en-tête et ouvre le formulaire en haut de la liste. Il est ouvert d'office quand la collection est vide, et l'état vide (`EmptyState`) dit quoi y mettre ;
+  - un objet en difficulté dit pourquoi et quoi faire (`.probleme`).
+- **Réglages** (Paramètres, Réglages d'un Projet) : une colonne `.reglages` de 760 px au plus, un panneau `.encadre` par sujet, et un bouton plein par panneau.
+
 ## Règles de rédaction
 
 - Un bouton dit ce qu'il fait, avec le nom du domaine : « Ajouter la Destination », « Réhabiliter », pas « Valider le formulaire ».
 - Une action garde le même nom dans tout le parcours (bouton, confirmation, message de succès).
 - Une erreur dit ce qui s'est passé et quoi faire, sans s'excuser.
+- Dans les listes, les dates sont relatives (`formatDateRelative`), et la date exacte s'affiche en `title`. Les groupes par jour utilisent `formatJour`.
 - Un état vide invite à agir.
 - Pas de majuscules pour les libellés, pas de point médian pour joindre des métadonnées : chaque métadonnée est un élément à part.

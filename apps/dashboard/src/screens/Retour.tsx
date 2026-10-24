@@ -70,7 +70,9 @@ export function Retour() {
   return (
     <article className="retour">
       <Fil versListe={versListe} id={detail.id} liste={liste} />
-      <h1 className="visuellement-cache">Retour</h1>
+      <h1 className="visuellement-cache">
+        Retour : {detail.texte.length > 80 ? `${detail.texte.slice(0, 80)}…` : detail.texte}
+      </h1>
       <div className="retour-grille">
         <div className="retour-principal">
           <header className="titre-retour">

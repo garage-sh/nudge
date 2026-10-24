@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../api/client.js';
 
@@ -138,24 +138,60 @@ export function Field({ libelle, aide, id, ...input }: FieldProps) {
   );
 }
 
-/** Une clé ou un lien affiché en entier, avec un bouton de copie. */
+/**
+ * Une clé ou un lien affiché en entier, avec un bouton de copie. Sans presse-papier
+ * (origine http, refus du navigateur), le texte est sélectionné pour une copie à la main.
+ */
 export function CopyableValue({ valeur, libelle }: { valeur: string; libelle: string }) {
-  const [copie, setCopie] = useState(false);
+  const code = useRef<HTMLElement>(null);
+  const [etat, setEtat] = useState<'repos' | 'copie' | 'manuelle'>('repos');
+  useEffect(() => {
+    if (etat !== 'copie') return;
+    const delai = setTimeout(() => setEtat('repos'), 2000);
+    return () => clearTimeout(delai);
+  }, [etat]);
+  const selectionner = () => {
+    const element = code.current;
+    const selection = window.getSelection();
+    if (!element || !selection) return;
+    const plage = document.createRange();
+    plage.selectNodeContents(element);
+    selection.removeAllRanges();
+    selection.addRange(plage);
+  };
   const copier = async () => {
-    await navigator.clipboard.writeText(valeur);
-    setCopie(true);
+    try {
+      await navigator.clipboard.writeText(valeur);
+      setEtat('copie');
+    } catch {
+      selectionner();
+      setEtat('manuelle');
+    }
   };
   return (
     <div className="copiable">
-      <code aria-label={libelle}>{valeur}</code>
+      <code ref={code} aria-label={libelle}>
+        {valeur}
+      </code>
       <button type="button" className="secondaire" onClick={() => void copier()}>
-        {copie ? 'Copié' : 'Copier'}
+        {etat === 'copie' ? 'Copié' : 'Copier'}
       </button>
+      <span role="status" className={etat === 'manuelle' ? 'aide' : 'visuellement-cache'}>
+        {etat === 'copie'
+          ? 'Copié dans le presse-papier.'
+          : etat === 'manuelle'
+            ? 'Copie automatique impossible : le texte est sélectionné, copiez-le avec ⌘C ou Ctrl+C.'
+            : ''}
+      </span>
     </div>
   );
 }
 
-/** Action irréversible en deux temps : le bouton demande une confirmation sur place. */
+/**
+ * Action irréversible en deux temps : le bouton demande une confirmation sur place.
+ * À l'ouverture, le focus va sur Annuler (le choix sûr) ; Échap ou Annuler le rendent
+ * au bouton d'origine.
+ */
 export function ConfirmAction({
   libelle,
   question,
@@ -168,28 +204,55 @@ export function ConfirmAction({
   onConfirm: () => void;
 }) {
   const [ouverte, setOuverte] = useState(false);
+  const declencheur = useRef<HTMLButtonElement>(null);
+  const annuler = useRef<HTMLButtonElement>(null);
+  const aRendreLeFocus = useRef(false);
+  useEffect(() => {
+    if (ouverte) annuler.current?.focus();
+    else if (aRendreLeFocus.current) {
+      aRendreLeFocus.current = false;
+      declencheur.current?.focus();
+    }
+  }, [ouverte]);
+  const fermer = () => {
+    aRendreLeFocus.current = true;
+    setOuverte(false);
+  };
   if (!ouverte) {
     return (
-      <button type="button" className="secondaire" onClick={() => setOuverte(true)}>
+      <button
+        ref={declencheur}
+        type="button"
+        className="secondaire"
+        onClick={() => setOuverte(true)}
+      >
         {libelle}
       </button>
     );
   }
   return (
-    <div className="confirmation" role="group" aria-label={question}>
+    <div
+      className="confirmation"
+      role="group"
+      aria-label={question}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') fermer();
+      }}
+    >
       <span>{question}</span>
       <button
         type="button"
         className="danger"
         disabled={enCours}
         onClick={() => {
+          aRendreLeFocus.current = true;
           setOuverte(false);
           onConfirm();
         }}
       >
         Confirmer
       </button>
-      <button type="button" className="secondaire" onClick={() => setOuverte(false)}>
+      <button ref={annuler} type="button" className="secondaire" onClick={fermer}>
         Annuler
       </button>
     </div>

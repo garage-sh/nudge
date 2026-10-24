@@ -73,7 +73,7 @@ export function Retours() {
       <PageHeader titre="Boîte de réception" />
       <Vues etat={filtres.etat} parametres={parametres} />
       <Filtres filtres={filtres} filtrer={filtrer} />
-      <ErrorMessage erreur={retours.error} />
+      {retours.isFetchNextPageError ? null : <ErrorMessage erreur={retours.error} />}
       {retours.isPending ? (
         <div className="liste-retours">
           <Loading />
@@ -119,9 +119,10 @@ export function Retours() {
           disabled={retours.isFetchingNextPage}
           onClick={() => void retours.fetchNextPage()}
         >
-          Afficher plus
+          {retours.isFetchingNextPage ? 'Chargement…' : 'Afficher plus'}
         </button>
       ) : null}
+      {retours.isFetchNextPageError ? <ErrorMessage erreur={retours.error} /> : null}
     </section>
   );
 }

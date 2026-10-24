@@ -26,7 +26,7 @@ import {
   Loading,
 } from '../../layout/ui.js';
 import { LIBELLES_CLASSE_ECHEC, LIBELLES_GRAVITE, LIBELLES_TYPE } from '../../libelles.js';
-import { EnteteProjet } from '../Projet.js';
+import { EnteteProjet, ProjetIntrouvable } from '../Projet.js';
 import { JaugeGravite, PastilleEtatDestination } from '../retour-badges.js';
 import { FormulaireDestination } from './FormulaireDestination.js';
 import { formulaireDe, FORMULAIRES_DESTINATION } from './types/index.js';
@@ -51,8 +51,15 @@ export function Destinations() {
   const [secretsMontres, setSecretsMontres] = useState<SecretsMontres | null>(null);
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
   if (projet.isPending || destinations.isPending) return <Loading />;
-  if (projet.isError) return <ErrorMessage erreur={projet.error} />;
-  if (destinations.isError) return <ErrorMessage erreur={destinations.error} />;
+  if (projet.isError) return <ProjetIntrouvable erreur={projet.error} />;
+  if (destinations.isError) {
+    return (
+      <section>
+        <EnteteProjet projet={projet.data} />
+        <ErrorMessage erreur={destinations.error} />
+      </section>
+    );
+  }
   const montrer: MontrerSecrets = (destination, secrets) =>
     setSecretsMontres(
       Object.keys(secrets).length > 0

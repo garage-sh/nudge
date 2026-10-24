@@ -42,7 +42,7 @@ export function Projet() {
   const id = useParams().id ?? '';
   const projet = useProjet(id);
   if (projet.isPending) return <Loading />;
-  if (projet.isError) return <ErrorMessage erreur={projet.error} />;
+  if (projet.isError) return <ProjetIntrouvable erreur={projet.error} />;
   return (
     <section>
       <EnteteProjet projet={projet.data} />
@@ -51,6 +51,16 @@ export function Projet() {
         <Informations projet={projet.data} />
         <Origines projet={projet.data} />
       </div>
+    </section>
+  );
+}
+
+/** Le Projet n'a pas pu être lu : le cadre reste, avec le chemin vers la liste des Projets. */
+export function ProjetIntrouvable({ erreur }: { erreur: unknown }) {
+  return (
+    <section>
+      <PageHeader titre="Projet" retour={{ to: '/projets', libelle: 'Projets' }} />
+      <ErrorMessage erreur={erreur} />
     </section>
   );
 }
