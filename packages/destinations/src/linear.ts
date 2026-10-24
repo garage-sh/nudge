@@ -11,6 +11,7 @@ import {
   definitionLinear,
   type SecretsLinear,
 } from '@nudge/shared';
+import { lireCapture } from './capture.js';
 import {
   DELAI_HTTP_PAR_DEFAUT_MS,
   EXTRAIT_MAX,
@@ -51,6 +52,14 @@ const REQUETE_EQUIPE = `query EquipeNudge($equipe: String!) {
     first: 250
     filter: { or: [{ team: { key: { eqIgnoreCase: $equipe } } }, { team: { null: true } }] }
   ) { nodes { id name isGroup } }
+}`;
+
+/** https://linear.app/developers/how-to-upload-a-file-to-linear */
+const MUTATION_FICHIER = `mutation FichierNudge($contentType: String!, $filename: String!, $size: Int!) {
+  fileUpload(contentType: $contentType, filename: $filename, size: $size) {
+    success
+    uploadFile { uploadUrl assetUrl headers { key value } }
+  }
 }`;
 
 const MUTATION_ISSUE = `mutation IssueNudge($entree: IssueCreateInput!) {
@@ -155,6 +164,58 @@ export function adaptateurLinear(
     };
   }
 
+  /**
+   * Téléverse l'image chez Linear (https://linear.app/developers/how-to-upload-a-file-to-linear) :
+   * `fileUpload` prépare une URL signée, un PUT y dépose l'image avec les en-têtes rendus,
+   * et l'`assetUrl` rendue la désigne dans la description. Un PUT refusé est passager :
+   * l'Envoi retenté demandera une nouvelle URL signée.
+   */
+  async function televerser(
+    retourId: string,
+    image: { contentType: string; octets: Uint8Array },
+  ): Promise<Appel<string>> {
+    const extension = image.contentType === 'image/jpeg' ? 'jpg' : 'png';
+    const preparation = await graphql<DonneesFichier>(MUTATION_FICHIER, {
+      contentType: image.contentType,
+      filename: `capture-${retourId}.${extension}`,
+      size: image.octets.length,
+    });
+    if (!preparation.ok) return preparation;
+    const fichier = preparation.data.fileUpload.uploadFile;
+    if (!preparation.data.fileUpload.success || !fichier) {
+      return {
+        ok: false,
+        classe: 'permanent',
+        message: 'Linear n’a pas préparé le téléversement de la Capture',
+      };
+    }
+    let reponse: Response;
+    try {
+      reponse = await fetch(fichier.uploadUrl, {
+        method: 'PUT',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(delaiMs),
+        headers: {
+          'content-type': image.contentType,
+          'cache-control': 'public, max-age=31536000',
+          ...Object.fromEntries(fichier.headers.map(({ key, value }) => [key, value])),
+        },
+        body: image.octets,
+      });
+    } catch (erreur) {
+      return { ok: false, classe: 'transient', message: messageErreur(erreur) };
+    }
+    await reponse.body?.cancel();
+    if (!reponse.ok) {
+      return {
+        ok: false,
+        classe: 'transient',
+        message: `Linear : téléversement de la Capture refusé (HTTP ${reponse.status})`,
+      };
+    }
+    return { ok: true, data: fichier.assetUrl };
+  }
+
   return {
     async send(envoi) {
       const noms = [
@@ -163,14 +224,19 @@ export function adaptateurLinear(
       ].filter((nom): nom is string => nom !== undefined);
       const cible = await resoudre(noms);
       if (!cible.ok) return echec(cible);
-      // #14 : la Capture se branche ici, avant la création — téléversée chez Linear
-      // (mutation `fileUpload`, par ce même client `graphql`, puis PUT sur l'URL signée)
-      // et son `assetUrl` passé à `description()`, qui l'ajoute comme une section.
+      const capture = await lireCapture(envoi.retour.capture);
+      if (!capture.ok) return echec(capture);
+      let assetUrl: string | null = null;
+      if (capture.image) {
+        const televersee = await televerser(envoi.retour.id, capture.image);
+        if (!televersee.ok) return echec(televersee);
+        assetUrl = televersee.data;
+      }
       const creation = await graphql<DonneesCreation>(MUTATION_ISSUE, {
         entree: {
           teamId: cible.data.equipeId,
           title: titreAvecType(envoi, TITRE_MAX),
-          description: description(envoi),
+          description: description(envoi, assetUrl),
           labelIds: cible.data.labelIds,
         },
       });
@@ -215,6 +281,17 @@ interface DonneesEquipe {
   };
 }
 
+interface DonneesFichier {
+  readonly fileUpload: {
+    readonly success: boolean;
+    readonly uploadFile: {
+      readonly uploadUrl: string;
+      readonly assetUrl: string;
+      readonly headers: readonly { readonly key: string; readonly value: string }[];
+    } | null;
+  };
+}
+
 interface DonneesCreation {
   readonly issueCreate: {
     readonly success: boolean;
@@ -226,11 +303,10 @@ interface DonneesCreation {
 const TITRE_MAX = 120;
 
 /**
- * Description (markdown) : le texte de l'Auteur échappé, puis un pied écrit par nudge.
- * #14 ajoutera la Capture ici, comme une section de plus (image déjà téléversée chez
- * Linear par `fileUpload`, référencée par son `assetUrl`).
+ * Description (markdown) : le texte de l'Auteur échappé, la Capture (image déjà
+ * téléversée chez Linear, désignée par son `assetUrl`), puis un pied écrit par nudge.
  */
-function description({ projet, retour }: EnvoiASortir): string {
+function description({ projet, retour }: EnvoiASortir, assetUrl: string | null): string {
   const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
   const pied = [
     `**Projet** : ${echapperPonctuation(projet.nom)}`,
@@ -242,7 +318,8 @@ function description({ projet, retour }: EnvoiASortir): string {
       ? [`[Voir le Retour dans nudge](<${retour.lienDashboard}>)`]
       : []),
   ];
-  return [texteEchappe(retour.texte), '---', ...pied].join('\n\n');
+  const capture = lienSur(assetUrl) ? [`![Capture de la page](<${assetUrl}>)`] : [];
+  return [texteEchappe(retour.texte), ...capture, '---', ...pied].join('\n\n');
 }
 
 /**

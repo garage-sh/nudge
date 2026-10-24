@@ -8,9 +8,16 @@ import {
   type RetryPolicy,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
+import type { StockageCaptures } from '@nudge/stockage';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { SECRET_CIPHER, DB, DISPATCH_QUEUE_TOKEN, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import {
+  SECRET_CIPHER,
+  DB,
+  DISPATCH_QUEUE_TOKEN,
+  STOCKAGE_CAPTURES,
+  TRIAGE_QUEUE_TOKEN,
+} from './tokens.js';
 
 export interface InfraOptions {
   readonly databaseUrl: string;
@@ -21,6 +28,8 @@ export interface InfraOptions {
   readonly retryPolicy?: RetryPolicy;
   /** Clé d'Instance (`NUDGE_ENCRYPTION_KEY`, 32 octets en base64) : chiffre les secrets stockés. */
   readonly cleChiffrement: string;
+  /** Stockage des Captures (`@nudge/stockage`), le même que celui du worker. */
+  readonly stockageCaptures: StockageCaptures;
 }
 
 const DB_CONNECTION = Symbol('DB_CONNECTION');
@@ -53,6 +62,7 @@ export class InfraModule implements OnApplicationShutdown {
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
         { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.cleChiffrement) },
+        { provide: STOCKAGE_CAPTURES, useValue: options.stockageCaptures },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
@@ -60,7 +70,7 @@ export class InfraModule implements OnApplicationShutdown {
         { provide: TRIAGE_QUEUE_TOKEN, ...queue(TRIAGE_QUEUE) },
         { provide: DISPATCH_QUEUE_TOKEN, ...queue(DISPATCH_QUEUE) },
       ],
-      exports: [DB, TRIAGE_QUEUE_TOKEN, DISPATCH_QUEUE_TOKEN, SECRET_CIPHER],
+      exports: [DB, TRIAGE_QUEUE_TOKEN, DISPATCH_QUEUE_TOKEN, SECRET_CIPHER, STOCKAGE_CAPTURES],
     };
   }
 

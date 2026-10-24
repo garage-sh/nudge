@@ -4,12 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { adaptateurLinear } from './linear.js';
 import {
+  ASSET_URL,
   CLE_API,
   EQUIPE_ID,
   ISSUE_URL,
   LABEL_BUG_ID,
   LABEL_URGENT_ID,
   LINEAR,
+  URL_TELEVERSEMENT,
   type Enregistrement,
 } from './test/linear-enregistrements.js';
 
@@ -40,6 +42,7 @@ const ENVOI: EnvoiASortir = {
     incertain: false,
     auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'declaree' },
     contexte: { url: 'https://boutique.test/panier' },
+    capture: null,
     recuLe: new Date('2026-10-24T09:29:58.000Z'),
     lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000024',
   },
@@ -60,7 +63,10 @@ function linear(...reponses: Reponse[]) {
   const requetes: RequeteGraphQL[] = [];
   let suivante = 0;
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
-    const { query, variables } = JSON.parse(String(init.body)) as {
+    // Hors du point d'appel GraphQL : le téléversement d'une Capture, corps binaire.
+    const { query, variables } = (
+      String(url) === POINT_D_APPEL ? JSON.parse(String(init.body)) : { query: '' }
+    ) as {
       query: string;
       variables?: Record<string, unknown>;
     };
@@ -109,6 +115,99 @@ const entreeCreation = (requete: RequeteGraphQL | undefined) =>
     description: string;
     labelIds: string[];
   };
+
+describe('Adaptateur Linear, Capture', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff]);
+  const avecCapture = (lire: () => Promise<Uint8Array | null>): EnvoiASortir => ({
+    ...ENVOI,
+    retour: { ...ENVOI.retour, capture: { contentType: 'image/png', octets: 9, lire } },
+  });
+
+  it('téléverse la Capture chez Linear, puis l’affiche dans la description de l’issue', async () => {
+    const { fetch, requetes } = linear(
+      LINEAR.equipe,
+      LINEAR.fichierPrepare,
+      LINEAR.televersement,
+      LINEAR.issueCreee,
+    );
+
+    const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+
+    expect(resultat).toEqual({ statut: 'livre', lienExterne: ISSUE_URL });
+    expect(requetes.map((requete) => requete.url)).toEqual([
+      POINT_D_APPEL,
+      POINT_D_APPEL,
+      URL_TELEVERSEMENT,
+      POINT_D_APPEL,
+    ]);
+    expect(requetes[1]?.query).toMatch(/mutation[\s\S]*fileUpload\(/);
+    expect(requetes[1]?.variables).toEqual({
+      contentType: 'image/png',
+      filename: `capture-${ENVOI.retour.id}.png`,
+      size: 9,
+    });
+    const put = requetes[2]!;
+    expect(put.init.method).toBe('PUT');
+    expect(new Uint8Array(put.init.body as Uint8Array)).toEqual(PNG);
+    expect(put.entetes.get('content-type')).toBe('image/png');
+    expect(put.entetes.get('cache-control')).toBe('public, max-age=31536000');
+    expect(put.entetes.get('x-goog-content-length-range')).toBe('9,9');
+    // La clé d'API ne part que vers Linear, jamais vers le stockage de l'URL signée.
+    expect(put.entetes.get('authorization')).toBeNull();
+    const html = new MarkdownIt().render(entreeCreation(requetes[3]).description);
+    expect(html).toContain(`<img src="${ASSET_URL}" alt="Capture de la page">`);
+  });
+
+  it('crée l’issue sans image si le stockage n’a plus la Capture', async () => {
+    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+
+    const resultat = await adaptateur(fetch).send(avecCapture(async () => null));
+
+    expect(resultat).toEqual({ statut: 'livre', lienExterne: ISSUE_URL });
+    expect(requetes).toHaveLength(2);
+    expect(entreeCreation(requetes[1]).description).not.toContain('Capture');
+  });
+
+  it('stockage injoignable : échec transitoire, aucune issue créée', async () => {
+    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+
+    const resultat = await adaptateur(fetch).send(
+      avecCapture(() => Promise.reject(new Error('disque illisible'))),
+    );
+
+    expect(resultat).toEqual({
+      statut: 'echec',
+      classe: 'transient',
+      message: 'Capture illisible : disque illisible',
+    });
+    expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+  });
+
+  it.each([
+    ['le téléversement refusé (403)', [LINEAR.fichierPrepare, LINEAR.televersementRefuse]],
+    ['le téléversement injoignable', [LINEAR.fichierPrepare, new TypeError('fetch failed')]],
+    ['la préparation limitée en débit', [LINEAR.limiteDeDebit]],
+  ] as const)(
+    '%s : échec transitoire, aucune issue créée',
+    async (_cas, reponses: readonly Reponse[]) => {
+      const { fetch, requetes } = linear(LINEAR.equipe, ...reponses, LINEAR.issueCreee);
+
+      const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+
+      expect(resultat).toMatchObject({ statut: 'echec', classe: 'transient' });
+      expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+    },
+  );
+
+  it('Linear ne prépare pas le téléversement : échec permanent, aucune issue créée', async () => {
+    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.fichierNonPrepare, LINEAR.issueCreee);
+
+    const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+
+    expect(resultat).toMatchObject({ statut: 'echec', classe: 'permanent' });
+    expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+  });
+});
 
 describe('Adaptateur Linear', () => {
   it('crée une issue dans l’équipe configurée, avec les labels du Type et de la Gravité, et rend son lien', async () => {

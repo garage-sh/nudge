@@ -6,6 +6,7 @@ import type {
   ResultatEnvoi,
 } from '@nudge/core';
 import { definitionWebhook, type SecretsWebhook } from '@nudge/shared';
+import { lireCapture } from './capture.js';
 import { DELAI_HTTP_PAR_DEFAUT_MS, echecHttp, messageErreur } from './http.js';
 
 export interface OptionsWebhook {
@@ -27,7 +28,9 @@ export interface OptionsWebhook {
  * `<timestamp>.<corps brut>` par le secret de signature de la Destination.
  *
  * Le texte du Retour part brut, tel que l'Auteur l'a écrit : c'est au récepteur de
- * l'encoder pour sa cible. Les redirections ne sont pas suivies.
+ * l'encoder pour sa cible. La Capture, s'il y en a une, est jointe en base64
+ * (`retour.capture: { contentType, data }`, `null` sinon). Les redirections ne sont
+ * pas suivies.
  */
 export function adaptateurWebhook(
   destination: DestinationConfiguree,
@@ -77,7 +80,11 @@ export function adaptateurWebhook(
   }
 
   return {
-    send: (envoi) => poster('retour', corpsRetour(envoi), envoi.envoiId),
+    async send(envoi) {
+      const capture = await lireCapture(envoi.retour.capture);
+      if (!capture.ok) return { statut: 'echec', classe: capture.classe, message: capture.message };
+      return poster('retour', corpsRetour(envoi, capture.image), envoi.envoiId);
+    },
     async healthCheck() {
       const resultat = await poster('ping', { evenement: 'ping' });
       return resultat.statut === 'livre'
@@ -87,7 +94,10 @@ export function adaptateurWebhook(
   };
 }
 
-function corpsRetour({ envoiId, essai, projet, retour }: EnvoiASortir) {
+function corpsRetour(
+  { envoiId, essai, projet, retour }: EnvoiASortir,
+  capture: { contentType: string; octets: Uint8Array } | null,
+) {
   return {
     evenement: 'retour',
     essai,
@@ -109,6 +119,12 @@ function corpsRetour({ envoiId, essai, projet, retour }: EnvoiASortir) {
           }
         : null,
       contexte: retour.contexte,
+      capture: capture
+        ? {
+            contentType: capture.contentType,
+            data: Buffer.from(capture.octets).toString('base64'),
+          }
+        : null,
       recuLe: retour.recuLe.toISOString(),
       lien: retour.lienDashboard,
     },

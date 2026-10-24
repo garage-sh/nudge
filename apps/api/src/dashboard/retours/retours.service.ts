@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { corrigerVerdict, projets, retours, verdicts, type Db } from '@nudge/database';
+import { captures, corrigerVerdict, projets, retours, verdicts, type Db } from '@nudge/database';
 import {
   LIMITES_DASHBOARD,
   schemaFiltresRetours,
@@ -14,11 +14,13 @@ import {
   type PageRetours,
   type RetourDetailVu,
   type RetourResumeVu,
+  type TypeCapture,
   type VerdictVu,
 } from '@nudge/shared';
+import type { StockageCaptures } from '@nudge/stockage';
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
-import { DB } from '../../infra/tokens.js';
+import { DB, STOCKAGE_CAPTURES } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
 import { COLONNES_DESTINATION_ENVOI, toEnvoiVu } from './envoi-vu.js';
 
@@ -66,7 +68,10 @@ function decodeCurseur(curseur: string): Position {
 /** Retours de tous les Projets, tels qu'un Membre les lit (pas de rôles en v1). */
 @Injectable()
 export class RetoursService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(STOCKAGE_CAPTURES) private readonly stockage: StockageCaptures,
+  ) {}
 
   /** Une page de la boîte de réception, du plus récent au plus ancien. */
   async list(filtres: FiltresRetours): Promise<PageRetours> {
@@ -140,6 +145,7 @@ export class RetoursService {
       where: eq(retours.id, id),
       with: {
         projet: { columns: { id: true, nom: true } },
+        capture: { columns: { contentType: true, octets: true } },
         verdict: true,
         envois: {
           with: { destination: { columns: COLONNES_DESTINATION_ENVOI } },
@@ -165,10 +171,28 @@ export class RetoursService {
             }
           : null,
       contexte: retour.contexte,
+      capture: retour.capture ?? null,
       verdict: retour.verdict ? toVerdictVu(retour.verdict) : null,
       envois: retour.envois.map(toEnvoiVu),
       createdAt: retour.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * L'image de la Capture d'un Retour, lue dans le stockage ; 404 `capture_introuvable`
+   * si le Retour n'en a pas (ou si le stockage ne l'a plus).
+   */
+  async lireCapture(id: string): Promise<{ contentType: TypeCapture; contenu: Uint8Array }> {
+    if (!isUuid(id)) throw retourIntrouvable();
+    const [capture] = await this.db
+      .select({ cle: captures.cle, contentType: captures.contentType })
+      .from(captures)
+      .where(eq(captures.retourId, id));
+    const contenu = capture ? await this.stockage.lire(capture.cle) : null;
+    if (!capture || !contenu) {
+      throw new NotFoundException({ erreur: 'capture_introuvable' } satisfies ApiErrorBody);
+    }
+    return { contentType: capture.contentType, contenu };
   }
 
   /**

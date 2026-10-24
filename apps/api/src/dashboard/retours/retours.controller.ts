@@ -8,6 +8,8 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -19,6 +21,8 @@ import {
   type PageRetours,
   type RetourDetailVu,
 } from '@nudge/shared';
+import type { Response } from 'express';
+import { nomFichierCapture } from '../../ingestion/capture.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
 import { retourIntrouvable, RetoursService } from './retours.service.js';
@@ -42,6 +46,29 @@ export class RetoursController {
   @Get(':id')
   lire(@Param('id') id: string): Promise<RetourDetailVu> {
     return this.retours.read(id);
+  }
+
+  /**
+   * L'image de la Capture, pour la balise `<img>` du dashboard. Elle vient de l'Auteur :
+   * le navigateur ne doit jamais l'interpréter autrement que comme l'image annoncée
+   * (`nosniff`, CSP fermée si elle est ouverte seule).
+   */
+  @Get(':id/capture')
+  async capture(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) reponse: Response,
+  ): Promise<StreamableFile> {
+    const { contentType, contenu } = await this.retours.lireCapture(id);
+    reponse.set({
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
+      'cache-control': 'private, max-age=3600',
+    });
+    return new StreamableFile(contenu, {
+      type: contentType,
+      length: contenu.length,
+      disposition: `inline; filename="${nomFichierCapture(id, contentType)}"`,
+    });
   }
 
   /**

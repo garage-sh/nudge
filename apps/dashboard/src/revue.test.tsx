@@ -25,6 +25,7 @@ const RETOUR: RetourDetailVu = {
   typeDeclare: null,
   auteur: null,
   contexte: {},
+  capture: null,
   verdict: {
     typeRetenu: 'bug',
     gravite: 'majeure',

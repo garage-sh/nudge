@@ -1,4 +1,5 @@
 import type { Contexte, RetourEntrant, TypeRetour } from '@nudge/shared';
+import type { CaptureEncodee } from './capture.js';
 import { LIMITES } from './domaine.js';
 import { MESSAGES, messageLimite } from './messages.js';
 import type { AuteurDeclare, Metadonnees, OptionsWidget } from './options.js';
@@ -8,6 +9,8 @@ export interface Saisie {
   readonly texte: string;
   readonly type?: TypeRetour;
   readonly email?: string;
+  /** La Capture que l'Auteur a choisi de joindre, déjà masquée et floutée. */
+  readonly capture?: CaptureEncodee;
 }
 
 export type ResultatSoumission =
@@ -45,12 +48,12 @@ export async function posterRetour(
   saisie: Saisie,
 ): Promise<ResultatSoumission> {
   const auteur = auteurDuRetour(options.auteur, saisie.email);
-  // #14 : la Capture (déjà masquée et floutée dans le navigateur) rejoindra ce corps.
   const corps: RetourEntrant = {
     texte: saisie.texte,
     ...(saisie.type ? { type: saisie.type } : {}),
     ...(auteur ? { auteur } : {}),
     contexte: contexteDeLaPage(options.metadonnees),
+    ...(saisie.capture ? { capture: saisie.capture } : {}),
   };
   let reponse: Response;
   try {

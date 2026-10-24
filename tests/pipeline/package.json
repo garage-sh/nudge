@@ -19,6 +19,7 @@
     "@nudge/destinations": "workspace:*",
     "@nudge/judge": "workspace:*",
     "@nudge/shared": "workspace:*",
+    "@nudge/stockage": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
     "@nudge/worker": "workspace:*",
     "@testcontainers/postgresql": "^11.14.0",

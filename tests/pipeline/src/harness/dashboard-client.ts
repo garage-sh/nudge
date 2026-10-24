@@ -4,6 +4,15 @@ export interface ReponseDashboard<T> {
   readonly body: T;
 }
 
+/** Réponse binaire (image d'une Capture) : statut, en-têtes et octets. */
+export interface TelechargementDashboard {
+  readonly status: number;
+  readonly enTetes: Headers;
+  readonly octets: Uint8Array;
+  /** Le corps lu comme du JSON (réponse d'erreur). */
+  json<T>(): T;
+}
+
 const COOKIE_SESSION = 'nudge_session';
 
 /**
@@ -44,6 +53,20 @@ export class DashboardClient {
 
   delete<T = unknown>(path: string) {
     return this.request<T>('DELETE', path);
+  }
+
+  /** GET d'une ressource binaire, telle qu'une balise `<img>` du dashboard la charge. */
+  async telecharger(path: string): Promise<TelechargementDashboard> {
+    const reponse = await fetch(`${this.baseUrl}${path}`, {
+      headers: this.session ? { cookie: `${COOKIE_SESSION}=${this.session}` } : {},
+    });
+    const octets = new Uint8Array(await reponse.arrayBuffer());
+    return {
+      status: reponse.status,
+      enTetes: reponse.headers,
+      octets,
+      json: <T>() => JSON.parse(new TextDecoder().decode(octets)) as T,
+    };
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<ReponseDashboard<T>> {

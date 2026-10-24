@@ -1,12 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   envoyer,
+  type CaptureADispatcher,
   type DestinationAdapterResolver,
   type DispatchJob,
   type EnvoiASortir,
   type SecretCipher,
 } from '@nudge/core';
-import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
+import { envois, toDestinationConfiguree, type captures, type Db } from '@nudge/database';
 import { eq } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
@@ -39,7 +40,7 @@ export class DispatchProcessor {
       where: eq(envois.id, envoiId),
       with: {
         destination: true,
-        retour: { with: { projet: true, verdict: true } },
+        retour: { with: { projet: true, verdict: true, capture: true } },
       },
     });
     if (!envoi) return;
@@ -79,6 +80,7 @@ export class DispatchProcessor {
             ? { ...retour.auteur, confiance: retour.confianceAuteur }
             : null,
         contexte: retour.contexte,
+        capture: retour.capture ? this.captureADispatcher(retour.capture) : null,
         recuLe: retour.createdAt,
         lienDashboard: this.options.dashboardUrl
           ? `${this.options.dashboardUrl.replace(/\/+$/, '')}/retours/${retour.id}`
@@ -98,5 +100,14 @@ export class DispatchProcessor {
     }
     const issue = await this.suspension.apresEchec(envoi, resultat, derniereTentative);
     if (issue === 'a_retenter') throw new EchecTransitoire(resultat.message);
+  }
+
+  /** La Capture d'un Retour, lue dans le stockage seulement si l'adaptateur la joint. */
+  private captureADispatcher({
+    cle,
+    contentType,
+    octets,
+  }: typeof captures.$inferSelect): CaptureADispatcher {
+    return { contentType, octets, lire: () => this.options.stockageCaptures.lire(cle) };
   }
 }

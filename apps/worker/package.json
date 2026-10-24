@@ -28,6 +28,7 @@
     "@nudge/destinations": "workspace:*",
     "@nudge/judge": "workspace:*",
     "@nudge/shared": "workspace:*",
+    "@nudge/stockage": "workspace:*",
     "bullmq": "^5.60.0",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.8.0",

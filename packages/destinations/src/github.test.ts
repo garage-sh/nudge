@@ -36,6 +36,7 @@ const ENVOI: EnvoiASortir = {
     incertain: false,
     auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'declaree' },
     contexte: { url: 'https://boutique.test/panier' },
+    capture: null,
     recuLe: new Date('2026-10-24T09:29:58.000Z'),
     lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000044',
   },

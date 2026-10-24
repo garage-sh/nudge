@@ -6,6 +6,7 @@ import type {
   Contexte,
   Gravite,
   Source,
+  TypeCapture,
   TypeRetour,
 } from '@nudge/shared';
 
@@ -16,6 +17,17 @@ export type { ClasseEchec } from '@nudge/shared';
  * Un adapter est construit pour UNE Destination, avec sa configuration
  * déchiffrée, par un `DestinationAdapterResolver`.
  */
+
+/**
+ * La Capture jointe à un Retour, telle qu'un adapter la reçoit : l'image n'est lue
+ * dans le stockage que par l'adapter qui la joint (webhook, Linear).
+ */
+export interface CaptureADispatcher {
+  readonly contentType: TypeCapture;
+  readonly octets: number;
+  /** L'image ; `null` si le stockage ne l'a plus. Lève si le stockage est injoignable. */
+  lire(): Promise<Uint8Array | null>;
+}
 
 /** Ce qu'un adapter reçoit d'un Retour Trié. Le texte est brut : chaque adapter l'encode pour sa cible. */
 export interface RetourADispatcher {
@@ -28,6 +40,8 @@ export interface RetourADispatcher {
   readonly incertain: boolean;
   readonly auteur: (Auteur & { readonly confiance: ConfianceAuteur }) | null;
   readonly contexte: Contexte;
+  /** `null` : pas de Capture. Jamais transmise au Juge, seulement aux Destinations. */
+  readonly capture: CaptureADispatcher | null;
   readonly recuLe: Date;
   /** « Voir le Retour » dans le dashboard ; `null` sans `NUDGE_DASHBOARD_URL` (D12). */
   readonly lienDashboard: string | null;
@@ -107,6 +121,7 @@ export function envoiDEssai(projet: EnvoiASortir['projet'], maintenant = new Dat
       incertain: false,
       auteur: null,
       contexte: {},
+      capture: null,
       recuLe: maintenant,
       lienDashboard: null,
     },

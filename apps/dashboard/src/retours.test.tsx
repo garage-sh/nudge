@@ -155,6 +155,7 @@ const DETAIL: RetourDetailVu = {
     viewport: { largeur: 1280, hauteur: 800 },
     metadonnees: { version: '2.3.1' },
   },
+  capture: null,
   verdict: {
     typeRetenu: 'bug',
     gravite: 'majeure',
@@ -230,6 +231,40 @@ describe('Détail d’un Retour', () => {
     expect(envois.textContent).toMatch(/Webhook/);
     expect(envois.textContent).toMatch(/Échec/);
     expect(envois.textContent).toMatch(/503 Service Unavailable/);
+  });
+
+  it('montre la Capture jointe par l’Auteur, et permet de l’ouvrir en grand', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/retours/retour-1': {
+        status: 200,
+        body: { ...DETAIL, capture: { contentType: 'image/png', octets: 48_213 } },
+      },
+    });
+
+    renderDashboard('/retours/retour-1');
+
+    const capture = await screen.findByRole('region', { name: 'Capture' });
+    expect(
+      within(capture).getByRole('img', { name: 'Capture de la page jointe par l’Auteur' }),
+    ).toHaveProperty('src', 'http://localhost:3000/api/retours/retour-1/capture');
+    const ouvrir = within(capture).getByRole('link', { name: /Ouvrir l’image/ });
+    expect(ouvrir.getAttribute('href')).toBe('/api/retours/retour-1/capture');
+    expect(ouvrir.getAttribute('target')).toBe('_blank');
+    expect(ouvrir.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(capture.textContent).toMatch(/PNG · 47 Kio/);
+  });
+
+  it('sans Capture, n’en montre aucune', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/retours/retour-1': { status: 200, body: DETAIL },
+    });
+
+    renderDashboard('/retours/retour-1');
+
+    await screen.findByLabelText('Texte du Retour');
+    expect(screen.queryByRole('region', { name: 'Capture' })).toBeNull();
   });
 
   it('montre un Retour anonyme, pas encore trié, sans Envoi', async () => {

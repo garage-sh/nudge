@@ -9,3 +9,5 @@ export const SESSION_COOKIE_OPTIONS = Symbol('SESSION_COOKIE_OPTIONS');
 export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
 /** `DestinationAdapterResolver` : le bouton « tester » d'une Destination passe par son adaptateur. */
 export const DESTINATION_ADAPTER_RESOLVER = Symbol('DESTINATION_ADAPTER_RESOLVER');
+/** `StockageCaptures` : les images des Captures, partagé avec le worker. */
+export const STOCKAGE_CAPTURES = Symbol('STOCKAGE_CAPTURES');

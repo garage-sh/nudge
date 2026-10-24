@@ -10,6 +10,7 @@ import {
   TYPES_RETOUR,
   type Auteur,
   type Contexte,
+  type TypeCapture,
 } from '@nudge/shared';
 import { relations, sql } from 'drizzle-orm';
 import {
@@ -115,6 +116,22 @@ export const retours = pgTable(
     index('retours_created_at_id_idx').on(t.createdAt, t.id),
   ],
 );
+
+/**
+ * La Capture jointe à un Retour : l'image est dans le stockage des Captures
+ * (`@nudge/stockage`) sous `cle`, la base n'en garde que la référence. Supprimer le
+ * Retour supprime cette ligne, pas l'image : celui qui supprime appelle aussi
+ * `StockageCaptures.supprimer(cle)`.
+ */
+export const captures = pgTable('captures', {
+  retourId: uuid('retour_id')
+    .primaryKey()
+    .references(() => retours.id, { onDelete: 'cascade' }),
+  cle: text('cle').notNull().unique(),
+  contentType: text('content_type').$type<TypeCapture>().notNull(),
+  octets: integer('octets').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const verdicts = pgTable('verdicts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -225,7 +242,12 @@ export const projetsRelations = relations(projets, ({ many }) => ({
 export const retoursRelations = relations(retours, ({ one, many }) => ({
   projet: one(projets, { fields: [retours.projetId], references: [projets.id] }),
   verdict: one(verdicts),
+  capture: one(captures),
   envois: many(envois),
+}));
+
+export const capturesRelations = relations(captures, ({ one }) => ({
+  retour: one(retours, { fields: [captures.retourId], references: [retours.id] }),
 }));
 
 export const verdictsRelations = relations(verdicts, ({ one }) => ({

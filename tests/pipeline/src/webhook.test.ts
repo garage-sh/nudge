@@ -77,6 +77,26 @@ describe('Destination webhook de bout en bout', () => {
     expect(retour.envois).toMatchObject([{ destinationId: destination.id, statut: 'livre' }]);
   });
 
+  it('la Capture du Retour part en base64 dans le corps signé', async () => {
+    const { cleSecrete, chemin, secretsGeneres } = await destinationWebhook('Avec Capture');
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a, 0x2a]);
+
+    const reponse = await pipeline.postRetour(cleSecrete, {
+      texte: 'Voir la capture',
+      capture: { contentType: 'image/png', data: png.toString('base64') },
+    });
+    const { id } = (await reponse.json()) as { id: string };
+
+    await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'livre'));
+    const [recue] = recepteur.requetes.filter((r) => r.chemin === chemin);
+    expect(signatureValide(recue!, secretsGeneres.secretSignature!)).toBe(true);
+    expect(JSON.parse(recue!.corps).retour.capture).toEqual({
+      contentType: 'image/png',
+      data: png.toString('base64'),
+    });
+  });
+
   it('« tester » envoie un Retour d’exemple signé, et rend le refus du récepteur', async () => {
     const { chemin, destination, secretsGeneres } = await destinationWebhook('Essai');
 

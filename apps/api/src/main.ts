@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
 import { resolveDestinationAdapter } from '@nudge/destinations';
+import { configStockageDepuisEnv, createStockage } from '@nudge/stockage';
 import { createApi } from './api.js';
 
 function requireEnv(nom: string): string {
@@ -16,6 +17,8 @@ async function main() {
     cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
     sessionCookieSecure: process.env.NUDGE_COOKIE_SECURE !== 'false',
     resolveDestinationAdapter,
+    // Le même stockage que l'${'worker' if app=='api' else 'api'} : un volume partagé, ou un bucket S3.
+    stockageCaptures: createStockage(configStockageDepuisEnv(process.env)),
   });
   app.enableShutdownHooks();
   await app.listen(Number(process.env.NUDGE_API_PORT ?? 3000));

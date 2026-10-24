@@ -2,8 +2,10 @@ import {
   estEnvoiRejouable,
   GRAVITES,
   TYPES_RETOUR,
+  urlCapture,
   type ActionRevue,
   type AuteurVu,
+  type CaptureVue,
   type Contexte,
   type EnvoiVu,
   type Gravite,
@@ -73,6 +75,11 @@ export function Retour() {
       <Section id="contexte" titre="Contexte">
         <ContexteRetour contexte={detail.contexte} />
       </Section>
+      {detail.capture ? (
+        <Section id="capture" titre="Capture">
+          <Capture retourId={detail.id} capture={detail.capture} />
+        </Section>
+      ) : null}
       <Section id="envois" titre="Envois">
         <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
       </Section>
@@ -134,6 +141,39 @@ function Revue({ retour, apresAction }: { retour: RetourDetailVu; apresAction: (
     </>
   );
 }
+
+/**
+ * La Capture jointe par l'Auteur, déjà masquée et floutée dans son navigateur.
+ * L'image est servie par l'api avec la session du Membre.
+ */
+function Capture({ retourId, capture }: { retourId: string; capture: CaptureVue }) {
+  const url = urlCapture(retourId);
+  return (
+    <figure className="capture">
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        <img src={url} alt="Capture de la page jointe par l’Auteur" loading="lazy" />
+      </a>
+      <figcaption className="discret">
+        {FORMATS_CAPTURE[capture.contentType]} · {formatOctets(capture.octets)} ·{' '}
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          Ouvrir l’image
+        </a>
+      </figcaption>
+    </figure>
+  );
+}
+
+const FORMATS_CAPTURE: Record<CaptureVue['contentType'], string> = {
+  'image/png': 'PNG',
+  'image/jpeg': 'JPEG',
+};
+
+const formatOctets = (octets: number): string =>
+  octets < 1024
+    ? `${octets} o`
+    : octets < 1024 * 1024
+      ? `${Math.round(octets / 1024)} Kio`
+      : `${(octets / (1024 * 1024)).toFixed(1).replace('.', ',')} Mio`;
 
 function Section({ id, titre, children }: { id: string; titre: string; children: ReactNode }) {
   return (

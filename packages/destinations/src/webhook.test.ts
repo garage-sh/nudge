@@ -30,6 +30,7 @@ const ENVOI: EnvoiASortir = {
     incertain: true,
     auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'attestee' },
     contexte: { url: 'https://boutique.test/panier', metadonnees: { version: '2.3.1' } },
+    capture: null,
     recuLe: new Date('2026-10-24T09:29:58.000Z'),
     lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000004',
   },
@@ -100,9 +101,59 @@ describe('Adaptateur webhook', () => {
         incertain: true,
         auteur: { id: 'u-42', email: 'ada@client.test', nom: null, confiance: 'attestee' },
         contexte: { url: 'https://boutique.test/panier', metadonnees: { version: '2.3.1' } },
+        capture: null,
         recuLe: '2026-10-24T09:29:58.000Z',
         lien: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000004',
       },
+    });
+  });
+
+  describe('Capture', () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff]);
+    const avecCapture = (lire: () => Promise<Uint8Array | null>): EnvoiASortir => ({
+      ...ENVOI,
+      retour: { ...ENVOI.retour, capture: { contentType: 'image/png', octets: 9, lire } },
+    });
+
+    it('la joint au JSON en base64, sous la signature (D10)', async () => {
+      const { fetch, requetes } = recepteur({ status: 204 });
+
+      expect(await webhook(fetch).send(avecCapture(async () => PNG))).toEqual({
+        statut: 'livre',
+        lienExterne: null,
+      });
+
+      const corps = requetes[0]!.corps;
+      expect(JSON.parse(corps).retour.capture).toEqual({
+        contentType: 'image/png',
+        data: 'iVBORw0KGgr/',
+      });
+      expect(requetes[0]!.entetes.get('x-nudge-signature')).toBe(
+        signatureAttendue(HORODATAGE, corps),
+      );
+    });
+
+    it('envoie le Retour sans elle si le stockage ne l’a plus', async () => {
+      const { fetch, requetes } = recepteur({ status: 204 });
+
+      await webhook(fetch).send(avecCapture(async () => null));
+
+      expect(JSON.parse(requetes[0]!.corps).retour.capture).toBeNull();
+    });
+
+    it('stockage injoignable : échec transitoire, sans appel au récepteur', async () => {
+      const { fetch, requetes } = recepteur({ status: 204 });
+
+      const resultat = await webhook(fetch).send(
+        avecCapture(() => Promise.reject(new Error('S3 GET : HTTP 503'))),
+      );
+
+      expect(resultat).toEqual({
+        statut: 'echec',
+        classe: 'transient',
+        message: 'Capture illisible : S3 GET : HTTP 503',
+      });
+      expect(requetes).toEqual([]);
     });
   });
 

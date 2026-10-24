@@ -32,11 +32,16 @@ const GRAPHQL = 'https://linear.app/developers/graphql';
 const LIMITES = 'https://linear.app/developers/rate-limiting';
 const SCHEMA = 'https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql';
 const ERREURS = 'https://github.com/linear/linear/blob/master/packages/sdk/src/error.ts';
+const TELEVERSEMENT = 'https://linear.app/developers/how-to-upload-a-file-to-linear';
 
 /** L'équipe des tests : id de l'exemple `issueCreate` de la documentation. */
 export const EQUIPE_ID = '9cfb482a-81e3-4154-b5b9-2c805e70a02d';
 export const LABEL_BUG_ID = '5f6b9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b';
 export const LABEL_URGENT_ID = '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d';
+/** URL signée de téléversement et URL permanente de l'image, rendues par `fileUpload`. */
+export const URL_TELEVERSEMENT =
+  'https://storage.googleapis.com/linear-uploads/8c3f/capture.png?X-Goog-Signature=abc123';
+export const ASSET_URL = 'https://uploads.linear.app/8c3f/1b2c/capture.png';
 export const LABEL_IDEE_ID = '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e';
 export const ISSUE_ID = '590a1127-f98b-49fc-ba74-2df8751c089e';
 export const ISSUE_URL = 'https://linear.app/boutique/issue/ENG-123/bug-le-panier-se-vide';
@@ -101,6 +106,48 @@ export const LINEAR = {
         },
       },
     },
+  },
+  /**
+   * `fileUpload` réussi : l'URL signée où téléverser (PUT), l'URL permanente de l'image
+   * et les en-têtes que le PUT doit reprendre (sans eux, 403).
+   */
+  fichierPrepare: {
+    provenance: 'reconstituee',
+    source: `${TELEVERSEMENT} ; ${SCHEMA} (fileUpload, UploadPayload, UploadFile, UploadFileHeader)`,
+    status: 200,
+    corps: {
+      data: {
+        fileUpload: {
+          success: true,
+          uploadFile: {
+            uploadUrl: URL_TELEVERSEMENT,
+            assetUrl: ASSET_URL,
+            headers: [{ key: 'x-goog-content-length-range', value: '9,9' }],
+          },
+        },
+      },
+    },
+  },
+  /** `fileUpload` sans fichier préparé : `uploadFile` nul (« the upload could not be prepared »). */
+  fichierNonPrepare: {
+    provenance: 'reconstituee',
+    source: `${SCHEMA} (UploadPayload.uploadFile : null si le téléversement n'a pu être préparé)`,
+    status: 200,
+    corps: { data: { fileUpload: { success: false, uploadFile: null } } },
+  },
+  /** Le PUT de l'image sur l'URL signée : 200, sans corps utile. */
+  televersement: {
+    provenance: 'reconstituee',
+    source: `${TELEVERSEMENT} (PUT sur uploadUrl)`,
+    status: 200,
+    corps: '',
+  },
+  /** Le PUT refusé par le stockage (en-têtes non repris, URL expirée) : 403. */
+  televersementRefuse: {
+    provenance: 'reconstituee',
+    source: `${TELEVERSEMENT} (« a 403 Forbidden response » sans les en-têtes rendus)`,
+    status: 403,
+    corps: '<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>',
   },
   /** `issueCreate` sans erreur mais sans issue : `success` faux, `issue` nulle. */
   creationRefusee: {

@@ -1,4 +1,9 @@
-import type { LIMITES_RETOUR, TypeRetour } from '@nudge/shared';
+import type {
+  LIMITES_RETOUR,
+  OCTETS_CAPTURE_MAX as OCTETS_CAPTURE_INSTANCE,
+  TYPES_CAPTURE as TYPES_CAPTURE_INSTANCE,
+  TypeRetour,
+} from '@nudge/shared';
 
 /**
  * Valeurs du domaine dont le Widget a besoin, recopiées plutôt qu'importées : le build
@@ -22,3 +27,11 @@ export const LIMITES = {
   url: 2048,
   userAgent: 1024,
 } as const satisfies Pick<typeof LIMITES_RETOUR, 'texte' | 'email' | 'url' | 'userAgent'>;
+
+/** Formats d'une Capture que l'Instance accepte, et sa taille maximale (octets). */
+export const TYPES_CAPTURE = [
+  'image/png',
+  'image/jpeg',
+] as const satisfies readonly (typeof TYPES_CAPTURE_INSTANCE)[number][];
+export type TypeCapture = (typeof TYPES_CAPTURE)[number];
+export const OCTETS_CAPTURE_MAX = 2_097_152 satisfies typeof OCTETS_CAPTURE_INSTANCE;

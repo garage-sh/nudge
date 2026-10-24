@@ -55,12 +55,64 @@ export const schemaContexte = z.strictObject({
   metadonnees: metadonnees.optional(),
 });
 
+/** Formats d'image d'une Capture : ceux que le Widget produit depuis un canvas. */
+export const TYPES_CAPTURE = ['image/png', 'image/jpeg'] as const;
+export type TypeCapture = (typeof TYPES_CAPTURE)[number];
+
+/** Taille maximale d'une Capture décodée : 2 Mio. */
+export const OCTETS_CAPTURE_MAX = 2_097_152;
+
+/** Signature (premiers octets) de chaque format : le contenu doit être ce qu'il annonce. */
+const SIGNATURES_CAPTURE: Record<TypeCapture, readonly number[]> = {
+  'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  'image/jpeg': [0xff, 0xd8, 0xff],
+};
+
+/** Taille en octets d'un contenu encodé en base64 (avec remplissage). */
+export const octetsBase64 = (data: string): number =>
+  (data.length / 4) * 3 - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
+
+const premiersOctets = (data: string): number[] =>
+  Array.from(atob(data.slice(0, 12)), (caractere) => caractere.charCodeAt(0));
+
+/**
+ * Capture de la page jointe par l'Auteur, déjà masquée et floutée dans son navigateur :
+ * une image PNG ou JPEG encodée en base64, d'au plus `OCTETS_CAPTURE_MAX` octets.
+ */
+export const schemaCaptureEntrante = z
+  .strictObject({
+    contentType: z.enum(TYPES_CAPTURE),
+    data: z
+      .base64()
+      .max(Math.ceil(OCTETS_CAPTURE_MAX / 3) * 4)
+      .refine((data) => data.length > 0, { message: 'Capture vide' }),
+  })
+  .superRefine(({ contentType, data }, contexte) => {
+    if (octetsBase64(data) > OCTETS_CAPTURE_MAX) {
+      contexte.addIssue({
+        code: 'custom',
+        path: ['data'],
+        message: `Capture de plus de ${OCTETS_CAPTURE_MAX} octets`,
+      });
+      return;
+    }
+    const octets = premiersOctets(data);
+    if (!SIGNATURES_CAPTURE[contentType].every((octet, index) => octets[index] === octet)) {
+      contexte.addIssue({
+        code: 'custom',
+        path: ['data'],
+        message: `Le contenu n'est pas une image ${contentType}`,
+      });
+    }
+  });
+
 /** Corps d'un Retour posté sur l'API publique (Widget ou clé secrète). */
 export const schemaRetourEntrant = z.strictObject({
   texte: boundedString(LIMITES_RETOUR.texte).refine(nonBlank, { message: 'Texte vide' }),
   type: z.enum(TYPES_RETOUR).optional(),
   auteur: schemaAuteur.optional(),
   contexte: schemaContexte.optional(),
+  capture: schemaCaptureEntrante.optional(),
 });
 
 /** Ce que l'appelant envoie. */
@@ -69,3 +121,4 @@ export type RetourEntrant = z.input<typeof schemaRetourEntrant>;
 export type RetourValide = z.output<typeof schemaRetourEntrant>;
 export type Auteur = z.output<typeof schemaAuteur>;
 export type Contexte = z.output<typeof schemaContexte>;
+export type CaptureEntrante = z.output<typeof schemaCaptureEntrante>;

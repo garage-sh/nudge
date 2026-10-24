@@ -83,6 +83,28 @@ textarea, select, input {
 }
 textarea { resize: vertical; min-height: 96px; }
 .envoyer { margin-top: 10px; align-self: flex-end; }
+.option { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+.option input { display: inline-block; width: auto; margin: 0; padding: 0; }
+.etat-capture, .aide { color: #57606a; font-size: 13px; line-height: 18px; }
+.apercu { display: flex; flex-direction: column; gap: 6px; }
+.apercu[hidden] { display: none; }
+.cadre { position: relative; }
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.selection {
+  position: absolute;
+  border: 2px dashed var(--nudge-accent, #3b5bdb);
+  background: rgba(59, 91, 219, 0.15);
+  pointer-events: none;
+}
+.retirer-flous { align-self: flex-start; padding: 4px 10px; border-color: #d0d7de; font-size: 13px; }
 .erreur { color: #cf222e; }
 .confirmation { color: #1a7f37; }
 `;

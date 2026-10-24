@@ -1,4 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createApi, type LimitesWidget } from '@nudge/api';
 import {
   createSecretCipher,
@@ -27,6 +30,7 @@ import {
 import type { ConfigJuge } from '@nudge/judge';
 import { resolveDestinationAdapter as adaptateursReels } from '@nudge/destinations';
 import type { EtatRetour, RetourEntrant } from '@nudge/shared';
+import { stockageDisque, type StockageCaptures } from '@nudge/stockage';
 import {
   createWorker,
   type OptionsBalayage,
@@ -68,6 +72,11 @@ export interface PipelineOptions {
   readonly repliquesWorker?: number;
   /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
   readonly limitesWidget?: LimitesWidget;
+  /**
+   * Stockage des Captures, partagé par l'api et le worker ; par défaut, un disque
+   * local dans un dossier temporaire propre au pipeline, supprimé à l'arrêt.
+   */
+  readonly stockage?: StockageCaptures;
 }
 
 export interface Pipeline {
@@ -207,6 +216,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     return fake;
   };
 
+  const dossierCaptures = await mkdtemp(join(tmpdir(), 'nudge-captures-'));
+  const stockageCaptures = options.stockage ?? stockageDisque(dossierCaptures);
   const suspensions: Suspension[] = [];
   const cleChiffrement = randomBytes(32).toString('base64');
   const cipher = createSecretCipher(cleChiffrement);
@@ -222,6 +233,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     // Retries rapides : les tests d'échecs transitoires restent courts.
     retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
+    stockageCaptures,
   };
   const workerOptions = {
     ...infra,
@@ -381,6 +393,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       await close();
       await dropDatabase(admin, nomBase);
       await admin.end();
+      await rm(dossierCaptures, { recursive: true, force: true });
     },
   };
   return pipeline;

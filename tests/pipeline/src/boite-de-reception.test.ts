@@ -150,6 +150,7 @@ describe('Boîte de réception des Retours', () => {
         viewport: { largeur: 1280, hauteur: 800 },
         metadonnees: { version: '2.3.1' },
       },
+      capture: null,
       verdict: {
         typeRetenu: 'bug',
         gravite: 'majeure',

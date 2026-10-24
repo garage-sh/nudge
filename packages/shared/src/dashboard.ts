@@ -16,7 +16,7 @@ import {
   type StatutEnvoi,
   type TypeRetour,
 } from './domaine.js';
-import type { Contexte } from './retour-entrant.js';
+import type { Contexte, TypeCapture } from './retour-entrant.js';
 
 /**
  * Contrat de l'API du dashboard (`/api/…`) : corps acceptés (schémas zod, validés
@@ -317,6 +317,19 @@ export interface EnvoiVu {
   readonly updatedAt: string;
 }
 
+/**
+ * La Capture jointe à un Retour : l'image elle-même se lit sur
+ * `GET /api/retours/:id/capture` (`urlCapture`).
+ */
+export interface CaptureVue {
+  readonly contentType: TypeCapture;
+  readonly octets: number;
+}
+
+/** Chemin de l'image d'une Capture dans l'API du dashboard. */
+export const urlCapture = (retourId: string): string =>
+  `/api/retours/${encodeURIComponent(retourId)}/capture`;
+
 /** Le détail d'un Retour (`GET /api/retours/:id`). */
 export interface RetourDetailVu {
   readonly id: string;
@@ -329,6 +342,8 @@ export interface RetourDetailVu {
   /** `null` : Auteur anonyme. */
   readonly auteur: AuteurVu | null;
   readonly contexte: Contexte;
+  /** `null` : l'Auteur n'a pas joint de Capture. */
+  readonly capture: CaptureVue | null;
   readonly verdict: VerdictVu | null;
   readonly envois: readonly EnvoiVu[];
   readonly createdAt: string;

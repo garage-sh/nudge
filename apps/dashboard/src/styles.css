@@ -358,6 +358,22 @@ button.plus {
   margin: 1rem 0;
 }
 
+.capture {
+  margin: 0;
+}
+
+.capture img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+}
+
+.capture figcaption {
+  margin-top: 0.5rem;
+}
+
 .proprietes {
   display: grid;
   gap: 0.35rem;
