@@ -9,9 +9,10 @@ import {
 import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
 import { and, eq, sql } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
+import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
 
-/** Échec transitoire : le job est relancé par BullMQ (backoff exponentiel). */
+/** Échec transitoire : le job est relancé par BullMQ (backoff exponentiel et jitter). */
 export class EchecTransitoire extends Error {
   override readonly name = 'EchecTransitoire';
 }
@@ -26,9 +27,14 @@ export class DispatchProcessor {
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
+    private readonly suspension: SuspensionService,
   ) {}
 
-  async handle({ envoiId }: DispatchJob): Promise<void> {
+  /**
+   * `derniereTentative` : BullMQ ne relancera plus ce job ; un échec transient y met
+   * l'Envoi en échec au lieu de le laisser en attente sans job.
+   */
+  async handle({ envoiId }: DispatchJob, { derniereTentative = false } = {}): Promise<void> {
     const envoi = await this.db.query.envois.findFirst({
       where: eq(envois.id, envoiId),
       with: {
@@ -38,6 +44,13 @@ export class DispatchProcessor {
     });
     if (!envoi || envoi.statut !== 'en_attente') return;
     const { destination, retour } = envoi;
+    // Destination Suspendue : l'Envoi est retenu sans appel sortant.
+    if (
+      destination.etat === 'suspendue' &&
+      (await this.suspension.retenirSiSuspendue(envoiId, destination.id))
+    ) {
+      return;
+    }
     if (!retour.verdict) {
       this.logger.error(`Envoi ${envoiId} sans Verdict, ignoré`);
       return;
@@ -71,8 +84,6 @@ export class DispatchProcessor {
       () => this.resolveDestinationAdapter(toDestinationConfiguree(destination, this.cipher)),
       aSortir,
     );
-    const enAttente = and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
-    const tentatives = sql`${envois.tentatives} + 1`;
 
     if (resultat.statut === 'livre') {
       await this.db
@@ -80,27 +91,14 @@ export class DispatchProcessor {
         .set({
           statut: 'livre',
           lienExterne: resultat.lienExterne,
-          tentatives,
+          tentatives: sql`${envois.tentatives} + 1`,
           derniereErreur: null,
         })
-        .where(enAttente);
+        .where(and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente')));
+      await this.suspension.apresLivraison(destination.id);
       return;
     }
-    if (resultat.classe === 'transient') {
-      await this.db
-        .update(envois)
-        .set({ tentatives, derniereErreur: resultat.message })
-        .where(enAttente);
-      throw new EchecTransitoire(resultat.message);
-    }
-    // auth / permanent : la Suspension et les alertes relèvent de #8.
-    await this.db
-      .update(envois)
-      .set({
-        statut: 'echec',
-        tentatives,
-        derniereErreur: `${resultat.classe}: ${resultat.message}`,
-      })
-      .where(enAttente);
+    const issue = await this.suspension.apresEchec(envoi, resultat, derniereTentative);
+    if (issue === 'a_retenter') throw new EchecTransitoire(resultat.message);
   }
 }

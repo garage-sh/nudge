@@ -36,6 +36,13 @@
       "when": 1792800563191,
       "tag": "0004_destinations_filtre_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792801757055,
+      "tag": "0005_suspension_destinations",
+      "breakpoints": true
     }
   ]
 }

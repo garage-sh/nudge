@@ -1,4 +1,11 @@
 import 'reflect-metadata';
 
-export type { OptionsBalayage, WorkerOptions } from './options.js';
+export {
+  SUSPENSION_PAR_DEFAUT,
+  type OptionsBalayage,
+  type OptionsSuspension,
+  type Suspension,
+  type SurSuspension,
+  type WorkerOptions,
+} from './options.js';
 export { createWorker } from './worker.js';

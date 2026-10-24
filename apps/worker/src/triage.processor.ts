@@ -158,26 +158,40 @@ export class TriageProcessor {
     );
   }
 
-  /** Les Envois des Destinations dont le Filtre retient le Verdict ; Dispatché s'il y en a. */
+  /**
+   * Les Envois des Destinations dont le Filtre retient le Verdict, retenus pour une
+   * Destination Suspendue ; Dispatché s'il y en a.
+   */
   private async creerEnvois(tx: Transaction, retourId: string, projetId: string): Promise<void> {
     const [verdict] = await tx
       .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
       .from(verdicts)
       .where(eq(verdicts.retourId, retourId));
     if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
+    // Verrou partagé : une Destination ne peut pas être réactivée (et libérer ses Envois
+    // retenus) avant que les Envois retenus créés ici soient visibles.
     const destinationsDuProjet = await tx
       .select({
         id: destinations.id,
+        etat: destinations.etat,
         filtreTypes: destinations.filtreTypes,
         filtreGraviteMinimale: destinations.filtreGraviteMinimale,
       })
       .from(destinations)
-      .where(eq(destinations.projetId, projetId));
+      .where(eq(destinations.projetId, projetId))
+      .for('share');
     const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
     if (cibles.length === 0) return;
     await tx
       .insert(envois)
-      .values(cibles.map((d) => ({ retourId, destinationId: d.id })))
+      .values(
+        cibles.map((d) => ({
+          retourId,
+          destinationId: d.id,
+          // Destination Suspendue : l'Envoi est retenu d'emblée, sans job ni appel sortant.
+          statut: d.etat === 'suspendue' ? ('retenu' as const) : ('en_attente' as const),
+        })),
+      )
       .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] });
     await tx
       .update(retours)

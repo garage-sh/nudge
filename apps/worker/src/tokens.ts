@@ -6,3 +6,8 @@ export const TRIAGE_QUEUE_TOKEN = Symbol('TRIAGE_QUEUE');
 export const OPTIONS = Symbol('OPTIONS');
 /** `SecretCipher` des secrets stockés en base, par la clé d'Instance. */
 export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
+/**
+ * `SurSuspension` : appelé à chaque passage d'une Destination en Suspendue, par
+ * `SuspensionService` seul. Par défaut, `WorkerOptions.surSuspension` ou rien.
+ */
+export const SUR_SUSPENSION = Symbol('SUR_SUSPENSION');

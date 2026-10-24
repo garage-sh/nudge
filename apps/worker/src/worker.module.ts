@@ -9,6 +9,7 @@ import {
   createSecretCipher,
   jobOptions,
   BALAYAGE_RECUS_JOB,
+  SONDE_SUSPENDUES_JOB,
   DISPATCH_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
@@ -28,9 +29,16 @@ import {
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
   TRIAGE_QUEUE_TOKEN,
+  SUR_SUSPENSION,
 } from './tokens.js';
 import { JugeResolver } from './juge-resolver.js';
-import { BALAYAGE_PAR_DEFAUT, type WorkerOptions } from './options.js';
+import {
+  BALAYAGE_PAR_DEFAUT,
+  SUSPENSION_PAR_DEFAUT,
+  type SurSuspension,
+  type WorkerOptions,
+} from './options.js';
+import { SuspensionService } from './suspension.service.js';
 import { TriageProcessor } from './triage.processor.js';
 
 const DB_CONNECTION = Symbol('DB_CONNECTION');
@@ -51,6 +59,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
     private readonly balayage: BalayageProcessor,
+    private readonly suspension: SuspensionService,
   ) {}
 
   static forRoot(options: WorkerOptions): DynamicModule {
@@ -60,6 +69,10 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       providers: [
         { provide: OPTIONS, useValue: options },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
+        {
+          provide: SUR_SUSPENSION,
+          useValue: options.surSuspension ?? ((() => undefined) satisfies SurSuspension),
+        },
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
         { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.cleChiffrement) },
@@ -101,6 +114,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         TriageProcessor,
         DispatchProcessor,
         BalayageProcessor,
+        SuspensionService,
       ],
     };
   }
@@ -114,19 +128,30 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: intervalleMs },
       { name: BALAYAGE_RECUS_JOB },
     );
+    const { intervalleSondeMs } = this.options.suspension ?? SUSPENSION_PAR_DEFAUT;
+    await this.maintenanceQueue.upsertJobScheduler(
+      SONDE_SUSPENDUES_JOB,
+      { every: intervalleSondeMs },
+      { name: SONDE_SUSPENDUES_JOB },
+    );
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
         connection: this.redis,
         prefix,
       }),
-      new Worker<DispatchJob>(DISPATCH_QUEUE, (job) => this.dispatch.handle(job.data), {
-        connection: this.redis,
-        prefix,
-      }),
+      new Worker<DispatchJob>(
+        DISPATCH_QUEUE,
+        (job) =>
+          this.dispatch.handle(job.data, {
+            derniereTentative: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+          }),
+        { connection: this.redis, prefix },
+      ),
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
           if (job.name === BALAYAGE_RECUS_JOB) await this.balayage.handle();
+          if (job.name === SONDE_SUSPENDUES_JOB) await this.suspension.sonder();
         },
         { connection: this.redis, prefix },
       ),

@@ -27,7 +27,12 @@ import {
 import type { ConfigJuge } from '@nudge/judge';
 import { resolveDestinationAdapter as adaptateursReels } from '@nudge/destinations';
 import type { RetourEntrant } from '@nudge/shared';
-import { createWorker, type OptionsBalayage } from '@nudge/worker';
+import {
+  createWorker,
+  type OptionsBalayage,
+  type OptionsSuspension,
+  type Suspension,
+} from '@nudge/worker';
 import { Queue, QueueEvents } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
@@ -57,6 +62,10 @@ export interface PipelineOptions {
    * récepteurs. Par défaut, chaque Destination est servie par sa `FakeDestination`.
    */
   readonly destinations?: 'fakes' | 'reelles';
+  /** Seuil, refroidissement et sonde de la Suspension ; ceux du worker sinon. */
+  readonly suspension?: OptionsSuspension;
+  /** Répliques du worker sur les mêmes queues et la même base (1 par défaut). */
+  readonly repliquesWorker?: number;
 }
 
 export interface Pipeline {
@@ -64,6 +73,8 @@ export interface Pipeline {
   readonly url: string;
   /** Le Juge branché sur le worker (lève si le pipeline tourne sans Juge). */
   readonly juge: FakeJuge;
+  /** Chaque passage d'une Destination en Suspendue signalé par le worker, dans l'ordre. */
+  readonly suspensions: readonly Suspension[];
   /** Le Projet est créé directement en base (seed) ; ses clés sont rendues en clair. */
   createProjet(donnees: {
     nom: string;
@@ -179,6 +190,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     return fake;
   };
 
+  const suspensions: Suspension[] = [];
   const cleChiffrement = randomBytes(32).toString('base64');
   const cipher = createSecretCipher(cleChiffrement);
   const resolveDestinationAdapter: DestinationAdapterResolver =
@@ -194,14 +206,21 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
   };
-  const worker = await createWorker({
+  const workerOptions = {
     ...infra,
     ...(juge === 'instance' ? { jugeParDefaut: options.jugeParDefaut ?? null } : { juge }),
     ...(options.seuilsTriage ? { seuilsTriage: options.seuilsTriage } : {}),
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
+    ...(options.suspension ? { suspension: options.suspension } : {}),
+    surSuspension: (suspension) => {
+      suspensions.push(suspension);
+    },
     resolveDestinationAdapter,
-  });
+  } satisfies Parameters<typeof createWorker>[0];
+  const workers = await Promise.all(
+    Array.from({ length: options.repliquesWorker ?? 1 }, () => createWorker(workerOptions)),
+  );
   const api = await createApi({ ...infra, sessionCookieSecure: false, resolveDestinationAdapter });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
@@ -231,6 +250,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       if (!fakeJuge) throw new Error('Ce pipeline tourne sans FakeJuge');
       return fakeJuge;
     },
+    suspensions,
     createProjet: (donnees) => createProjet(db, donnees),
     async createDestination(projetId, donnees = {}) {
       const destination = await createDestination(db, cipher, {
@@ -306,7 +326,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     },
     async stop() {
       await api.close();
-      await worker.close();
+      await Promise.all(workers.map((worker) => worker.close()));
       await Promise.all(Object.values(queues).map((queue) => queue.close()));
       await redis.quit();
       await close();

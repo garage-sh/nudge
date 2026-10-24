@@ -154,6 +154,14 @@ export const destinations = pgTable('destinations', {
   /** … et Gravité minimale facultative (`null` : pas d'exigence). */
   filtreGraviteMinimale: graviteEnum('filtre_gravite_minimale'),
   etat: etatDestinationEnum('etat').notNull().default('active'),
+  /** Échecs transient consécutifs : remis à zéro par une livraison ou un échec permanent. */
+  echecsConsecutifs: integer('echecs_consecutifs').notNull().default(0),
+  /** Moment du passage en Suspendue ; `null` tant que la Destination est active. */
+  suspendueLe: timestamp('suspendue_le', { withTimezone: true }),
+  /** Ce qui l'a suspendue (`auth: HTTP 401…`) ; `null` tant qu'elle est active. */
+  motifSuspension: text('motif_suspension'),
+  /** Quand la sonde pourra tester la Destination Suspendue (fin du refroidissement). */
+  prochaineSondeLe: timestamp('prochaine_sonde_le', { withTimezone: true }),
   ...timestamps,
 });
 
@@ -173,8 +181,14 @@ export const envois = pgTable(
     derniereErreur: text('derniere_erreur'),
     ...timestamps,
   },
-  // Idempotence : un Envoi par couple (Retour, Destination).
-  (t) => [unique('envois_retour_destination_uniq').on(t.retourId, t.destinationId)],
+  (t) => [
+    // Idempotence : un Envoi par couple (Retour, Destination).
+    unique('envois_retour_destination_uniq').on(t.retourId, t.destinationId),
+    // Libération des Envois retenus d'une Destination redevenue active.
+    index('envois_retenus_idx')
+      .on(t.destinationId)
+      .where(sql`${t.statut} = 'retenu'`),
+  ],
 );
 
 /**

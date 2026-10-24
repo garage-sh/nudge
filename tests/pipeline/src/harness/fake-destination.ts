@@ -18,6 +18,7 @@ export class FakeDestination implements DestinationAdapter {
   /** Nombre d'appels à `healthCheck`. */
   healthChecks = 0;
   private sends: (ResultatEnvoi | Error)[] = [];
+  private held: Promise<void> | null = null;
   private health: SanteDestination[] = [];
 
   /**
@@ -33,8 +34,21 @@ export class FakeDestination implements DestinationAdapter {
     this.health.push(...health);
   }
 
+  /** Bloque les `send` jusqu'à l'appel de la fonction rendue (pour des appels simultanés). */
+  hold(): () => void {
+    let release!: () => void;
+    this.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return () => {
+      this.held = null;
+      release();
+    };
+  }
+
   async send(envoi: EnvoiASortir): Promise<ResultatEnvoi> {
     this.attempts.push(envoi);
+    if (this.held) await this.held;
     const result = this.sends.shift() ?? {
       statut: 'livre',
       lienExterne: `https://destination.test/envois/${envoi.envoiId}`,
