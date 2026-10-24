@@ -10,6 +10,7 @@ import { Retour } from './screens/Retour.js';
 import { Retours } from './screens/Retours.js';
 import { Setup } from './screens/Setup.js';
 import { Layout } from './layout/Layout.js';
+import { PageIntrouvable } from './screens/PageIntrouvable.js';
 import { RequireSession } from './session/RequireSession.js';
 
 /**
@@ -32,7 +33,7 @@ export function AppRoutes() {
           <Route path="projets/:id/destinations" element={<Destinations />} />
           <Route path="membres" element={<Membres />} />
           <Route path="parametres" element={<Parametres />} />
-          <Route path="*" element={<h1>Page introuvable</h1>} />
+          <Route path="*" element={<PageIntrouvable />} />
         </Route>
       </Route>
     </Routes>

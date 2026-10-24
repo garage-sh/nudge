@@ -1509,3 +1509,36 @@ fieldset.champ legend {
     grid-row: 2;
   }
 }
+
+/* Liste des Projets */
+.projets > li {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.projet-lien {
+  font-weight: 600;
+  color: var(--texte);
+  text-decoration: none;
+}
+
+.projet-lien:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.projets p {
+  margin: 0;
+  font-size: var(--t-s);
+}
+
+.nav a.nav-titre {
+  min-height: 0;
+  padding: 0.15rem 0.5rem 0.25rem;
+}
+
+.nav a.nav-titre.active {
+  background: none;
+  box-shadow: none;
+  color: var(--texte);
+}

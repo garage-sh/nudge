@@ -24,7 +24,7 @@ import {
   useRetraitAlerte,
   useTestAlerte,
 } from '../api/instance.js';
-import { ConfirmAction, ErrorMessage, Field, Loading } from '../layout/ui.js';
+import { ConfirmAction, ErrorMessage, Field, Loading, PageHeader } from '../layout/ui.js';
 import { LIBELLES_FOURNISSEUR_JUGE } from '../libelles.js';
 import { ResultatTest, SecretsGeneres, type SecretsMontres } from './destinations/Destinations.js';
 import { FormulaireDestination } from './destinations/FormulaireDestination.js';
@@ -40,12 +40,17 @@ export function Parametres() {
   const retention = useRetention();
   return (
     <section>
-      <h1>Paramètres de l’Instance</h1>
-      {juge.isPending || alerte.isPending || retention.isPending ? <Loading /> : null}
-      <ErrorMessage erreur={juge.error ?? alerte.error ?? retention.error} />
-      {juge.data ? <Juge juge={juge.data} /> : null}
-      {alerte.data ? <DestinationAlerte destination={alerte.data.destination} /> : null}
-      {retention.data ? <Retention retention={retention.data} /> : null}
+      <PageHeader
+        titre="Paramètres de l’Instance"
+        description="Ces réglages valent pour tous les Projets et tous les Membres."
+      />
+      <div className="reglages">
+        {juge.isPending || alerte.isPending || retention.isPending ? <Loading /> : null}
+        <ErrorMessage erreur={juge.error ?? alerte.error ?? retention.error} />
+        {juge.data ? <Juge juge={juge.data} /> : null}
+        {alerte.data ? <DestinationAlerte destination={alerte.data.destination} /> : null}
+        {retention.data ? <Retention retention={retention.data} /> : null}
+      </div>
     </section>
   );
 }
