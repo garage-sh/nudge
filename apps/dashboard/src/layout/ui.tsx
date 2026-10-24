@@ -1,4 +1,5 @@
 import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { ApiError } from '../api/client.js';
 
 const MESSAGES: Record<string, string> = {
@@ -40,11 +41,87 @@ export function ErrorMessage({ erreur }: { erreur: unknown }) {
   );
 }
 
+/** Chargement : des silhouettes de lignes, annoncées comme « Chargement… ». */
 export function Loading() {
   return (
-    <p className="discret" aria-live="polite">
-      Loading…
-    </p>
+    <div className="chargement" aria-live="polite">
+      <span className="visuellement-cache">Chargement…</span>
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * En-tête d'un écran : le titre (seul `h1` de l'écran), un lien de retour facultatif
+ * au-dessus, une description et les actions de l'écran à droite.
+ */
+export function PageHeader({
+  titre,
+  retour,
+  description,
+  actions,
+}: {
+  titre: ReactNode;
+  retour?: { to: string; libelle: string };
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="entete-page">
+      <div>
+        {retour ? (
+          <Link to={retour.to} className="retour-lien">
+            ← {retour.libelle}
+          </Link>
+        ) : null}
+        <h1>{titre}</h1>
+        {description ? <p className="description">{description}</p> : null}
+      </div>
+      {actions ? <div className="actions">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** Rien à montrer : dit pourquoi et, quand il y en a une, propose l'action qui remplit l'écran. */
+export function EmptyState({
+  titre,
+  children,
+  action,
+}: {
+  titre: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="vide">
+      <p>
+        <strong>{titre}</strong>
+      </p>
+      {children ? <p>{children}</p> : null}
+      {action}
+    </div>
+  );
+}
+
+/** Ton d'une pastille : la couleur sémantique d'un état (voir docs/design-system.md). */
+export type Ton = 'neutre' | 'succes' | 'revue' | 'danger' | 'retenu' | 'eteint';
+
+/** Un État ou un Statut, en pastille colorée par son ton. */
+export function Pastille({
+  ton,
+  children,
+  title,
+}: {
+  ton: Ton;
+  children: ReactNode;
+  title?: string;
+}) {
+  return (
+    <span className={`badge pastille ton-${ton}`} title={title}>
+      {children}
+    </span>
   );
 }
 

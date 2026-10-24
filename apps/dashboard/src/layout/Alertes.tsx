@@ -15,14 +15,14 @@ export function Alertes() {
   return (
     <section className="bandeau-alertes" aria-label="Alertes">
       {retoursEnRevue > 0 ? (
-        <Link className="badge badge-attention" to="/retours?etat=en_revue">
+        <Link className="alerte-revue" to="/retours?etat=en_revue">
           {retoursEnRevue === 1 ? '1 Retour en revue' : `${retoursEnRevue} Retours en revue`}
         </Link>
       ) : null}
       {destinationsSuspendues.map(({ id, nom, projet }) => (
         <Link
           key={id}
-          className="badge badge-attention"
+          className="alerte-suspendue"
           to={`/projets/${encodeURIComponent(projet.id)}/destinations`}
         >
           Destination suspendue : {nom} ({projet.nom})
