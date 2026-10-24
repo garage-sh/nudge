@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { TriageJob } from '@nudge/core';
 import { captures, retours, type Db } from '@nudge/database';
 import type { Auteur, CaptureEntrante, RetourRecu, RetourValide, Source } from '@nudge/shared';
@@ -11,6 +11,8 @@ import { cleCapture } from './capture.js';
 /** Cas d'usage commun aux deux voies d'ingestion (clé publique, clé secrète). */
 @Injectable()
 export class IngestionService {
+  private readonly logger = new Logger(IngestionService.name);
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue<TriageJob>,
@@ -21,6 +23,9 @@ export class IngestionService {
    * Enregistre le Retour, et sa Capture s'il en a une : l'image est écrite dans le
    * stockage avant la ligne en base. Un stockage indisponible refuse le Retour (5xx)
    * plutôt que de le garder sans la Capture que l'Auteur a choisi de joindre.
+   *
+   * Une fois la ligne en base, le Retour est reçu : si sa mise en queue échoue, le
+   * balayage des Retours restés Reçu (D18) le remettra au Triage.
    */
   async receive(projetId: string, source: Source, retour: RetourValide): Promise<RetourRecu> {
     const id = randomUUID();
@@ -46,7 +51,13 @@ export class IngestionService {
       if (capture) await this.stockage.supprimer(capture.cle).catch(() => undefined);
       throw erreur;
     }
-    await this.triageQueue.add('triage', { retourId: id }, { jobId: id });
+    try {
+      await this.triageQueue.add('triage', { retourId: id }, { jobId: id });
+    } catch (erreur) {
+      this.logger.error(
+        `Retour ${id} enregistré mais pas mis en queue, le balayage le triera : ${String(erreur)}`,
+      );
+    }
     return { id, etat: 'recu' };
   }
 

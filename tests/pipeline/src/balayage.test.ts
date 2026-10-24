@@ -33,6 +33,25 @@ describe('Balayage des Retours restés Reçu', () => {
     expect(fake.envois).toHaveLength(1);
   });
 
+  it('un Retour dont la mise en queue échoue est accepté (202), puis trié par le balayage', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Redis en panne' });
+    await pipeline.createDestination(projet.id);
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const reparer = await pipeline.casserMiseEnQueue('triage');
+    let id: string;
+    try {
+      const reponse = await pipeline.postRetour(cleSecrete, { texte: 'Enregistré malgré Redis' });
+
+      expect(reponse.status).toBe(202);
+      ({ id } = (await reponse.json()) as { id: string });
+      expect(await pipeline.readRetour(id)).toMatchObject({ etat: 'recu' });
+    } finally {
+      await reparer();
+    }
+    const retour = await pipeline.waitForRetour(id, (r) => r.etat === 'dispatche', 10_000);
+    expect(retour.verdict).toMatchObject({ typeRetenu: 'bug' });
+  });
+
   it('un Retour dont le Triage a épuisé ses retries est retenté quand le Juge revient', async () => {
     const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Juge longtemps absent' });
     await pipeline.createDestination(projet.id);

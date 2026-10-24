@@ -175,6 +175,11 @@ export interface Pipeline {
   rejouerTriage(retourId: string): Promise<void>;
   /** Remet en queue le job de Dispatch d'un Envoi et attend qu'il soit traité. */
   rejouerDispatch(envoiId: string): Promise<void>;
+  /**
+   * Fait échouer toute mise en queue dans la queue `nom` (l'api comme le worker), comme
+   * un Redis qui refuse les écritures. Rend la fonction qui la répare.
+   */
+  casserMiseEnQueue(nom: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE): Promise<() => Promise<void>>;
   /** La ligne des paramètres d'Instance telle qu'en base (secrets chiffrés), ou `null`. */
   parametresInstance(): Promise<typeof parametresInstance.$inferSelect | null>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
@@ -423,6 +428,15 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     },
     rejouerTriage: (retourId) => rejouer(TRIAGE_QUEUE, { retourId }),
     rejouerDispatch: (envoiId) => rejouer(DISPATCH_QUEUE, { envoiId }),
+    async casserMiseEnQueue(nom) {
+      // Chaque ajout de job incrémente le compteur `id` de la queue : non numérique, il
+      // fait échouer l'ajout avant toute écriture.
+      const compteur = `${infra.queuePrefix}:${nom}:id`;
+      await redis.set(compteur, 'cassé');
+      return async () => {
+        await redis.del(compteur);
+      };
+    },
     async parametresInstance() {
       const [ligne] = await db.select().from(parametresInstance);
       return ligne ?? null;
