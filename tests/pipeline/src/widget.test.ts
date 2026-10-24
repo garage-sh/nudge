@@ -94,6 +94,19 @@ describe('Ingestion par clé publique (Widget)', () => {
     expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
   });
 
+  it.each([
+    ['dans l’Auteur', { auteur: { id: 'u-7', confiance: 'attestee' } }],
+    ['à la racine du Retour', { auteur: { id: 'u-7' }, confianceAuteur: 'attestee' }],
+  ])('refuse un navigateur qui prétend attester l’Auteur %s', async (_cas, champs) => {
+    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
+      texte: 'Bonjour',
+      ...champs,
+    });
+
+    expect(reponse.status).toBe(400);
+    expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
+  });
+
   it('refuse l’ancienne clé publique après régénération, accepte la nouvelle', async () => {
     const membre = await pipeline.signIn();
     const { body } = await membre.post<{ projet: ProjetVu }>('/api/projets', {

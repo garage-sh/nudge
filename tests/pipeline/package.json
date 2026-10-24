@@ -18,6 +18,7 @@
     "@nudge/database": "workspace:*",
     "@nudge/destinations": "workspace:*",
     "@nudge/judge": "workspace:*",
+    "@nudge/sdk": "workspace:*",
     "@nudge/shared": "workspace:*",
     "@nudge/stockage": "workspace:*",
     "@nudge/typescript-config": "workspace:*",

@@ -29,6 +29,13 @@ export type Source = (typeof SOURCES)[number];
 export const ETATS_RETOUR = ['recu', 'trie', 'dispatche', 'ecarte', 'en_revue'] as const;
 export type EtatRetour = (typeof ETATS_RETOUR)[number];
 
+/**
+ * Préfixes des clés d'un Projet : l'ingestion choisit sa voie d'après lui. La clé
+ * publique (Widget) déclare l'identité de l'Auteur, la clé secrète (serveur) l'atteste.
+ */
+export const PREFIXE_CLE_PUBLIQUE = 'nk_pub_';
+export const PREFIXE_CLE_SECRETE = 'nk_sec_';
+
 /** Identité de l'Auteur : déclarée par le navigateur, ou attestée par la clé secrète. */
 export const CONFIANCES_AUTEUR = ['declaree', 'attestee'] as const;
 export type ConfianceAuteur = (typeof CONFIANCES_AUTEUR)[number];

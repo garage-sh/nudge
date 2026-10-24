@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { PREFIXE_CLE_PUBLIQUE, PREFIXE_CLE_SECRETE } from '@nudge/shared';
 
 /** Clés d'un Projet : la publique pour le Widget, la secrète pour l'API serveur. */
 export interface ProjetKeys {
@@ -6,9 +7,8 @@ export interface ProjetKeys {
   readonly cleSecrete: string;
 }
 
-/** Préfixes des clés : l'ingestion choisit sa voie (Widget ou serveur) d'après lui. */
-export const PREFIXE_CLE_PUBLIQUE = 'nk_pub_';
-export const PREFIXE_CLE_SECRETE = 'nk_sec_';
+// Les préfixes font partie du contrat de l'API publique (le SDK les vérifie) : ils vivent dans shared.
+export { PREFIXE_CLE_PUBLIQUE, PREFIXE_CLE_SECRETE };
 
 export const generateClePublique = (): string =>
   `${PREFIXE_CLE_PUBLIQUE}${randomBytes(18).toString('base64url')}`;

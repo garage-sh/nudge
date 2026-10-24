@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { TriageJob } from '@nudge/core';
 import { captures, retours, type Db } from '@nudge/database';
-import type { CaptureEntrante, RetourValide, Source } from '@nudge/shared';
+import type { CaptureEntrante, RetourRecu, RetourValide, Source } from '@nudge/shared';
 import type { StockageCaptures } from '@nudge/stockage';
 import type { Queue } from 'bullmq';
 import { DB, STOCKAGE_CAPTURES, TRIAGE_QUEUE_TOKEN } from '../infra/tokens.js';
@@ -22,11 +22,7 @@ export class IngestionService {
    * stockage avant la ligne en base. Un stockage indisponible refuse le Retour (5xx)
    * plutôt que de le garder sans la Capture que l'Auteur a choisi de joindre.
    */
-  async receive(
-    projetId: string,
-    source: Source,
-    retour: RetourValide,
-  ): Promise<{ id: string; etat: 'recu' }> {
+  async receive(projetId: string, source: Source, retour: RetourValide): Promise<RetourRecu> {
     const id = randomUUID();
     const capture = retour.capture ? await this.stocker(id, retour.capture) : null;
     try {

@@ -1588,6 +1588,7 @@ __metadata:
     "@nudge/database": "workspace:*"
     "@nudge/destinations": "workspace:*"
     "@nudge/judge": "workspace:*"
+    "@nudge/sdk": "workspace:*"
     "@nudge/shared": "workspace:*"
     "@nudge/stockage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
@@ -1602,6 +1603,21 @@ __metadata:
     ioredis: "npm:^5.8.0"
     pg: "npm:^8.16.0"
     testcontainers: "npm:^11.14.0"
+    typescript: "npm:~5.9.3"
+    vitest: "npm:^4.1.0"
+  languageName: unknown
+  linkType: soft
+
+"@nudge/sdk@workspace:*, @nudge/sdk@workspace:packages/sdk":
+  version: 0.0.0-use.local
+  resolution: "@nudge/sdk@workspace:packages/sdk"
+  dependencies:
+    "@nudge/shared": "workspace:*"
+    "@nudge/tsup-config": "workspace:*"
+    "@nudge/typescript-config": "workspace:*"
+    "@types/node": "npm:^24.10.0"
+    eslint: "npm:^9.39.0"
+    tsup: "npm:^8.5.1"
     typescript: "npm:~5.9.3"
     vitest: "npm:^4.1.0"
   languageName: unknown

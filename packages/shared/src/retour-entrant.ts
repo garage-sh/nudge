@@ -131,3 +131,9 @@ export type RetourValide = z.output<typeof schemaRetourEntrant>;
 export type Auteur = z.output<typeof schemaAuteur>;
 export type Contexte = z.output<typeof schemaContexte>;
 export type CaptureEntrante = z.output<typeof schemaCaptureEntrante>;
+
+/** Réponse de l'API publique (202) : le Retour est conservé et attend son Triage. */
+export interface RetourRecu {
+  readonly id: string;
+  readonly etat: 'recu';
+}
