@@ -7,6 +7,9 @@ import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
 import type { InfraOptions } from './infra/infra.module.js';
 
+/** Réglage `trust proxy` d'Express : booléen, nombre de proxys, ou adresses de confiance. */
+export type TrustProxy = boolean | number | string;
+
 export interface ApiOptions extends InfraOptions, IngestionOptions {
   /** `false` coupe les logs Nest (tests). */
   readonly logger?: false | LogLevel[];
@@ -20,7 +23,7 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
    * limit du Widget, anti force brute de la connexion) se lit dans `X-Forwarded-For`.
    * Absent ou `false` : l'IP de la connexion, que le client ne peut pas falsifier.
    */
-  readonly trustProxy?: boolean | number | string;
+  readonly trustProxy?: TrustProxy;
   /** Adaptateurs de Destination (bouton « tester ») : ceux de `@nudge/destinations` en production. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }

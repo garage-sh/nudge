@@ -62,8 +62,8 @@ Le cookie de session est `Secure` : il faut donc HTTPS. Les navigateurs font une
 ### Mettre à jour, sauvegarder, monter en charge
 
 - **Mettre à jour** : `git pull && docker compose up -d --build`. Le service `migrate` applique les nouvelles migrations avant que l'api et le worker ne redémarrent.
-- **Sauvegarder** : les volumes `postgres` (la source de vérité) et `captures`, ainsi que la valeur de `NUDGE_ENCRYPTION_KEY`. Sans cette clé, les secrets stockés (clé du Juge, jetons des Destinations) sont illisibles et doivent être ressaisis. Redis ne porte que les queues, que l'état en base permet de reconstituer.
-- **Monter en charge** : `docker compose up -d --scale worker=3`. Les workers se partagent les queues, et un Triage lent ne ralentit pas la collecte. Le rate limit du Widget est compté en mémoire, par réplique de l'api.
+- **Sauvegarder** : les volumes `postgres` (la source de vérité), `captures` et `redis`, ainsi que la valeur de `NUDGE_ENCRYPTION_KEY`. Sans cette clé, les secrets stockés (clé du Juge, jetons des Destinations) sont illisibles et doivent être ressaisis. Redis ne porte que les queues : un Retour resté Reçu est remis au Triage tout seul, mais un Envoi en attente perdu avec Redis reste bloqué.
+- **Monter en charge** : `docker compose up -d --scale worker=3`. Les workers se partagent les queues, et un Triage lent ne ralentit pas la collecte. L'api se réplique aussi, mais le rate limit du Widget est compté en mémoire, par réplique : avec N répliques, la limite effective est multipliée par N.
 
 ## Configuration
 
@@ -83,7 +83,7 @@ Toute la configuration passe par des variables d'environnement. [`.env.example`]
 
 ### Juge
 
-Le Juge se choisit dans le dashboard (**Paramètres**), et sa clé y est stockée chiffrée. Les variables `NUDGE_JUDGE_*` ne servent que de repli tant qu'aucun Juge n'est choisi. Trois fournisseurs sont possibles :
+Le Juge se choisit dans le dashboard (**Paramètres**), et sa clé y est stockée chiffrée. Les variables `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL` et `NUDGE_JUDGE_BASE_URL` ne servent que de repli tant qu'aucun Juge n'est choisi ; `NUDGE_JUDGE_TIMEOUT_MS` s'applique toujours. Trois fournisseurs sont possibles :
 
 - `typesafe` : TypeSafe System One (Jev). Il demande `NUDGE_JUDGE_API_KEY` ;
 - `openrouter` : pplx-decider via l'API Decisions d'OpenRouter. Il demande `NUDGE_JUDGE_API_KEY` ;

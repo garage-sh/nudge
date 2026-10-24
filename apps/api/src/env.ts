@@ -7,7 +7,7 @@ import {
   type Env,
 } from '@nudge/core';
 import { configStockageFromEnv, type ConfigStockage } from '@nudge/stockage';
-import type { ApiOptions } from './api.js';
+import type { ApiOptions, TrustProxy } from './api.js';
 import { LIMITES_WIDGET_PAR_DEFAUT } from './ingestion/acces-widget.js';
 
 /** Ce que l'environnement fixe de l'api ; `main.ts` y branche les adaptateurs. */
@@ -29,7 +29,7 @@ export type ConfigApi = Required<
  * de confiance (`loopback, uniquelocal`, `10.0.0.0/8`). Absente : aucun proxy, l'IP
  * vue est celle de la connexion.
  */
-function trustProxyFromEnv(env: Env): boolean | number | string {
+function trustProxyFromEnv(env: Env): TrustProxy {
   const valeur = optionalEnv(env, 'NUDGE_TRUST_PROXY');
   if (valeur === null || valeur === 'false') return false;
   if (valeur === 'true') return true;

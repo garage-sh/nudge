@@ -32,8 +32,8 @@ export type ConfigWorker = Required<
   >
 > & { readonly stockage: ConfigStockage };
 
-const probabilite = { min: 0, max: 1 };
-const duree = { min: 1 };
+const bornesProbabilite = { min: 0, max: 1 };
+const bornesDuree = { min: 1 };
 
 /**
  * La configuration du worker, lue dans l'environnement (voir `.env.example`). Une
@@ -56,17 +56,22 @@ export function configWorkerFromEnv(env: Env): ConfigWorker {
         env,
         'NUDGE_TRIAGE_SEUIL_INDESIRABLE',
         seuils.indesirable,
-        probabilite,
+        bornesProbabilite,
       ),
       manipulation: numberEnv(
         env,
         'NUDGE_TRIAGE_SEUIL_MANIPULATION',
         seuils.manipulation,
-        probabilite,
+        bornesProbabilite,
       ),
-      confiance: numberEnv(env, 'NUDGE_TRIAGE_SEUIL_CONFIANCE', seuils.confiance, probabilite),
+      confiance: numberEnv(
+        env,
+        'NUDGE_TRIAGE_SEUIL_CONFIANCE',
+        seuils.confiance,
+        bornesProbabilite,
+      ),
     },
-    delaiJugeMs: integerEnv(env, 'NUDGE_JUDGE_TIMEOUT_MS', DELAI_JUGE_PAR_DEFAUT_MS, duree),
+    delaiJugeMs: integerEnv(env, 'NUDGE_JUDGE_TIMEOUT_MS', DELAI_JUGE_PAR_DEFAUT_MS, bornesDuree),
     suspension: {
       seuilEchecs: integerEnv(env, 'NUDGE_SUSPENSION_SEUIL_ECHECS', suspension.seuilEchecs, {
         min: 1,
@@ -75,13 +80,13 @@ export function configWorkerFromEnv(env: Env): ConfigWorker {
         env,
         'NUDGE_SUSPENSION_REFROIDISSEMENT_MS',
         suspension.refroidissementMs,
-        duree,
+        bornesDuree,
       ),
       intervalleSondeMs: integerEnv(
         env,
         'NUDGE_SUSPENSION_INTERVALLE_SONDE_MS',
         suspension.intervalleSondeMs,
-        duree,
+        bornesDuree,
       ),
     },
     purge: {
@@ -89,7 +94,7 @@ export function configWorkerFromEnv(env: Env): ConfigWorker {
         env,
         'NUDGE_PURGE_INTERVALLE_MS',
         PURGE_PAR_DEFAUT.intervalleMs,
-        duree,
+        bornesDuree,
       ),
     },
   };

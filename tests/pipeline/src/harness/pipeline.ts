@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApi, type LimitesWidget } from '@nudge/api';
+import { createApi, type LimitesWidget, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -77,7 +77,7 @@ export interface PipelineOptions {
   /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
   readonly limitesWidget?: LimitesWidget;
   /** Réglage `trust proxy` de l'api (`NUDGE_TRUST_PROXY`) ; aucun proxy sinon. */
-  readonly trustProxy?: boolean | number | string;
+  readonly trustProxy?: TrustProxy;
   /**
    * Stockage des Captures, partagé par l'api et le worker ; par défaut, un disque
    * local dans un dossier temporaire propre au pipeline, supprimé à l'arrêt.
