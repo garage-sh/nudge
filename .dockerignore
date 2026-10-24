@@ -1,0 +1,17 @@
+# Contexte des images (Dockerfile) : les sources et les manifestes, rien de construit
+# ni d'installé sur le poste.
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+**/test-results
+**/playwright-report
+**/coverage
+.yarn/*
+!.yarn/releases
+.env
+.env.*
+.data
+.DS_Store
+**/*.log

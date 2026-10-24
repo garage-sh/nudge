@@ -1,0 +1,128 @@
+# Une Instance nudge complète : `docker compose up -d`, puis http://localhost:8080.
+# La configuration se lit dans `.env` (copier `.env.example`) ; voir le README.
+#
+# Seul le dashboard publie un port : il sert aussi l'api (/api, /v1) et le Widget
+# (/widget/nudge-widget.js) sur la même origine. Mettre un reverse proxy TLS devant.
+
+x-nudge-env: &nudge-env
+  DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD:?définir NUDGE_POSTGRES_PASSWORD dans .env}@postgres:5432/nudge
+  REDIS_URL: redis://redis:6379
+  NUDGE_ENCRYPTION_KEY: ${NUDGE_ENCRYPTION_KEY:?définir NUDGE_ENCRYPTION_KEY dans .env (openssl rand -base64 32)}
+  NUDGE_DASHBOARD_URL: ${NUDGE_DASHBOARD_URL:-}
+  NUDGE_COOKIE_SECURE: ${NUDGE_COOKIE_SECURE:-true}
+  # Le proxy du dashboard, plus ceux placés devant lui (voir le README).
+  NUDGE_TRUST_PROXY: ${NUDGE_TRUST_PROXY:-1}
+  NUDGE_WIDGET_LIMITE_IP: ${NUDGE_WIDGET_LIMITE_IP:-}
+  NUDGE_WIDGET_LIMITE_PROJET: ${NUDGE_WIDGET_LIMITE_PROJET:-}
+  NUDGE_JUDGE_PROVIDER: ${NUDGE_JUDGE_PROVIDER:-}
+  NUDGE_JUDGE_API_KEY: ${NUDGE_JUDGE_API_KEY:-}
+  NUDGE_JUDGE_MODEL: ${NUDGE_JUDGE_MODEL:-}
+  NUDGE_JUDGE_BASE_URL: ${NUDGE_JUDGE_BASE_URL:-}
+  NUDGE_JUDGE_TIMEOUT_MS: ${NUDGE_JUDGE_TIMEOUT_MS:-}
+  NUDGE_TRIAGE_SEUIL_INDESIRABLE: ${NUDGE_TRIAGE_SEUIL_INDESIRABLE:-}
+  NUDGE_TRIAGE_SEUIL_MANIPULATION: ${NUDGE_TRIAGE_SEUIL_MANIPULATION:-}
+  NUDGE_TRIAGE_SEUIL_CONFIANCE: ${NUDGE_TRIAGE_SEUIL_CONFIANCE:-}
+  NUDGE_SUSPENSION_SEUIL_ECHECS: ${NUDGE_SUSPENSION_SEUIL_ECHECS:-}
+  NUDGE_SUSPENSION_REFROIDISSEMENT_MS: ${NUDGE_SUSPENSION_REFROIDISSEMENT_MS:-}
+  NUDGE_SUSPENSION_INTERVALLE_SONDE_MS: ${NUDGE_SUSPENSION_INTERVALLE_SONDE_MS:-}
+  NUDGE_PURGE_INTERVALLE_MS: ${NUDGE_PURGE_INTERVALLE_MS:-}
+  NUDGE_CAPTURES_STOCKAGE: ${NUDGE_CAPTURES_STOCKAGE:-disque}
+  # Le volume `captures`, monté au même endroit dans l'api et le worker.
+  NUDGE_CAPTURES_DOSSIER: /var/lib/nudge/captures
+  NUDGE_S3_ENDPOINT: ${NUDGE_S3_ENDPOINT:-}
+  NUDGE_S3_REGION: ${NUDGE_S3_REGION:-}
+  NUDGE_S3_BUCKET: ${NUDGE_S3_BUCKET:-}
+  NUDGE_S3_ACCESS_KEY_ID: ${NUDGE_S3_ACCESS_KEY_ID:-}
+  NUDGE_S3_SECRET_ACCESS_KEY: ${NUDGE_S3_SECRET_ACCESS_KEY:-}
+  NUDGE_S3_PREFIXE: ${NUDGE_S3_PREFIXE:-}
+  NUDGE_S3_STYLE_CHEMIN: ${NUDGE_S3_STYLE_CHEMIN:-}
+
+x-build-api: &build-api
+  context: .
+  target: api
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nudge
+      POSTGRES_PASSWORD: ${NUDGE_POSTGRES_PASSWORD:?définir NUDGE_POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: nudge
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nudge -d nudge']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Les queues BullMQ : persistées (AOF), et jamais évincées sous pression mémoire.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Applique les migrations de la base, puis s'arrête ; l'api et le worker l'attendent.
+  migrate:
+    image: nudge-api
+    build: *build-api
+    command: ['node', 'apps/api/dist/migrate.js']
+    environment:
+      DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD}@postgres:5432/nudge
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: nudge-api
+    build: *build-api
+    restart: unless-stopped
+    environment: *nudge-env
+    volumes:
+      - captures:/var/lib/nudge/captures
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Se met à l'échelle indépendamment de l'api : `docker compose up -d --scale worker=3`.
+  worker:
+    image: nudge-worker
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    environment: *nudge-env
+    volumes:
+      - captures:/var/lib/nudge/captures
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    image: nudge-dashboard
+    build:
+      context: .
+      target: dashboard
+    restart: unless-stopped
+    ports:
+      - '${NUDGE_PORT:-8080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres:
+  redis:
+  captures:
