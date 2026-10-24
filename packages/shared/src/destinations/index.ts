@@ -9,12 +9,14 @@ import {
 } from '../domaine.js';
 import type { DefinitionDestination } from './definition.js';
 import { definitionDiscord } from './discord.js';
+import { definitionGitHub } from './github.js';
 import { definitionLinear } from './linear.js';
 import { definitionSlack } from './slack.js';
 import { definitionWebhook } from './webhook.js';
 
 export { schemaUrlHttp, type DefinitionDestination } from './definition.js';
 export * from './discord.js';
+export * from './github.js';
 export * from './linear.js';
 export * from './slack.js';
 export * from './webhook.js';
@@ -30,6 +32,7 @@ export const DEFINITIONS_DESTINATION = {
   discord: definitionDiscord,
   linear: definitionLinear,
   slack: definitionSlack,
+  github: definitionGitHub,
 } as const satisfies Record<string, DefinitionDestination>;
 
 export type TypeDestination = keyof typeof DEFINITIONS_DESTINATION;

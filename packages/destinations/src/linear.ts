@@ -18,7 +18,8 @@ import {
   echecHttp,
   messageErreur,
 } from './http.js';
-import { tronquer } from './texte.js';
+import { echapperPonctuation, lienSur } from './markdown.js';
+import { premiereLigne, tronquer } from './texte.js';
 
 export interface OptionsLinear {
   readonly fetch?: typeof globalThis.fetch;
@@ -226,13 +227,9 @@ const TITRE_MAX = 120;
 
 /** Titre (texte brut chez Linear) : le Type et la première ligne non vide du texte. */
 function titre({ essai, retour }: EnvoiASortir): string {
-  const premiereLigne =
-    retour.texte
-      .split(/\r\n|\r|\n/)
-      .map((ligne) => ligne.replace(/\s+/g, ' ').trim())
-      .find((ligne) => ligne.length > 0) ?? '';
+  const ligne = premiereLigne(retour.texte);
   const entete = `${essai ? 'Essai · ' : ''}${LIBELLES_TYPE[retour.typeRetenu]}`;
-  return tronquer(premiereLigne ? `${entete} · ${premiereLigne}` : entete, TITRE_MAX);
+  return tronquer(ligne ? `${entete} · ${ligne}` : entete, TITRE_MAX);
 }
 
 /**
@@ -254,10 +251,6 @@ function description({ projet, retour }: EnvoiASortir): string {
   ];
   return [texteEchappe(retour.texte), '---', ...pied].join('\n\n');
 }
-
-/** Un lien du dashboard qu'on peut écrire tel quel entre chevrons. */
-const lienSur = (lien: string | null): lien is string =>
-  lien !== null && /^https?:\/\/[^\s<>]+$/.test(lien);
 
 /**
  * Le texte de l'Auteur, affiché tel qu'il l'a écrit et jamais interprété : chaque
@@ -281,8 +274,6 @@ function texteEchappe(texte: string): string {
     .filter((paragraphe) => paragraphe.length > 0);
   return paragraphes.length > 0 ? paragraphes.join('\n\n') : '_(texte vide)_';
 }
-
-const echapperPonctuation = (texte: string) => texte.replace(/[!-/:-@[-`{-~]/g, '\\$&');
 
 /** Un nom de label tel que Linear le compare : sans tenir compte de la casse. */
 const cleLabel = (nom: string) => nom.toLowerCase();

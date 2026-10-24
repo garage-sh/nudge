@@ -218,6 +218,83 @@ describe('Destinations d’un Projet', () => {
     );
   });
 
+  it('ajoute un dépôt GitHub : jeton en secret, dépôt en configuration', async () => {
+    const DEPOT: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Issues boutique-web',
+      type: 'github',
+      config: { depot: 'boutique-sa/boutique-web' },
+      secrets: ['jeton'],
+    };
+    const api = fakeApi({
+      ...routesDeBase([]),
+      'POST /api/projets/projet-1/destinations': {
+        status: 201,
+        body: { destination: DEPOT, secretsGeneres: {} },
+      },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const formulaire = within(
+      (await screen.findByRole('heading', { name: 'Ajouter une Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.selectOptions(formulaire.getByLabelText('Type'), 'GitHub Issues');
+    await userEvent.type(formulaire.getByLabelText('Nom'), 'Issues boutique-web');
+    const champJeton = formulaire.getByLabelText('Jeton d’accès') as HTMLInputElement;
+    expect(champJeton.type).toBe('password');
+    await userEvent.type(champJeton, 'github_pat_secret');
+    await userEvent.type(formulaire.getByLabelText('Dépôt'), 'boutique-sa/boutique-web');
+    await userEvent.click(formulaire.getByRole('button', { name: 'Ajouter' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.appels.find((a) => a.route === 'POST /api/projets/projet-1/destinations')?.corps,
+      ).toEqual({
+        type: 'github',
+        nom: 'Issues boutique-web',
+        config: { depot: 'boutique-sa/boutique-web' },
+        secrets: { jeton: 'github_pat_secret' },
+        filtre: { types: ['bug', 'suggestion', 'avis', 'question'], graviteMinimale: null },
+      }),
+    );
+  });
+
+  it('modifie un dépôt GitHub sans ressaisir le jeton enregistré', async () => {
+    const DEPOT: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Issues boutique-web',
+      type: 'github',
+      config: { depot: 'boutique-sa/boutique-web' },
+      secrets: ['jeton'],
+    };
+    const api = fakeApi({
+      ...routesDeBase([DEPOT]),
+      'PATCH /api/destinations/destination-1': { status: 200, body: DEPOT },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const carteDepot = await carte('Issues boutique-web');
+    expect(carteDepot.getByText('GitHub Issues')).toBeTruthy();
+    expect(carteDepot.getByText('Dépôt boutique-sa/boutique-web')).toBeTruthy();
+    await userEvent.click(carteDepot.getByRole('button', { name: 'Modifier' }));
+    const formulaire = within(screen.getByRole('form', { name: 'Modifier Issues boutique-web' }));
+    const champJeton = formulaire.getByLabelText('Jeton d’accès') as HTMLInputElement;
+    expect(champJeton.value).toBe('');
+    expect(champJeton.required).toBe(false);
+    await userEvent.clear(formulaire.getByLabelText('Dépôt'));
+    await userEvent.type(formulaire.getByLabelText('Dépôt'), 'boutique-sa/api');
+    await userEvent.click(formulaire.getByRole('button', { name: 'Enregistrer' }));
+
+    await vi.waitFor(() => {
+      const corps = api.appels.find((a) => a.route === 'PATCH /api/destinations/destination-1')
+        ?.corps as Record<string, unknown> | undefined;
+      expect(corps).not.toHaveProperty('secrets');
+      expect(corps?.config).toEqual({ depot: 'boutique-sa/api' });
+    });
+  });
+
   it('ajoute une équipe Linear : clé d’API en secret, équipe et labels du Type et de la Gravité', async () => {
     const EQUIPE: DestinationVu = {
       ...RECEPTEUR,

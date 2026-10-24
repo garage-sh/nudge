@@ -5,3 +5,10 @@ export function tronquer(texte: string, max: number): string {
   if (/[\ud800-\udbff]$/.test(coupe)) coupe = coupe.slice(0, -1);
   return `${coupe}…`;
 }
+
+/** La première ligne non vide d'un texte, espaces réduits, ou `''`. */
+export const premiereLigne = (texte: string): string =>
+  texte
+    .split(/\r\n|\r|\n/)
+    .map((ligne) => ligne.replace(/\s+/g, ' ').trim())
+    .find((ligne) => ligne.length > 0) ?? '';

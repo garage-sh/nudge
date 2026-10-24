@@ -228,6 +228,49 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(JSON.stringify(ligne)).not.toContain(jeton);
   });
 
+  it('ajoute un dépôt GitHub : le jeton est un secret, le dépôt propriétaire/dépôt est validé', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'GitHub' });
+    const jeton = 'github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz';
+    const depot = (config: unknown, secrets?: unknown) => ({
+      type: 'github',
+      nom: 'Issues boutique-web',
+      config,
+      ...(secrets === undefined ? {} : { secrets }),
+    });
+
+    for (const [corps, chemin] of [
+      [depot({ depot: 'boutique-sa/boutique-web' }), /^secrets/],
+      [depot({ depot: 'boutique-sa/boutique-web' }, { jeton: '  ' }), /^secrets/],
+      [depot({ depot: 'boutique-web' }, { jeton }), /^config\.depot/],
+      [
+        depot({ depot: 'https://github.com/boutique-sa/boutique-web' }, { jeton }),
+        /^config\.depot/,
+      ],
+      [depot({ depot: '-boutique/boutique-web' }, { jeton }), /^config\.depot/],
+      [depot({ depot: 'boutique-sa/..' }, { jeton }), /^config\.depot/],
+      [depot({ depot: 'boutique-sa/boutique-web', labels: {} }, { jeton }), /^config/],
+    ] as const) {
+      const refus = await membre.post(`/api/projets/${projet.id}/destinations`, corps);
+      expect(refus).toMatchObject({
+        status: 400,
+        body: { erreur: 'requete_invalide', details: [{ chemin: expect.stringMatching(chemin) }] },
+      });
+    }
+
+    const { destination, secretsGeneres } = await creer(
+      projet.id,
+      depot({ depot: ' boutique-sa/boutique-web ' }, { jeton }),
+    );
+    expect(destination).toMatchObject({
+      type: 'github',
+      config: { depot: 'boutique-sa/boutique-web' },
+      secrets: ['jeton'],
+    });
+    expect(secretsGeneres).toEqual({});
+    const ligne = await pipeline.ligneDestination(destination.id);
+    expect(JSON.stringify(ligne)).not.toContain(jeton);
+  });
+
   it('des secrets indéchiffrables (clé d’Instance changée) n’empêchent ni de lister ni de régénérer', async () => {
     const { projet } = await pipeline.createProjet({ nom: 'Clé changée' });
     const { destination } = await creer(projet.id);
