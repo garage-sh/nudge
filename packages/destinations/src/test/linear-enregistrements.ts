@@ -85,9 +85,12 @@ export const LINEAR = {
     status: 200,
     corps: { data: { teams: { nodes: [] }, issueLabels: { nodes: [] } } },
   },
-  /** `issueCreate` réussi : `success` et l'issue demandée (id, identifiant, url). */
+  /**
+   * `issueCreate` réussi : `success` et l'issue demandée. La documentation ne sélectionne
+   * que `issue { id title }` ; `identifier` et `url` suivent le schéma.
+   */
   issueCreee: {
-    provenance: 'documentation',
+    provenance: 'reconstituee',
     source: `${GRAPHQL} (issueCreate) ; ${SCHEMA} (IssuePayload, Issue.url)`,
     status: 200,
     corps: {

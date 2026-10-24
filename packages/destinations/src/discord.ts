@@ -12,6 +12,7 @@ import {
   type SecretsDiscord,
 } from '@nudge/shared';
 import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
+import { tronquer } from './texte.js';
 
 export interface OptionsDiscord {
   readonly fetch?: typeof globalThis.fetch;
@@ -218,11 +219,3 @@ function echapperMarkdown(texte: string): string {
 
 const neutraliserMentionsGenerales = (texte: string) =>
   texte.replace(/@(everyone|here)/gi, `@${SANS_CHASSE}$1`);
-
-/** Borné à `max` unités UTF-16, sans couper une paire de substitution, avec « … ». */
-function tronquer(texte: string, max: number): string {
-  if (texte.length <= max) return texte;
-  let coupe = texte.slice(0, max - 1);
-  if (/[\ud800-\udbff]$/.test(coupe)) coupe = coupe.slice(0, -1);
-  return `${coupe}…`;
-}

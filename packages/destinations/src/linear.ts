@@ -11,7 +11,14 @@ import {
   definitionLinear,
   type SecretsLinear,
 } from '@nudge/shared';
-import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
+import {
+  DELAI_HTTP_PAR_DEFAUT_MS,
+  EXTRAIT_MAX,
+  classerStatut,
+  echecHttp,
+  messageErreur,
+} from './http.js';
+import { tronquer } from './texte.js';
 
 export interface OptionsLinear {
   readonly fetch?: typeof globalThis.fetch;
@@ -80,9 +87,6 @@ export function adaptateurLinear(
     } catch (erreur) {
       return { ok: false, classe: 'transient', message: messageErreur(erreur) };
     }
-    if (reponse.status >= 300 && reponse.status < 400) {
-      return { ok: false, ...(await echecHttp(reponse)) };
-    }
     const corps = await corpsGraphQL<T>(reponse);
     if (!reponse.ok && !corps?.errors?.length) return { ok: false, ...(await echecHttp(reponse)) };
     await reponse.body?.cancel();
@@ -110,7 +114,7 @@ export function adaptateurLinear(
     }
     const labels = new Map<string, string>();
     for (const label of appel.data.issueLabels.nodes) {
-      if (!label.isGroup) labels.set(label.name.toLowerCase(), label.id);
+      if (!label.isGroup) labels.set(cleLabel(label.name), label.id);
     }
     const lue = { id: trouvee.id, labels };
     equipes.set(cleCache, lue);
@@ -127,7 +131,7 @@ export function adaptateurLinear(
     { relire = false } = {},
   ): Promise<Appel<EquipeEtLabels>> {
     const connaitTout = (equipe: EquipeLue) =>
-      noms.every((nom) => equipe.labels.has(nom.toLowerCase()));
+      noms.every((nom) => equipe.labels.has(cleLabel(nom)));
     const gardee = relire ? undefined : equipes.get(cleCache);
     let equipe: EquipeLue;
     if (gardee && connaitTout(gardee)) {
@@ -137,7 +141,7 @@ export function adaptateurLinear(
       if (!lue.ok) return lue;
       equipe = lue.data;
     }
-    const manquant = noms.find((nom) => !equipe.labels.has(nom.toLowerCase()));
+    const manquant = noms.find((nom) => !equipe.labels.has(cleLabel(nom)));
     if (manquant !== undefined) {
       return refus(`Label Linear « ${manquant} » introuvable dans l’équipe ${config.equipe}`);
     }
@@ -145,7 +149,7 @@ export function adaptateurLinear(
       ok: true,
       data: {
         equipeId: equipe.id,
-        labelIds: noms.map((nom) => equipe.labels.get(nom.toLowerCase())!),
+        labelIds: noms.map((nom) => equipe.labels.get(cleLabel(nom))!),
       },
     };
   }
@@ -239,7 +243,7 @@ function titre({ essai, retour }: EnvoiASortir): string {
 function description({ projet, retour }: EnvoiASortir): string {
   const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
   const pied = [
-    `**Projet** : ${echapperMarkdown(projet.nom)}`,
+    `**Projet** : ${echapperPonctuation(projet.nom)}`,
     `**Type** : ${LIBELLES_TYPE[retour.typeRetenu]} · **Gravité** : ${gravite}`,
     ...(retour.incertain
       ? ['**Verdict incertain** : le Juge a hésité, vérifiez-le dans nudge.']
@@ -267,7 +271,7 @@ function texteEchappe(texte: string): string {
   const paragraphes = texte
     .split(/\r\n|\r|\n/)
     .map((ligne) =>
-      echapperMarkdown(ligne.trimEnd()).replace(/^[ \t]+/, (indentation) =>
+      echapperPonctuation(ligne.trimEnd()).replace(/^[ \t]+/, (indentation) =>
         indentation.replaceAll('\t', '    ').replaceAll(' ', '\u00a0'),
       ),
     )
@@ -278,15 +282,10 @@ function texteEchappe(texte: string): string {
   return paragraphes.length > 0 ? paragraphes.join('\n\n') : '_(texte vide)_';
 }
 
-const echapperMarkdown = (texte: string) => texte.replace(/[!-/:-@[-`{-~]/g, '\\$&');
+const echapperPonctuation = (texte: string) => texte.replace(/[!-/:-@[-`{-~]/g, '\\$&');
 
-/** Borné à `max` unités UTF-16, sans couper une paire de substitution, avec « … ». */
-function tronquer(texte: string, max: number): string {
-  if (texte.length <= max) return texte;
-  let coupe = texte.slice(0, max - 1);
-  if (/[\ud800-\udbff]$/.test(coupe)) coupe = coupe.slice(0, -1);
-  return `${coupe}…`;
-}
+/** Un nom de label tel que Linear le compare : sans tenir compte de la casse. */
+const cleLabel = (nom: string) => nom.toLowerCase();
 
 type Echec = { readonly ok: false; readonly classe: ClasseEchec; readonly message: string };
 type Appel<T> = { readonly ok: true; readonly data: T } | Echec;
@@ -372,9 +371,8 @@ function echecGraphQL(
   const messages = erreurs.map(({ message, extensions }) =>
     String(extensions?.userPresentableMessage ?? message ?? 'erreur sans message'),
   );
-  return { classe, message: borne(`Linear (HTTP ${status}) : ${messages.join(' ; ')}`) };
+  return {
+    classe,
+    message: tronquer(`Linear (HTTP ${status}) : ${messages.join(' ; ')}`, EXTRAIT_MAX),
+  };
 }
-
-const MESSAGE_MAX = 300;
-const borne = (texte: string) =>
-  texte.length > MESSAGE_MAX ? `${texte.slice(0, MESSAGE_MAX)}…` : texte;

@@ -1,7 +1,8 @@
 import type { ClasseEchec } from '@nudge/core';
+import { tronquer } from './texte.js';
 
 /** Longueur maximale de la réponse d'un service externe reprise dans un message d'échec. */
-const EXTRAIT_MAX = 300;
+export const EXTRAIT_MAX = 300;
 
 /** Délai de réponse d'un service externe, au-delà duquel l'appel est un échec transitoire. */
 export const DELAI_HTTP_PAR_DEFAUT_MS = 10_000;
@@ -38,7 +39,7 @@ export async function echecHttp(
 /** « 422 : <début de la réponse> », borné. */
 export async function messageEchec(reponse: Response): Promise<string> {
   const texte = (await reponse.text().catch(() => '')).trim();
-  const extrait = texte.length > EXTRAIT_MAX ? `${texte.slice(0, EXTRAIT_MAX)}…` : texte;
+  const extrait = tronquer(texte, EXTRAIT_MAX);
   return extrait ? `HTTP ${reponse.status} : ${extrait}` : `HTTP ${reponse.status}`;
 }
 
