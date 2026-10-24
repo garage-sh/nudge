@@ -38,7 +38,7 @@ export class FakeDestination implements DestinationAdapter {
   }
 
   /** Les prochains `alerter` rendent ces résultats, dans l'ordre ; ensuite, livraison. */
-  scriptAlertes(...results: (ResultatEnvoi | Error)[]): void {
+  scriptAlerts(...results: (ResultatEnvoi | Error)[]): void {
     this.alerts.push(...results);
   }
 

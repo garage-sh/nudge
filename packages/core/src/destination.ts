@@ -30,6 +30,13 @@ export interface CaptureADispatcher {
   lire(): Promise<Uint8Array | null>;
 }
 
+/**
+ * Un lien vers un écran du dashboard (`chemin` commence par `/`), d'après son URL
+ * publique (`NUDGE_DASHBOARD_URL`, D12) ; `null` sans elle.
+ */
+export const lienDashboard = (base: string | null | undefined, chemin: string): string | null =>
+  base ? `${base.replace(/\/+$/, '')}${chemin}` : null;
+
 /** Ce qu'un adapter reçoit d'un Retour Trié. Le texte est brut : chaque adapter l'encode pour sa cible. */
 export interface RetourADispatcher {
   readonly id: string;

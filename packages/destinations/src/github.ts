@@ -22,7 +22,7 @@ import {
   messageEchec,
   texteReponse,
 } from './http.js';
-import { echapperPonctuation, lienSur } from './markdown.js';
+import { alerteEnMarkdown, echapperPonctuation, lienSur } from './markdown.js';
 import { titreAvecType, tronquer } from './texte.js';
 
 export interface OptionsGitHub {
@@ -189,13 +189,11 @@ function corps({ projet, retour }: EnvoiASortir): string {
  * les noms (saisis par un Membre) et le refus (formulé par la cible) sont littéraux.
  */
 function issueAlerte(alerte: Alerte): { title: string; body: string } {
-  const { titre: titreAlerte, resume, details } = presenterAlerte(alerte);
-  const lignes = [
-    resume,
-    ...details.map(({ libelle, valeur }) => `**${libelle}** : ${echapperMarkdown(valeur)}`),
-    ...(lienSur(alerte.lienDashboard) ? [`[Ouvrir dans nudge](<${alerte.lienDashboard}>)`] : []),
-  ];
-  return { title: sansMention(tronquer(titreAlerte, TITRE_MAX)), body: lignes.join('\n\n') };
+  const { titre: titreAlerte } = presenterAlerte(alerte);
+  return {
+    title: sansMention(tronquer(titreAlerte, TITRE_MAX)),
+    body: alerteEnMarkdown(alerte, echapperMarkdown),
+  };
 }
 
 /**

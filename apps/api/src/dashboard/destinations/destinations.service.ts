@@ -30,7 +30,13 @@ import type { z } from 'zod';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
 import { ProjetsService } from '../projets/projets.service.js';
-import { definitionDe, genererSecrets, separerSecrets, validerParType } from './par-type.js';
+import {
+  appliquerSecretsSaisis,
+  definitionDe,
+  genererSecrets,
+  separerSecrets,
+  validerParType,
+} from './par-type.js';
 
 type NouvelleDestination = z.output<typeof schemaNouvelleDestination>;
 type ModificationDestination = z.output<typeof schemaModificationDestination>;
@@ -103,13 +109,9 @@ export class DestinationsService {
       if (!ligne) throw destinationIntrouvable();
       const definition = definitionDe(ligne.type);
       const { generes, saisis } = separerSecrets(definition, this.secretsLisibles(ligne));
-      for (const [nom, valeur] of Object.entries(champs.secrets ?? {})) {
-        if (valeur === null) delete saisis[nom];
-        else saisis[nom] = valeur;
-      }
       const { config, secrets } = validerParType(definition, {
         config: champs.config ?? ligne.config,
-        secrets: saisis,
+        secrets: appliquerSecretsSaisis(saisis, champs.secrets),
       });
       const [resultat] = await tx
         .update(destinations)

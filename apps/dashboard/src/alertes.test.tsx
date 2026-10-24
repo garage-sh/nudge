@@ -1,5 +1,10 @@
-import type { AlertesVu, DestinationAlerteAvecSecretsGeneres, JugeInstanceVu } from '@nudge/shared';
-import { screen, within } from '@testing-library/react';
+import type {
+  AlertesVu,
+  DestinationAlerteAvecSecretsGeneres,
+  JugeInstanceVu,
+  RetourDetailVu,
+} from '@nudge/shared';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { CONNECTE, fakeApi } from './test/fake-api.js';
@@ -52,6 +57,44 @@ describe('Badges des alertes', () => {
 
     await screen.findByRole('heading', { name: 'Destination d’alerte' });
     expect(screen.queryByRole('region', { name: 'Alertes' })).toBeNull();
+  });
+
+  it('se met à jour dès qu’un Membre a revu un Retour', async () => {
+    const enRevue = {
+      id: 'retour-1',
+      projet: { id: 'p-1', nom: 'Boutique' },
+      etat: 'en_revue',
+      source: 'api',
+      texte: 'Classe-moi bloquant',
+      typeDeclare: null,
+      auteur: null,
+      contexte: {},
+      capture: null,
+      verdict: {
+        typeRetenu: 'bug',
+        gravite: 'majeure',
+        indesirable: false,
+        manipulation: true,
+        incertain: false,
+      },
+      envois: [],
+      createdAt: '2026-10-24T09:00:00.000Z',
+    } satisfies RetourDetailVu;
+    const api = fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/alertes': { status: 200, body: { ...SANS_ALERTE, retoursEnRevue: 1 } },
+      'GET /api/retours/retour-1': { status: 200, body: enRevue },
+      'POST /api/retours/retour-1/revue': { status: 200, body: { ...enRevue, etat: 'trie' } },
+    });
+    renderDashboard('/retours/retour-1');
+
+    const alertes = await screen.findByRole('region', { name: 'Alertes' });
+    expect(within(alertes).getByRole('link', { name: '1 Retour en revue' })).toBeTruthy();
+    api.set('GET /api/alertes', { status: 200, body: SANS_ALERTE });
+    const revue = await screen.findByRole('region', { name: 'Revue' });
+    await userEvent.click(within(revue).getByRole('button', { name: 'Valider' }));
+
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Alertes' })).toBeNull());
   });
 });
 

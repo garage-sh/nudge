@@ -24,7 +24,12 @@ import {
 } from '@nudge/shared';
 import type { z } from 'zod';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from '../../infra/tokens.js';
-import { genererSecrets, separerSecrets, validerParType } from '../destinations/par-type.js';
+import {
+  appliquerSecretsSaisis,
+  genererSecrets,
+  separerSecrets,
+  validerParType,
+} from '../destinations/par-type.js';
 
 type DestinationAlerteSaisie = z.output<typeof schemaDestinationAlerte>;
 
@@ -57,14 +62,10 @@ export class DestinationAlerteService {
     const memeType = actuelle?.type === saisie.type;
     const { generes, saisis } = memeType
       ? separerSecrets(definition, this.secretsLisibles(actuelle))
-      : { generes: {}, saisis: {} as Record<string, string> };
-    for (const [nom, valeur] of Object.entries(saisie.secrets ?? {})) {
-      if (valeur === null) delete saisis[nom];
-      else saisis[nom] = valeur;
-    }
+      : { generes: {}, saisis: {} };
     const { config, secrets } = validerParType(definition, {
       config: saisie.config,
-      secrets: saisis,
+      secrets: appliquerSecretsSaisis(saisis, saisie.secrets),
     });
     // Un secret généré manquant (type nouveau, secrets devenus indéchiffrables) est tiré.
     const manquants = genererSecrets({

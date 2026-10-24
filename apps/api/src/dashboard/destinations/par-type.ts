@@ -33,6 +33,22 @@ export function validerParType(
   );
 }
 
+/**
+ * Applique aux secrets saisis enregistrés ceux d'une saisie : une valeur remplace,
+ * `null` efface, une clé absente garde le secret enregistré.
+ */
+export function appliquerSecretsSaisis(
+  enregistres: Record<string, string>,
+  saisie: Readonly<Record<string, string | null>> = {},
+): Record<string, string> {
+  const resultat = { ...enregistres };
+  for (const [nom, valeur] of Object.entries(saisie)) {
+    if (valeur === null) delete resultat[nom];
+    else resultat[nom] = valeur;
+  }
+  return resultat;
+}
+
 export function genererSecrets(definition: DefinitionDestination): Record<string, string> {
   return Object.fromEntries(
     definition.secretsGeneres.map((nom) => [nom, randomBytes(32).toString('base64url')]),

@@ -15,6 +15,7 @@ import {
   type SecretsDiscord,
 } from '@nudge/shared';
 import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
+import { lienSur } from './markdown.js';
 import { tronquer } from './texte.js';
 
 export interface OptionsDiscord {
@@ -214,15 +215,14 @@ function corpsAlerte(alerte: Alerte) {
     embeds: [
       {
         title: tronquer(echapperMarkdown(titre), TITRE_MAX),
-        ...(alerte.lienDashboard ? { url: alerte.lienDashboard } : {}),
+        ...(lienSur(alerte.lienDashboard) ? { url: alerte.lienDashboard } : {}),
         description: resume,
         timestamp: alerte.le.toISOString(),
         color: COULEUR_ALERTE,
-        fields: details.map(({ libelle, valeur }) => ({
+        fields: details.map(({ libelle, valeur, long }) => ({
           name: libelle,
           value: tronquer(echapperMarkdown(valeur), CHAMP_MAX),
-          // Le refus de la cible est long : il prend toute la largeur.
-          inline: libelle !== 'Dernier refus',
+          inline: !long,
         })),
         footer: { text: alerte.essai ? 'nudge · alerte d’essai' : 'nudge · alerte' },
       },

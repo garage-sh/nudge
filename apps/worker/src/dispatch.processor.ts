@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   envoyer,
+  lienDashboard,
   type CaptureADispatcher,
   type DestinationAdapterResolver,
   type DispatchJob,
@@ -82,9 +83,7 @@ export class DispatchProcessor {
         contexte: retour.contexte,
         capture: retour.capture ? this.captureADispatcher(retour.capture) : null,
         recuLe: retour.createdAt,
-        lienDashboard: this.options.dashboardUrl
-          ? `${this.options.dashboardUrl.replace(/\/+$/, '')}/retours/${retour.id}`
-          : null,
+        lienDashboard: lienDashboard(this.options.dashboardUrl, `/retours/${retour.id}`),
       },
     };
 

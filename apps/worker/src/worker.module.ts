@@ -21,7 +21,7 @@ import {
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
-import { Queue, Worker } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { AlertesService } from './alertes.service.js';
 import { BalayageProcessor } from './balayage.processor.js';
@@ -49,6 +49,9 @@ import { TriageProcessor } from './triage.processor.js';
 const DB_CONNECTION = Symbol('DB_CONNECTION');
 const REDIS = Symbol('REDIS');
 const MAINTENANCE_QUEUE_TOKEN = Symbol('MAINTENANCE_QUEUE');
+
+/** BullMQ ne relancera plus ce job s'il échoue. */
+const derniereTentative = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
 @Module({})
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -177,7 +180,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         DISPATCH_QUEUE,
         (job) =>
           this.dispatch.handle(job.data, {
-            derniereTentative: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+            derniereTentative: derniereTentative(job),
           }),
         { connection: this.redis, prefix },
       ),
@@ -187,7 +190,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           this.alertes.envoyer(job.data, {
             id: job.id ?? idJobAlerte(job.data),
             signaleLe: new Date(job.timestamp),
-            derniereTentative: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+            derniereTentative: derniereTentative(job),
           }),
         { connection: this.redis, prefix },
       ),

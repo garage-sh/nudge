@@ -1,6 +1,5 @@
 import {
   presenterAlerte,
-  type Alerte,
   type ClasseEchec,
   type DestinationAdapter,
   type DestinationConfiguree,
@@ -22,7 +21,7 @@ import {
   echecHttp,
   messageErreur,
 } from './http.js';
-import { echapperPonctuation, lienSur } from './markdown.js';
+import { alerteEnMarkdown, echapperPonctuation, lienSur } from './markdown.js';
 import { titreAvecType, tronquer } from './texte.js';
 
 export interface OptionsLinear {
@@ -268,7 +267,7 @@ export function adaptateurLinear(
       return creerIssue({
         teamId: cible.data.equipeId,
         title: tronquer(titre, TITRE_MAX),
-        description: descriptionAlerte(alerte),
+        description: alerteEnMarkdown(alerte, texteEchappe),
         labelIds: [],
       });
     },
@@ -338,19 +337,6 @@ function description({ projet, retour }: EnvoiASortir, assetUrl: string | null):
   ];
   const capture = lienSur(assetUrl) ? [`![Capture de la page](<${assetUrl}>)`] : [];
   return [texteEchappe(retour.texte), ...capture, '---', ...pied].join('\n\n');
-}
-
-/**
- * Description d'une alerte : écrite par nudge, où les noms (saisis par un Membre) et
- * le refus (formulé par la cible) sont échappés comme le texte de l'Auteur.
- */
-function descriptionAlerte(alerte: Alerte): string {
-  const { resume, details } = presenterAlerte(alerte);
-  return [
-    resume,
-    ...details.map(({ libelle, valeur }) => `**${libelle}** : ${texteEchappe(valeur)}`),
-    ...(lienSur(alerte.lienDashboard) ? [`[Ouvrir dans nudge](<${alerte.lienDashboard}>)`] : []),
-  ].join('\n\n');
 }
 
 /**

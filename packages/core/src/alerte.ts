@@ -48,8 +48,15 @@ export interface AlertePresentee {
   readonly titre: string;
   /** Ce qui s'est passé et ce qu'on attend du Membre, en texte brut écrit par nudge. */
   readonly resume: string;
-  /** Détails en texte brut, à encoder par chaque adaptateur pour sa cible. */
-  readonly details: readonly { readonly libelle: string; readonly valeur: string }[];
+  /**
+   * Détails en texte brut, à encoder par chaque adaptateur pour sa cible ; `long` : un
+   * texte qui mérite toute la largeur (le refus de la cible).
+   */
+  readonly details: readonly {
+    readonly libelle: string;
+    readonly valeur: string;
+    readonly long?: boolean;
+  }[];
 }
 
 /**
@@ -79,7 +86,7 @@ export function presenterAlerte(alerte: Alerte): AlertePresentee {
     details: [
       { libelle: 'Projet', valeur: alerte.projet.nom },
       { libelle: 'Destination', valeur: destination.nom },
-      { libelle: 'Dernier refus', valeur: destination.message },
+      { libelle: 'Dernier refus', valeur: destination.message, long: true },
     ],
   };
 }

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   alerter,
   idJobAlerte,
+  lienDashboard,
   type Alerte,
   type AlerteJob,
   type DestinationAdapterResolver,
@@ -101,7 +102,7 @@ export class AlertesService {
         le: signaleLe,
         projet: retour.projet,
         retour: { id: retour.id },
-        lienDashboard: this.lien(`/retours/${retour.id}`),
+        lienDashboard: lienDashboard(this.options.dashboardUrl, `/retours/${retour.id}`),
       };
     }
     const destination = await this.db.query.destinations.findFirst({
@@ -122,12 +123,10 @@ export class AlertesService {
         classe: job.classe,
         message: job.message,
       },
-      lienDashboard: this.lien(`/projets/${destination.projet.id}/destinations`),
+      lienDashboard: lienDashboard(
+        this.options.dashboardUrl,
+        `/projets/${destination.projet.id}/destinations`,
+      ),
     };
-  }
-
-  private lien(chemin: string): string | null {
-    const base = this.options.dashboardUrl;
-    return base ? `${base.replace(/\/+$/, '')}${chemin}` : null;
   }
 }

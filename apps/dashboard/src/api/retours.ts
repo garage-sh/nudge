@@ -6,6 +6,7 @@ import type {
   RetourDetailVu,
 } from '@nudge/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CLE_ALERTES } from './alertes.js';
 import { api } from './client.js';
 
 /** Filtres de la boîte de réception, dans l'ordre où ils s'écrivent dans l'URL. */
@@ -80,6 +81,8 @@ function useApresAction(id: string) {
     if (retour) client.setQueryData(cleRetour(id), retour);
     else void client.invalidateQueries({ queryKey: cleRetour(id) });
     void client.invalidateQueries({ queryKey: ['retours', 'liste'] });
+    // Un Retour revu quitte les badges « en revue ».
+    void client.invalidateQueries({ queryKey: CLE_ALERTES });
   };
 }
 

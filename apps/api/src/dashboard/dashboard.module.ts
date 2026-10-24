@@ -7,6 +7,7 @@ import {
 import type { DestinationAdapterResolver } from '@nudge/core';
 import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
 import { AlertesController } from './alertes/alertes.controller.js';
+import { AlertesService } from './alertes/alertes.service.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
@@ -72,6 +73,7 @@ export class DashboardModule implements NestModule {
         EnvoisService,
         JugeInstanceService,
         DestinationAlerteService,
+        AlertesService,
         DestinationsService,
         SessionGuard,
         AuthThrottleGuard,

@@ -1,3 +1,5 @@
+import type { ClasseEchec } from '@nudge/shared';
+
 /**
  * Contrat des queues BullMQ entre l'api et le worker. La queue n'est qu'un
  * transport : l'état d'un Retour ou d'un Envoi se lit toujours en base.
@@ -35,7 +37,7 @@ export type AlerteJob =
   | {
       readonly evenement: 'destination_suspendue';
       readonly destinationId: string;
-      readonly classe: 'transient' | 'auth';
+      readonly classe: Exclude<ClasseEchec, 'permanent'>;
       readonly message: string;
       /** ISO 8601 : distingue deux Suspensions successives de la même Destination. */
       readonly suspendueLe: string;

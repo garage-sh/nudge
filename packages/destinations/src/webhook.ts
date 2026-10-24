@@ -50,7 +50,7 @@ export function adaptateurWebhook(
   async function poster(
     evenement: 'retour' | 'alerte' | 'ping',
     corps: unknown,
-    idStable: Readonly<Record<string, string>> = {},
+    entetesId: Readonly<Record<string, string>> = {},
   ): Promise<ResultatEnvoi> {
     const brut = JSON.stringify(corps);
     const horodatage = String(Math.floor(maintenant().getTime() / 1000));
@@ -67,7 +67,7 @@ export function adaptateurWebhook(
           'content-type': 'application/json',
           'user-agent': 'nudge-webhook',
           'x-nudge-evenement': evenement,
-          ...idStable,
+          ...entetesId,
           'x-nudge-timestamp': horodatage,
           'x-nudge-signature': `sha256=${signature}`,
         },
@@ -150,13 +150,14 @@ function corpsAlerte(alerte: Alerte) {
     titre,
     resume,
     projet: { id: alerte.projet.id, nom: alerte.projet.nom },
+    lien: alerte.lienDashboard,
   };
   return {
     evenement: 'alerte',
     essai: alerte.essai,
     alerte:
       alerte.evenement === 'retour_en_revue'
-        ? { ...commun, retour: { id: alerte.retour.id }, lien: alerte.lienDashboard }
+        ? { ...commun, retour: { id: alerte.retour.id } }
         : {
             ...commun,
             destination: {
@@ -165,7 +166,6 @@ function corpsAlerte(alerte: Alerte) {
               classe: alerte.destination.classe,
               message: alerte.destination.message,
             },
-            lien: alerte.lienDashboard,
           },
   };
 }
