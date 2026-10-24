@@ -9,6 +9,7 @@ import {
   type SecretCipher,
 } from '@nudge/core';
 import { destinations, envois, toDestinationConfiguree, type Db } from '@nudge/database';
+import { messageErreur } from '@nudge/shared';
 import type { Queue } from 'bullmq';
 import { and, eq, lte, ne, sql } from 'drizzle-orm';
 import {
@@ -18,6 +19,7 @@ import {
   type SurSuspension,
   type WorkerOptions,
 } from './options.js';
+import { avecDelai } from './delai.js';
 import {
   DB,
   DESTINATION_ADAPTER_RESOLVER,
@@ -302,26 +304,17 @@ export class SuspensionService {
   }
 
   private async sante(destination: typeof destinations.$inferSelect): Promise<SanteDestination> {
-    let minuteur: NodeJS.Timeout | undefined;
-    const expiration = new Promise<never>((_, reject) => {
-      minuteur = setTimeout(
-        () => reject(new Error(`sans réponse après ${DELAI_SONDE_MS} ms`)),
-        DELAI_SONDE_MS,
-      );
-    });
     try {
       const adaptateur = this.resolveDestinationAdapter(
         toDestinationConfiguree(destination, this.cipher),
       );
-      return await Promise.race([adaptateur.healthCheck(), expiration]);
+      return await avecDelai(
+        DELAI_SONDE_MS,
+        () => new Error(`sans réponse après ${DELAI_SONDE_MS} ms`),
+        () => adaptateur.healthCheck(),
+      );
     } catch (erreur) {
-      return {
-        joignable: false,
-        classe: 'transient',
-        message: erreur instanceof Error ? erreur.message : String(erreur),
-      };
-    } finally {
-      clearTimeout(minuteur);
+      return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
     }
   }
 

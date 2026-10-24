@@ -1,3 +1,4 @@
+import { messageErreur } from '@nudge/shared';
 import {
   ErreurJugeRefusee,
   ErreurJugeTransitoire,
@@ -108,7 +109,7 @@ async function appeler(
     });
   } catch (cause) {
     // Coupure réseau, DNS, délai dépassé (annulation) : le Juge est injoignable.
-    throw new ErreurJugeTransitoire(`${client.fournisseur} injoignable : ${messageDe(cause)}`, {
+    throw new ErreurJugeTransitoire(`${client.fournisseur} injoignable : ${messageErreur(cause)}`, {
       cause,
     });
   }
@@ -150,9 +151,6 @@ function detailErreur(texte: string): string {
   const chaine = typeof detail === 'string' ? detail : JSON.stringify(detail);
   return chaine ? ` : ${chaine.slice(0, MESSAGE_MAX)}` : '';
 }
-
-const messageDe = (erreur: unknown): string =>
-  erreur instanceof Error ? erreur.message : String(erreur);
 
 type Objet = Record<string, unknown>;
 const estObjet = (valeur: unknown): valeur is Objet =>

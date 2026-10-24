@@ -54,5 +54,4 @@ export async function texteReponse(reponse: Response): Promise<string> {
 }
 
 /** Message d'une exception de `fetch` (réseau, délai dépassé). */
-export const messageErreur = (erreur: unknown): string =>
-  erreur instanceof Error ? erreur.message : String(erreur);
+export { messageErreur } from '@nudge/shared';

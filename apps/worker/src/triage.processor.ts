@@ -21,6 +21,7 @@ import {
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import { AlertesService } from './alertes.service.js';
+import { avecDelai } from './delai.js';
 import { DELAI_JUGE_PAR_DEFAUT_MS, type WorkerOptions } from './options.js';
 import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
@@ -110,17 +111,12 @@ export class TriageProcessor {
     requete: RequeteJuge<typeof triageQuestions>,
   ): Promise<TriageAnswers> {
     const delaiMs = this.options.delaiJugeMs ?? DELAI_JUGE_PAR_DEFAUT_MS;
-    const annulation = new AbortController();
-    let minuteur: NodeJS.Timeout | undefined;
-    const expiration = new Promise<never>((_, reject) => {
-      minuteur = setTimeout(() => {
-        const erreur = new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`);
-        annulation.abort(erreur);
-        reject(erreur);
-      }, delaiMs);
-    });
     try {
-      return await Promise.race([juge.juger(requete, { signal: annulation.signal }), expiration]);
+      return await avecDelai(
+        delaiMs,
+        () => new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`),
+        (signal) => juge.juger(requete, { signal }),
+      );
     } catch (erreur) {
       // Un refus durable (clé refusée, requête rejetée) ne se résout pas seul : il est
       // retenté comme le reste, mais signalé pour qu'un Membre corrige la configuration.
@@ -130,8 +126,6 @@ export class TriageProcessor {
         );
       }
       throw erreur;
-    } finally {
-      clearTimeout(minuteur);
     }
   }
 

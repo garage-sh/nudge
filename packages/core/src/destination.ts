@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  Auteur,
-  ClasseEchec,
-  ConfianceAuteur,
-  Contexte,
-  Gravite,
-  Source,
-  TypeCapture,
-  TypeRetour,
+import {
+  messageErreur,
+  type Auteur,
+  type ClasseEchec,
+  type ConfianceAuteur,
+  type Contexte,
+  type Gravite,
+  type Source,
+  type TypeCapture,
+  type TypeRetour,
 } from '@nudge/shared';
 import type { Alerte } from './alerte.js';
 
@@ -130,7 +131,7 @@ export function echecDException(erreur: unknown): Extract<ResultatEnvoi, { statu
   return {
     statut: 'echec',
     classe: 'transient',
-    message: erreur instanceof Error ? erreur.message : String(erreur),
+    message: messageErreur(erreur),
   };
 }
 
