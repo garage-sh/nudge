@@ -9,9 +9,10 @@ import {
   LIBELLES_GRAVITE,
   LIBELLES_TYPE,
   definitionLinear,
+  nomFichierCapture,
   type SecretsLinear,
 } from '@nudge/shared';
-import { lireCapture } from './capture.js';
+import { lireCapture, type ImageCapture } from './capture.js';
 import {
   DELAI_HTTP_PAR_DEFAUT_MS,
   EXTRAIT_MAX,
@@ -170,14 +171,10 @@ export function adaptateurLinear(
    * et l'`assetUrl` rendue la désigne dans la description. Un PUT refusé est passager :
    * l'Envoi retenté demandera une nouvelle URL signée.
    */
-  async function televerser(
-    retourId: string,
-    image: { contentType: string; octets: Uint8Array },
-  ): Promise<Appel<string>> {
-    const extension = image.contentType === 'image/jpeg' ? 'jpg' : 'png';
+  async function televerser(retourId: string, image: ImageCapture): Promise<Appel<string>> {
     const preparation = await graphql<DonneesFichier>(MUTATION_FICHIER, {
       contentType: image.contentType,
-      filename: `capture-${retourId}.${extension}`,
+      filename: nomFichierCapture(retourId, image.contentType),
       size: image.octets.length,
     });
     if (!preparation.ok) return preparation;

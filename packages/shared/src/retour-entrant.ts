@@ -68,8 +68,17 @@ const SIGNATURES_CAPTURE: Record<TypeCapture, readonly number[]> = {
   'image/jpeg': [0xff, 0xd8, 0xff],
 };
 
+/** Longueur maximale d'une Capture encodée en base64 (4 caractères pour 3 octets). */
+export const LONGUEUR_BASE64_CAPTURE_MAX = Math.ceil(OCTETS_CAPTURE_MAX / 3) * 4;
+
+const EXTENSIONS_CAPTURE: Record<TypeCapture, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' };
+
+/** Nom de fichier d'une Capture, tel qu'un Membre ou une Destination le voit. */
+export const nomFichierCapture = (retourId: string, contentType: TypeCapture): string =>
+  `capture-${retourId}.${EXTENSIONS_CAPTURE[contentType]}`;
+
 /** Taille en octets d'un contenu encodé en base64 (avec remplissage). */
-export const octetsBase64 = (data: string): number =>
+const octetsBase64 = (data: string): number =>
   (data.length / 4) * 3 - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
 
 const premiersOctets = (data: string): number[] =>
@@ -84,7 +93,7 @@ export const schemaCaptureEntrante = z
     contentType: z.enum(TYPES_CAPTURE),
     data: z
       .base64()
-      .max(Math.ceil(OCTETS_CAPTURE_MAX / 3) * 4)
+      .max(LONGUEUR_BASE64_CAPTURE_MAX)
       .refine((data) => data.length > 0, { message: 'Capture vide' }),
   })
   .superRefine(({ contentType, data }, contexte) => {

@@ -34,7 +34,7 @@ const requise = (env: Env, nom: string): string => {
  * `NUDGE_S3_STYLE_CHEMIN` (`true`)). Une configuration invalide lève, pour échouer
  * au démarrage plutôt qu'à la première Capture. L'api et le worker lisent la même.
  */
-export function configStockageDepuisEnv(env: Env): ConfigStockage {
+export function configStockageFromEnv(env: Env): ConfigStockage {
   const type = env.NUDGE_CAPTURES_STOCKAGE?.trim() || 'disque';
   if (type === 'disque') {
     const dossier = env.NUDGE_CAPTURES_DOSSIER?.trim() || DOSSIER_CAPTURES_PAR_DEFAUT;

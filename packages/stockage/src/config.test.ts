@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { configStockageDepuisEnv } from './config.js';
+import { configStockageFromEnv } from './config.js';
 
 describe('Stockage des Captures choisi par l’environnement', () => {
   it('disque local par défaut, dans /var/lib/nudge/captures', () => {
-    expect(configStockageDepuisEnv({})).toEqual({
+    expect(configStockageFromEnv({})).toEqual({
       type: 'disque',
       dossier: '/var/lib/nudge/captures',
     });
   });
 
   it('refuse un dossier relatif, que l’api et le worker liraient chacun ailleurs', () => {
-    expect(() => configStockageDepuisEnv({ NUDGE_CAPTURES_DOSSIER: 'data/captures' })).toThrow(
+    expect(() => configStockageFromEnv({ NUDGE_CAPTURES_DOSSIER: 'data/captures' })).toThrow(
       /NUDGE_CAPTURES_DOSSIER invalide/,
     );
   });
 
   it('disque local dans le dossier donné', () => {
     expect(
-      configStockageDepuisEnv({
+      configStockageFromEnv({
         NUDGE_CAPTURES_STOCKAGE: 'disque',
         NUDGE_CAPTURES_DOSSIER: '/var/lib/nudge/captures',
       }),
@@ -26,7 +26,7 @@ describe('Stockage des Captures choisi par l’environnement', () => {
 
   it('S3-compatible : style chemin et sans préfixe par défaut', () => {
     expect(
-      configStockageDepuisEnv({
+      configStockageFromEnv({
         NUDGE_CAPTURES_STOCKAGE: 's3',
         NUDGE_S3_ENDPOINT: 'http://minio:9000',
         NUDGE_S3_REGION: 'garage',
@@ -48,7 +48,7 @@ describe('Stockage des Captures choisi par l’environnement', () => {
 
   it('S3 : région us-east-1 par défaut, préfixe et style sous-domaine sur demande', () => {
     expect(
-      configStockageDepuisEnv({
+      configStockageFromEnv({
         NUDGE_CAPTURES_STOCKAGE: 's3',
         NUDGE_S3_ENDPOINT: 'https://s3.amazonaws.com',
         NUDGE_S3_BUCKET: 'nudge',
@@ -75,18 +75,18 @@ describe('Stockage des Captures choisi par l’environnement', () => {
     };
     delete env[variable];
 
-    expect(() => configStockageDepuisEnv(env)).toThrow(variable);
+    expect(() => configStockageFromEnv(env)).toThrow(variable);
   });
 
   it('lève sur un type de stockage inconnu', () => {
-    expect(() => configStockageDepuisEnv({ NUDGE_CAPTURES_STOCKAGE: 'ftp' })).toThrow(
+    expect(() => configStockageFromEnv({ NUDGE_CAPTURES_STOCKAGE: 'ftp' })).toThrow(
       /NUDGE_CAPTURES_STOCKAGE invalide/,
     );
   });
 
   it('lève sur un point d’appel S3 qui n’est pas une URL http(s)', () => {
     expect(() =>
-      configStockageDepuisEnv({
+      configStockageFromEnv({
         NUDGE_CAPTURES_STOCKAGE: 's3',
         NUDGE_S3_ENDPOINT: 'minio:9000',
         NUDGE_S3_BUCKET: 'nudge',

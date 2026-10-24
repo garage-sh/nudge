@@ -6,7 +6,7 @@ import type {
   ResultatEnvoi,
 } from '@nudge/core';
 import { definitionWebhook, type SecretsWebhook } from '@nudge/shared';
-import { lireCapture } from './capture.js';
+import { lireCapture, type ImageCapture } from './capture.js';
 import { DELAI_HTTP_PAR_DEFAUT_MS, echecHttp, messageErreur } from './http.js';
 
 export interface OptionsWebhook {
@@ -96,7 +96,7 @@ export function adaptateurWebhook(
 
 function corpsRetour(
   { envoiId, essai, projet, retour }: EnvoiASortir,
-  capture: { contentType: string; octets: Uint8Array } | null,
+  capture: ImageCapture | null,
 ) {
   return {
     evenement: 'retour',

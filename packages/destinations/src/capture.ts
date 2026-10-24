@@ -1,8 +1,15 @@
 import type { CaptureADispatcher, ClasseEchec } from '@nudge/core';
+import type { TypeCapture } from '@nudge/shared';
 import { messageErreur } from './http.js';
 
+/** L'image d'une Capture, lue dans le stockage, prête à joindre. */
+export interface ImageCapture {
+  readonly contentType: TypeCapture;
+  readonly octets: Uint8Array;
+}
+
 export type CaptureLue =
-  | { readonly ok: true; readonly image: { contentType: string; octets: Uint8Array } | null }
+  | { readonly ok: true; readonly image: ImageCapture | null }
   | { readonly ok: false; readonly classe: ClasseEchec; readonly message: string };
 
 /**

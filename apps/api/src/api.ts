@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { LogLevel } from '@nestjs/common';
 import type { DestinationAdapterResolver } from '@nudge/core';
-import { OCTETS_CAPTURE_MAX } from '@nudge/shared';
+import { LONGUEUR_BASE64_CAPTURE_MAX } from '@nudge/shared';
 import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
 import type { InfraOptions } from './infra/infra.module.js';
@@ -19,8 +19,8 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
 
-/** Un Retour et sa Capture encodée en base64 (4 octets pour 3), plus le reste du corps. */
-const LIMITE_CORPS_RETOUR = Math.ceil(OCTETS_CAPTURE_MAX / 3) * 4 + 200 * 1024;
+/** Un Retour et sa Capture encodée en base64, plus le reste du corps. */
+const LIMITE_CORPS_RETOUR = LONGUEUR_BASE64_CAPTURE_MAX + 200 * 1024;
 
 /** Construit l'api sans l'écouter : `main.ts` et le harnais de tests appellent `listen` eux-mêmes. */
 export async function createApi(options: ApiOptions): Promise<NestExpressApplication> {
