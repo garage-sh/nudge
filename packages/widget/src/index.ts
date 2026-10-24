@@ -13,10 +13,7 @@ export function definirWidget(): void {
 export function monterWidget(options: OptionsWidget, parent: Element = document.body): NudgeWidget {
   definirWidget();
   const widget = document.createElement(NOM_ELEMENT) as NudgeWidget;
-  widget.cle = options.cle;
-  widget.api = options.api;
-  widget.auteur = options.auteur;
-  widget.metadonnees = options.metadonnees;
+  widget.configurer(options);
   parent.append(widget);
   return widget;
 }

@@ -1,8 +1,8 @@
 import type { TypeRetour } from '@nudge/shared';
 import { LIBELLES_TYPE, LIMITES, TYPES_RETOUR } from './domaine.js';
-import { envoyerRetour } from './envoi.js';
+import { posterRetour } from './soumission.js';
 import { MESSAGES } from './messages.js';
-import type { AuteurDeclare, Metadonnees } from './options.js';
+import type { AuteurDeclare, Metadonnees, OptionsWidget } from './options.js';
 import { STYLES } from './styles.js';
 
 /** Nom de l'élément : `<nudge-widget cle="nk_pub_…" api="https://nudge.exemple">`. */
@@ -105,6 +105,14 @@ export class NudgeWidget extends ElementHtml {
     this.#metadonnees = valeur;
   }
 
+  /** Pose d'un coup la clé, l'Instance, l'identité et les métadonnées de l'hôte. */
+  configurer(options: OptionsWidget): void {
+    this.cle = options.cle;
+    this.api = options.api;
+    this.#auteur = options.auteur;
+    this.#metadonnees = options.metadonnees;
+  }
+
   #el<E extends HTMLElement = HTMLElement>(selecteur: string): E {
     const element = this.#racine.querySelector<E>(selecteur);
     if (!element) throw new Error(`Widget nudge : ${selecteur} introuvable`);
@@ -142,8 +150,8 @@ export class NudgeWidget extends ElementHtml {
 
     erreur.hidden = true;
     bouton.disabled = true;
-    bouton.textContent = MESSAGES.envoiEnCours;
-    const resultat = await envoyerRetour(
+    bouton.textContent = MESSAGES.soumissionEnCours;
+    const resultat = await posterRetour(
       { cle: this.cle, api: this.api, auteur: this.#auteur, metadonnees: this.#metadonnees },
       {
         texte: texte.value,

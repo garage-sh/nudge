@@ -2,10 +2,16 @@
  * Limiteur de débit en mémoire du processus, à fenêtre fixe, par clé (IP…).
  * Limite assumée : il compte par réplique d'api (pas de Redis pour ça, D8).
  */
+/** `limit` tentatives par fenêtre fixe de `windowMs`. */
+export interface RateLimit {
+  readonly limit: number;
+  readonly windowMs: number;
+}
+
 export class RateLimiter {
   private readonly fenetres = new Map<string, { debut: number; compte: number }>();
 
-  constructor(private readonly options: { readonly limit: number; readonly windowMs: number }) {}
+  constructor(private readonly options: RateLimit) {}
 
   /** Compte une tentative pour `cle` ; `false` si la limite de la fenêtre est dépassée. */
   consume(cle: string, maintenant = Date.now()): boolean {
@@ -20,7 +26,7 @@ export class RateLimiter {
   }
 
   /** Temps restant avant la fin de la fenêtre courante de `cle` (0 si aucune n'est ouverte). */
-  msAvantReprise(cle: string, maintenant = Date.now()): number {
+  msUntilReset(cle: string, maintenant = Date.now()): number {
     const fenetre = this.fenetres.get(cle);
     if (!fenetre) return 0;
     return Math.max(0, fenetre.debut + this.options.windowMs - maintenant);

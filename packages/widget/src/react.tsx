@@ -16,12 +16,7 @@ export function NudgeWidget({ cle, api, auteur, metadonnees }: NudgeWidgetProps)
   useLayoutEffect(() => {
     // Défini avant d'écrire les propriétés : l'élément est alors mis à niveau.
     definirWidget();
-    const widget = ref.current;
-    if (!widget) return;
-    widget.cle = cle;
-    widget.api = api;
-    widget.auteur = auteur;
-    widget.metadonnees = metadonnees;
+    ref.current?.configurer({ cle, api, auteur, metadonnees });
   }, [cle, api, auteur, metadonnees]);
   return createElement(NOM_ELEMENT, { ref });
 }

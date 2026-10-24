@@ -10,7 +10,7 @@ export interface Saisie {
   readonly email?: string;
 }
 
-export type ResultatEnvoi =
+export type ResultatSoumission =
   { readonly statut: 'envoye' } | { readonly statut: 'erreur'; readonly message: string };
 
 /**
@@ -40,10 +40,10 @@ function auteurDuRetour(hote: AuteurDeclare | undefined, email: string | undefin
  * Poste le Retour sur l'API publique de l'Instance avec la clé publique du Projet
  * (Source `widget`) et traduit l'issue en message pour l'Auteur.
  */
-export async function envoyerRetour(
+export async function posterRetour(
   options: OptionsWidget,
   saisie: Saisie,
-): Promise<ResultatEnvoi> {
+): Promise<ResultatSoumission> {
   const auteur = auteurDuRetour(options.auteur, saisie.email);
   // #14 : la Capture (déjà masquée et floutée dans le navigateur) rejoindra ce corps.
   const corps: RetourEntrant = {
@@ -70,4 +70,4 @@ export async function envoyerRetour(
   return erreur(MESSAGES.configuration);
 }
 
-const erreur = (message: string): ResultatEnvoi => ({ statut: 'erreur', message });
+const erreur = (message: string): ResultatSoumission => ({ statut: 'erreur', message });

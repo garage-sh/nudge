@@ -1,17 +1,11 @@
 import { ForbiddenException, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Projet } from '@nudge/database';
-import { RateLimiter } from '../infra/rate-limiter.js';
-
-/** Une limite à fenêtre fixe : `limit` Retours par fenêtre de `windowMs`. */
-export interface LimiteDebit {
-  readonly limit: number;
-  readonly windowMs: number;
-}
+import { RateLimiter, type RateLimit } from '../infra/rate-limiter.js';
 
 /** Rate limit de l'ingestion par clé publique (D8 : en mémoire, par réplique d'api). */
 export interface LimitesWidget {
-  readonly parIp: LimiteDebit;
-  readonly parProjet: LimiteDebit;
+  readonly parIp: RateLimit;
+  readonly parProjet: RateLimit;
 }
 
 /**
@@ -63,7 +57,7 @@ export class AccesWidget {
 
 function limiter(limiteur: RateLimiter, cle: string): void {
   if (limiteur.consume(cle)) return;
-  const secondes = Math.max(1, Math.ceil(limiteur.msAvantReprise(cle) / 1000));
+  const secondes = Math.max(1, Math.ceil(limiteur.msUntilReset(cle) / 1000));
   throw new TropDeRetours(secondes);
 }
 

@@ -9,7 +9,7 @@ export const MESSAGES = {
   typeNonPrecise: 'Non précisé',
   email: 'Email (facultatif)',
   envoyer: 'Envoyer',
-  envoiEnCours: 'Envoi…',
+  soumissionEnCours: 'Envoi…',
   envoye: 'Merci ! Votre retour a bien été envoyé.',
   reseau: 'Envoi impossible : vérifiez votre connexion, puis réessayez.',
   invalide: 'Votre retour n’a pas été accepté : vérifiez le message et l’email, puis réessayez.',
