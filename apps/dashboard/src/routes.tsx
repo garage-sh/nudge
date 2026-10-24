@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router';
 import { Connexion } from './screens/Connexion.js';
+import { Destinations } from './screens/destinations/Destinations.js';
 import { Invitation } from './screens/Invitation.js';
 import { Membres } from './screens/Membres.js';
 import { Parametres } from './screens/Parametres.js';
@@ -28,6 +29,7 @@ export function AppRoutes() {
           <Route path="retours/:id" element={<Retour />} />
           <Route path="projets" element={<Projets />} />
           <Route path="projets/:id" element={<Projet />} />
+          <Route path="projets/:id/destinations" element={<Destinations />} />
           <Route path="membres" element={<Membres />} />
           <Route path="parametres" element={<Parametres />} />
           <Route path="*" element={<h1>Page introuvable</h1>} />

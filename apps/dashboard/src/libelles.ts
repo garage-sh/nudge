@@ -1,4 +1,5 @@
 import type {
+  ClasseEchec,
   ConfianceAuteur,
   EtatDestination,
   EtatRetour,
@@ -64,4 +65,11 @@ export const LIBELLES_FOURNISSEUR_JUGE: Record<FournisseurJuge, string> = {
   typesafe: 'TypeSafe (Jev)',
   openrouter: 'OpenRouter (pplx-decider)',
   auto_heberge: 'pplx-decider auto-hébergé (API Decisions)',
+};
+
+/** Classe d'un échec d'Envoi, telle qu'un Membre la lit. */
+export const LIBELLES_CLASSE_ECHEC: Record<ClasseEchec, string> = {
+  transient: 'indisponibilité passagère',
+  auth: 'identifiants refusés',
+  permanent: 'refusé par la Destination',
 };

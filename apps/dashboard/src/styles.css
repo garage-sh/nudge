@@ -382,3 +382,34 @@ button.plus {
 .lien-brut {
   overflow-wrap: anywhere;
 }
+
+/* Destinations : cases du Filtre et barre d'actions d'une carte. */
+fieldset.champ {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+fieldset.champ legend {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.champ label.case {
+  font-weight: 400;
+  font-size: inherit;
+}
+
+.case {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}

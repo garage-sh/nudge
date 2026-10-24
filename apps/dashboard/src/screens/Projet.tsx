@@ -1,6 +1,6 @@
 import type { ProjetVu } from '@nudge/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import {
   useModificationProjet,
   useProjet,
@@ -39,6 +39,9 @@ export function Projet() {
   return (
     <section>
       <h1>{projet.data.nom}</h1>
+      <p>
+        <Link to="destinations">Destinations</Link> : où partent les Retours Triés de ce Projet.
+      </p>
       <Cles projet={projet.data} />
       <Informations projet={projet.data} />
       <Origines projet={projet.data} />
