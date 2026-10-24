@@ -10,13 +10,17 @@ import {
   type ChoixJuge,
   type DestinationAlerteVu,
   type JugeInstanceVu,
+  LIMITES_DASHBOARD,
+  type RetentionVu,
 } from '@nudge/shared';
 import { useState, type FormEvent } from 'react';
 import {
+  useChangementRetention,
   useChoixJuge,
   useConfigurationAlerte,
   useDestinationAlerte,
   useJugeInstance,
+  useRetention,
   useRetraitAlerte,
   useTestAlerte,
 } from '../api/instance.js';
@@ -27,19 +31,63 @@ import { FormulaireDestination } from './destinations/FormulaireDestination.js';
 import { FORMULAIRES_DESTINATION } from './destinations/types/index.js';
 
 /**
- * Paramètres de l'Instance. Chaque paramètre est un bloc `encadre` : la durée de
- * rétention s'ajoute ici à côté du Juge et de la Destination d'alerte.
+ * Paramètres de l'Instance. Chaque paramètre est un bloc `encadre` : Juge,
+ * Destination d'alerte, durée de rétention.
  */
 export function Parametres() {
   const juge = useJugeInstance();
   const alerte = useDestinationAlerte();
+  const retention = useRetention();
   return (
     <section>
       <h1>Paramètres de l’Instance</h1>
-      {juge.isPending || alerte.isPending ? <Loading /> : null}
-      <ErrorMessage erreur={juge.error ?? alerte.error} />
+      {juge.isPending || alerte.isPending || retention.isPending ? <Loading /> : null}
+      <ErrorMessage erreur={juge.error ?? alerte.error ?? retention.error} />
       {juge.data ? <Juge juge={juge.data} /> : null}
       {alerte.data ? <DestinationAlerte destination={alerte.data.destination} /> : null}
+      {retention.data ? <Retention retention={retention.data} /> : null}
+    </section>
+  );
+}
+
+/**
+ * Durée de rétention des Retours : une tâche planifiée efface les Retours plus
+ * anciens, avec leurs Captures. Champ vide : rétention illimitée.
+ */
+function Retention({ retention }: { retention: RetentionVu }) {
+  const [jours, setJours] = useState(retention.jours === null ? '' : String(retention.jours));
+  const changement = useChangementRetention();
+  const soumettre = (evenement: FormEvent) => {
+    evenement.preventDefault();
+    changement.mutate({ jours: jours === '' ? null : Number(jours) });
+  };
+  return (
+    <section className="encadre" aria-labelledby="parametres-retention">
+      <h2 id="parametres-retention">Rétention des Retours</h2>
+      <form onSubmit={soumettre} className="formulaire">
+        <p className="aide">
+          {retention.jours === null
+            ? 'Rétention illimitée : aucun Retour n’est effacé automatiquement.'
+            : `Les Retours plus anciens que ${retention.jours} jours sont effacés automatiquement, avec leurs Captures.`}
+        </p>
+        <Field
+          libelle="Durée de rétention (jours)"
+          id="retention-jours"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={LIMITES_DASHBOARD.retentionJoursMax}
+          step={1}
+          value={jours}
+          onChange={(e) => setJours(e.target.value)}
+          aide="Vide : rétention illimitée. L’effacement est définitif."
+        />
+        <ErrorMessage erreur={changement.error} />
+        <button type="submit" disabled={changement.isPending}>
+          Enregistrer la rétention
+        </button>
+        {changement.isSuccess ? <span className="discret"> Enregistré.</span> : null}
+      </form>
     </section>
   );
 }

@@ -115,3 +115,21 @@ export function useRejeu(retourId: string) {
     onSettled: () => apres(),
   });
 }
+
+/**
+ * Supprimer un Retour et sa Capture (demande d'effacement). `quitter` emmène hors de
+ * l'écran du Retour avant qu'il quitte le cache (sinon l'écran le relirait : 404) ;
+ * la boîte de réception et les badges sont relus.
+ */
+export function useSuppressionRetour(id: string, quitter: () => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<void>(cheminRetour(id)),
+    onSuccess: () => {
+      quitter();
+      client.removeQueries({ queryKey: cleRetour(id) });
+      void client.invalidateQueries({ queryKey: ['retours', 'liste'] });
+      void client.invalidateQueries({ queryKey: CLE_ALERTES });
+    },
+  });
+}

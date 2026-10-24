@@ -10,6 +10,7 @@ import {
   jobOptions,
   ALERTES_QUEUE,
   BALAYAGE_RECUS_JOB,
+  PURGE_RETENTION_JOB,
   SONDE_SUSPENDUES_JOB,
   DISPATCH_QUEUE,
   MAINTENANCE_QUEUE,
@@ -26,6 +27,7 @@ import { Redis } from 'ioredis';
 import { AlertesService } from './alertes.service.js';
 import { BalayageProcessor } from './balayage.processor.js';
 import { DispatchProcessor } from './dispatch.processor.js';
+import { PurgeProcessor } from './purge.processor.js';
 import {
   ALERTES_QUEUE_TOKEN,
   DB,
@@ -39,6 +41,7 @@ import {
 import { JugeResolver } from './juge-resolver.js';
 import {
   BALAYAGE_PAR_DEFAUT,
+  RETENTION_PAR_DEFAUT,
   SUSPENSION_PAR_DEFAUT,
   type SurSuspension,
   type WorkerOptions,
@@ -68,6 +71,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
     private readonly balayage: BalayageProcessor,
+    private readonly purge: PurgeProcessor,
     private readonly suspension: SuspensionService,
     private readonly alertes: AlertesService,
   ) {}
@@ -150,6 +154,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         TriageProcessor,
         DispatchProcessor,
         BalayageProcessor,
+        PurgeProcessor,
         SuspensionService,
         AlertesService,
       ],
@@ -170,6 +175,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       SONDE_SUSPENDUES_JOB,
       { every: intervalleSondeMs },
       { name: SONDE_SUSPENDUES_JOB },
+    );
+    const retention = this.options.retention ?? RETENTION_PAR_DEFAUT;
+    await this.maintenanceQueue.upsertJobScheduler(
+      PURGE_RETENTION_JOB,
+      { every: retention.intervalleMs },
+      { name: PURGE_RETENTION_JOB },
     );
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
@@ -199,6 +210,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         async (job) => {
           if (job.name === BALAYAGE_RECUS_JOB) await this.balayage.handle();
           if (job.name === SONDE_SUSPENDUES_JOB) await this.suspension.sonder();
+          if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
         },
         { connection: this.redis, prefix },
       ),

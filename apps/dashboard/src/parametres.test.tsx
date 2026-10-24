@@ -1,5 +1,5 @@
 import type { JugeInstanceVu } from '@nudge/shared';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { CONNECTE, fakeApi } from './test/fake-api.js';
@@ -23,6 +23,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('sans Juge choisi, annonce le mode dégradé', async () => {
     fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
     });
@@ -38,6 +39,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('choisit OpenRouter avec une clé, envoyée une fois et jamais réaffichée', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
       'PUT /api/instance/juge': enregistre,
@@ -67,6 +69,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('garde la clé enregistrée quand le champ reste vide', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': {
         status: 200,
@@ -90,6 +93,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('auto-hébergé : envoie l’URL du serveur, et affiche un refus de l’API', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
       'PUT /api/instance/juge': {
@@ -119,6 +123,7 @@ describe('Paramètres de l’Instance : Juge', () => {
   it('revient au mode dégradé en retirant le Juge', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
       'GET /api/instance/juge': {
         status: 200,
@@ -135,5 +140,50 @@ describe('Paramètres de l’Instance : Juge', () => {
     expect(api.appels.find((a) => a.route === 'PUT /api/instance/juge')?.corps).toEqual({
       fournisseur: null,
     });
+  });
+});
+
+describe('Paramètres de l’Instance : rétention', () => {
+  const routes = (jours: number | null) => ({
+    'GET /api/session': CONNECTE,
+    'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+    'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
+    'GET /api/instance/retention': { status: 200, body: { jours } },
+    'PUT /api/instance/retention': (corps: unknown) => ({ status: 200, body: corps }),
+  });
+
+  it('illimitée par défaut, fixe une durée en jours', async () => {
+    const api = fakeApi(routes(null));
+    renderDashboard('/parametres');
+
+    const bloc = await screen.findByRole('region', { name: 'Rétention des Retours' });
+    expect(bloc.textContent).toMatch(/illimitée/);
+    const duree = within(bloc).getByLabelText('Durée de rétention (jours)') as HTMLInputElement;
+    expect(duree.value).toBe('');
+    await userEvent.type(duree, '90');
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Enregistrer la rétention' }));
+
+    expect(await within(bloc).findByText(/Enregistré/)).toBeTruthy();
+    expect(api.appels.find((a) => a.route === 'PUT /api/instance/retention')?.corps).toEqual({
+      jours: 90,
+    });
+    expect(bloc.textContent).toMatch(/plus anciens que 90 jours/);
+  });
+
+  it('revient à une rétention illimitée en vidant le champ', async () => {
+    const api = fakeApi(routes(30));
+    renderDashboard('/parametres');
+
+    const bloc = await screen.findByRole('region', { name: 'Rétention des Retours' });
+    const duree = within(bloc).getByLabelText('Durée de rétention (jours)') as HTMLInputElement;
+    expect(duree.value).toBe('30');
+    await userEvent.clear(duree);
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Enregistrer la rétention' }));
+
+    expect(await within(bloc).findByText(/Enregistré/)).toBeTruthy();
+    expect(api.appels.find((a) => a.route === 'PUT /api/instance/retention')?.corps).toEqual({
+      jours: null,
+    });
+    expect(bloc.textContent).toMatch(/illimitée/);
   });
 });

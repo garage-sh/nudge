@@ -5,6 +5,7 @@ import type {
   DestinationAlerteVu,
   JugeInstanceVu,
   ResultatTestDestination,
+  RetentionVu,
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
@@ -53,3 +54,17 @@ export const useTestAlerte = () =>
   useMutation({
     mutationFn: () => api.post<ResultatTestDestination>(`${CHEMIN_ALERTE}/test`),
   });
+
+const CLE_RETENTION = ['instance', 'retention'] as const;
+const CHEMIN_RETENTION = '/api/instance/retention';
+
+export const useRetention = () =>
+  useQuery({ queryKey: CLE_RETENTION, queryFn: () => api.get<RetentionVu>(CHEMIN_RETENTION) });
+
+export function useChangementRetention() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (retention: RetentionVu) => api.put<RetentionVu>(CHEMIN_RETENTION, retention),
+    onSuccess: (retention) => client.setQueryData(CLE_RETENTION, retention),
+  });
+}

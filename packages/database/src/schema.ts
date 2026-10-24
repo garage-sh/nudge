@@ -216,8 +216,8 @@ export const envois = pgTable(
 /**
  * Paramètres de l'Instance (D6) : une seule ligne, `id = 1`, absente tant que rien
  * n'est configuré. Le Juge choisi ici prime sur les variables `NUDGE_JUDGE_*`. Les
- * paramètres d'Instance à venir (Destination d'alerte, durée de rétention)
- * s'ajoutent en colonnes de cette même ligne.
+ * paramètres d'Instance (Destination d'alerte, durée de rétention) sont des
+ * colonnes de cette même ligne.
  */
 export const parametresInstance = pgTable(
   'parametres_instance',
@@ -237,9 +237,17 @@ export const parametresInstance = pgTable(
     alerteConfig: jsonb('alerte_config').$type<Record<string, unknown>>(),
     /** … et secrets en un objet JSON chiffré par la clé d'Instance (`ALERTE_SECRETS_CONTEXT`). */
     alerteSecretsChiffres: text('alerte_secrets_chiffres'),
+    /**
+     * Durée de rétention des Retours, en jours : la purge planifiée efface les Retours
+     * (et leurs Captures) plus anciens. `null` : rétention illimitée.
+     */
+    retentionJours: integer('retention_jours'),
     ...timestamps,
   },
-  (t) => [check('parametres_instance_ligne_unique', sql`${t.id} = 1`)],
+  (t) => [
+    check('parametres_instance_ligne_unique', sql`${t.id} = 1`),
+    check('parametres_instance_retention_positive', sql`${t.retentionJours} > 0`),
+  ],
 );
 
 export const projetsRelations = relations(projets, ({ many }) => ({

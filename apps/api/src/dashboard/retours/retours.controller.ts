@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -46,6 +47,13 @@ export class RetoursController {
   @Get(':id')
   lire(@Param('id') id: string): Promise<RetourDetailVu> {
     return this.retours.read(id);
+  }
+
+  /** Efface le Retour et sa Capture : 204, 404 `retour_introuvable`, 503 `stockage_indisponible`. */
+  @Delete(':id')
+  @HttpCode(204)
+  supprimer(@Param('id') id: string): Promise<void> {
+    return this.retours.supprimer(id);
   }
 
   /**

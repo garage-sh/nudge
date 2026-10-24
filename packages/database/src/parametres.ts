@@ -134,3 +134,21 @@ export function destinationAlerteConfiguree(
     secrets: dechiffrerSecretsAlerte(cipher, alerte),
   };
 }
+
+/** Durée de rétention des Retours en jours ; `null` : illimitée (aussi sans paramètres). */
+export async function readRetentionInstance(db: Db): Promise<number | null> {
+  const [ligne] = await db
+    .select({ jours: parametresInstance.retentionJours })
+    .from(parametresInstance)
+    .where(eq(parametresInstance.id, LIGNE));
+  return ligne?.jours ?? null;
+}
+
+/** Enregistre la durée de rétention (`null` : illimitée) ; crée la ligne au besoin. */
+export async function writeRetentionInstance(db: Db, jours: number | null): Promise<void> {
+  const valeurs = { retentionJours: jours, updatedAt: new Date() };
+  await db
+    .insert(parametresInstance)
+    .values({ id: LIGNE, ...valeurs })
+    .onConflictDoUpdate({ target: parametresInstance.id, set: valeurs });
+}

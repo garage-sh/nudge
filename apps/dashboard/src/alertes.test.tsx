@@ -24,6 +24,7 @@ describe('Badges des alertes', () => {
     fakeApi({
       'GET /api/session': CONNECTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': { status: 200, body: { destination: null } },
       'GET /api/alertes': {
         status: 200,
@@ -50,6 +51,7 @@ describe('Badges des alertes', () => {
     fakeApi({
       'GET /api/session': CONNECTE,
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': { status: 200, body: { destination: null } },
       'GET /api/alertes': { status: 200, body: SANS_ALERTE },
     });
@@ -104,6 +106,7 @@ describe('Paramètres de l’Instance : Destination d’alerte', () => {
       'GET /api/session': CONNECTE,
       'GET /api/alertes': { status: 200, body: SANS_ALERTE },
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': { status: 200, body: { destination: null } },
       'PUT /api/instance/alerte': {
         status: 200,
@@ -140,6 +143,7 @@ describe('Paramètres de l’Instance : Destination d’alerte', () => {
       'GET /api/session': CONNECTE,
       'GET /api/alertes': { status: 200, body: SANS_ALERTE },
       'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
       'GET /api/instance/alerte': {
         status: 200,
         body: { destination: { type: 'discord', config: {}, secrets: ['url'] } },

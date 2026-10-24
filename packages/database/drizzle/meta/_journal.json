@@ -57,6 +57,13 @@
       "when": 1792810041541,
       "tag": "0007_alertes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792811280248,
+      "tag": "0008_retention",
+      "breakpoints": true
     }
   ]
 }

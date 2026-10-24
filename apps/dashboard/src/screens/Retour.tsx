@@ -14,8 +14,14 @@ import {
   type VerdictVu,
 } from '@nudge/shared';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
-import { useCorrectionVerdict, useRejeu, useRetour, useRevue } from '../api/retours.js';
+import { Link, useNavigate, useParams } from 'react-router';
+import {
+  useCorrectionVerdict,
+  useRejeu,
+  useRetour,
+  useRevue,
+  useSuppressionRetour,
+} from '../api/retours.js';
 import {
   formatDate,
   LIBELLES_CONFIANCE,
@@ -32,7 +38,7 @@ import { BadgeIncertain } from './retour-badges.js';
 /**
  * Détail d'un Retour. Tout ce que l'Auteur a fourni (texte, identité, contexte)
  * est rendu comme du texte : jamais de HTML, jamais de lien hors http(s).
- * Les actions de revue, la Capture et la suppression s'ajoutent comme sections.
+ * Chaque partie (revue, Verdict, Capture, Envois, suppression…) est une section.
  */
 export function Retour() {
   const id = useParams().id ?? '';
@@ -82,6 +88,9 @@ export function Retour() {
       ) : null}
       <Section id="envois" titre="Envois">
         <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
+      </Section>
+      <Section id="suppression" titre="Suppression">
+        <Suppression retour={detail} />
       </Section>
     </article>
   );
@@ -138,6 +147,33 @@ function Revue({ retour, apresAction }: { retour: RetourDetailVu; apresAction: (
         ) : null}
       </div>
       <ErrorMessage erreur={revue.error} />
+    </>
+  );
+}
+
+/**
+ * Effacer le Retour, pour répondre à une demande d'effacement : sa Capture est
+ * effacée du stockage avec lui. Les objets déjà créés chez les Destinations restent.
+ */
+function Suppression({ retour }: { retour: RetourDetailVu }) {
+  const navigate = useNavigate();
+  const suppression = useSuppressionRetour(retour.id, () => void navigate('/retours'));
+  return (
+    <>
+      <p className="aide">
+        Efface définitivement ce Retour{retour.capture ? ' et sa Capture' : ''}, par exemple pour
+        une demande d’effacement de l’Auteur. Ce qui a déjà été créé chez les Destinations (issues,
+        messages) n’est pas touché.
+      </p>
+      <div className="actions">
+        <ConfirmAction
+          libelle="Supprimer"
+          question="Le Retour sera effacé définitivement. Supprimer ?"
+          enCours={suppression.isPending}
+          onConfirm={() => suppression.mutate()}
+        />
+      </div>
+      <ErrorMessage erreur={suppression.error} />
     </>
   );
 }

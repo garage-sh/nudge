@@ -14,6 +14,8 @@ export const MAINTENANCE_QUEUE = 'maintenance';
 export const BALAYAGE_RECUS_JOB = 'balayage-recus';
 /** Sonde des Destinations Suspendues dont le refroidissement est écoulé. */
 export const SONDE_SUSPENDUES_JOB = 'sonde-suspendues';
+/** Purge des Retours (et de leurs Captures) plus anciens que la durée de rétention. */
+export const PURGE_RETENTION_JOB = 'purge-retention';
 
 /** Préfixe des clés BullMQ par défaut ; l'api et le worker doivent partager le même. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';

@@ -3,9 +3,19 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { captures, corrigerVerdict, projets, retours, verdicts, type Db } from '@nudge/database';
+import {
+  captures,
+  corrigerVerdict,
+  projets,
+  retours,
+  supprimerRetours,
+  verdicts,
+  type Db,
+} from '@nudge/database';
 import {
   LIMITES_DASHBOARD,
   schemaFiltresRetours,
@@ -68,6 +78,8 @@ function decodeCurseur(curseur: string): Position {
 /** Retours de tous les Projets, tels qu'un Membre les lit (pas de rôles en v1). */
 @Injectable()
 export class RetoursService {
+  private readonly logger = new Logger(RetoursService.name);
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(STOCKAGE_CAPTURES) private readonly stockage: StockageCaptures,
@@ -193,6 +205,26 @@ export class RetoursService {
       throw new NotFoundException({ erreur: 'capture_introuvable' } satisfies ApiErrorBody);
     }
     return { contentType: capture.contentType, contenu };
+  }
+
+  /**
+   * Efface un Retour et sa Capture (demande d'effacement). 404 s'il n'existe pas ;
+   * 503 `stockage_indisponible` si l'image n'a pas pu être effacée : le Retour est
+   * alors gardé, et la suppression peut être retentée.
+   */
+  async supprimer(id: string): Promise<void> {
+    if (!isUuid(id)) throw retourIntrouvable();
+    const { supprimes, echecs } = await supprimerRetours(this.db, [id], (cle) =>
+      this.stockage.supprimer(cle),
+    );
+    const [echec] = echecs;
+    if (echec) {
+      this.logger.error(`Capture du Retour ${id} non effacée : Retour gardé`, echec.erreur);
+      throw new ServiceUnavailableException({
+        erreur: 'stockage_indisponible',
+      } satisfies ApiErrorBody);
+    }
+    if (supprimes.length === 0) throw retourIntrouvable();
   }
 
   /**

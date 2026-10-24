@@ -35,11 +35,12 @@ import { stockageDisque, type StockageCaptures } from '@nudge/stockage';
 import {
   createWorker,
   type OptionsBalayage,
+  type OptionsRetention,
   type OptionsSuspension,
   type Suspension,
 } from '@nudge/worker';
 import { Queue, QueueEvents } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { Client } from 'pg';
 import { inject } from 'vitest';
@@ -80,6 +81,8 @@ export interface PipelineOptions {
    * local dans un dossier temporaire propre au pipeline, supprimé à l'arrêt.
    */
   readonly stockage?: StockageCaptures;
+  /** Période de la purge de rétention ; celle du worker sinon. */
+  readonly retention?: OptionsRetention;
 }
 
 export interface Pipeline {
@@ -134,6 +137,8 @@ export interface Pipeline {
    * avait échoué après l'insertion. Rend son id.
    */
   insererRetourSansTriage(projetId: string, donnees: { texte: string }): Promise<string>;
+  /** Recule la date de création d'un Retour de `jours` jours, comme s'il était ancien. */
+  vieillirRetour(retourId: string, jours: number): Promise<void>;
   /** POST /v1/retours avec la clé secrète du Projet. */
   postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
   /**
@@ -250,6 +255,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
+    ...(options.retention ? { retention: options.retention } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     surSuspension: (suspension) => {
       suspensions.push(suspension);
@@ -348,6 +354,12 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .returning({ id: retours.id });
       if (!retour) throw new Error('Retour non enregistré');
       return retour.id;
+    },
+    async vieillirRetour(retourId, jours) {
+      await db
+        .update(retours)
+        .set({ createdAt: sql`${retours.createdAt} - make_interval(days => ${jours})` })
+        .where(eq(retours.id, retourId));
     },
     postRetour: (cleSecrete, corps) =>
       fetch(`${url}/v1/retours`, {

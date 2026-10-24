@@ -1,24 +1,39 @@
-import { Body, Controller, Delete, Get, HttpCode, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { readRetentionInstance, writeRetentionInstance, type Db } from '@nudge/database';
 import {
   schemaChoixJuge,
   schemaDestinationAlerte,
+  schemaRetention,
+  type RetentionVu,
   type DestinationAlerteAvecSecretsGeneres,
   type DestinationAlerteVu,
   type JugeInstanceVu,
   type ResultatTestDestination,
 } from '@nudge/shared';
+import { DB } from '../../infra/tokens.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
 import { DestinationAlerteService } from './destination-alerte.service.js';
 import { JugeInstanceService } from './juge-instance.service.js';
 
-/** Paramètres de l'Instance (D6). Les paramètres à venir (rétention) s'ajoutent ici. */
+/** Paramètres de l'Instance (D6) : Juge, Destination d'alerte, durée de rétention. */
 @Controller('api/instance')
 @UseGuards(SessionGuard)
 export class InstanceController {
   constructor(
     private readonly juge: JugeInstanceService,
     private readonly alerte: DestinationAlerteService,
+    @Inject(DB) private readonly db: Db,
   ) {}
 
   @Get('juge')
@@ -55,5 +70,19 @@ export class InstanceController {
   @HttpCode(200)
   testerAlerte(): Promise<ResultatTestDestination> {
     return this.alerte.tester();
+  }
+
+  /** `jours: null` : rétention illimitée (par défaut). */
+  @Get('retention')
+  async lireRetention(): Promise<RetentionVu> {
+    return { jours: await readRetentionInstance(this.db) };
+  }
+
+  /** La purge planifiée du worker relit la durée à chaque passage. */
+  @Put('retention')
+  async changerRetention(@Body() corps: unknown): Promise<RetentionVu> {
+    const { jours } = parseBody(schemaRetention, corps);
+    await writeRetentionInstance(this.db, jours);
+    return { jours };
   }
 }

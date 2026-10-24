@@ -39,6 +39,8 @@ export const LIMITES_DASHBOARD = {
   modeleJuge: 200,
   urlJuge: 2048,
   cleJuge: 1000,
+  /** Durée de rétention la plus longue qui ne soit pas illimitée : 100 ans. */
+  retentionJoursMax: 36_500,
 } as const;
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(LIMITES_DASHBOARD.email));
@@ -183,6 +185,15 @@ export interface JugeInstanceVu {
   readonly urlBase: string | null;
   readonly cleConfiguree: boolean;
 }
+
+/**
+ * Durée de rétention des Retours de l'Instance, en jours entiers ; `null` : illimitée.
+ * La purge planifiée efface les Retours plus anciens, et leurs Captures.
+ */
+export const schemaRetention = z.strictObject({
+  jours: z.number().int().min(1).max(LIMITES_DASHBOARD.retentionJoursMax).nullable(),
+});
+export type RetentionVu = z.output<typeof schemaRetention>;
 
 /** Ce qui attend un Membre, pour les badges du dashboard. */
 export interface AlertesVu {
