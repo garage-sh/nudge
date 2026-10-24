@@ -67,12 +67,27 @@ export interface RetourATrier {
  * Seuls les éléments de contexte non personnels sont transmis.
  */
 export function buildTriageState(retour: RetourATrier): StateJuge {
+  const url = retour.contexte?.url ? pageSansDonnees(retour.contexte.url) : null;
   return {
     texte: retour.texte,
     ...(retour.typeDeclare ? { typeDeclare: retour.typeDeclare } : {}),
-    ...(retour.contexte?.url ? { url: retour.contexte.url } : {}),
+    ...(url ? { url } : {}),
     ...(retour.descriptionProjet ? { descriptionProjet: retour.descriptionProjet } : {}),
   };
+}
+
+/**
+ * L'origine et le chemin d'une URL : identifiants, paramètres et fragment peuvent
+ * porter des données personnelles (jeton, email, numéro de compte). `null` si
+ * l'URL ne se lit pas.
+ */
+function pageSansDonnees(url: string): string | null {
+  try {
+    const { origin, pathname } = new URL(url);
+    return origin === 'null' ? null : `${origin}${pathname}`;
+  } catch {
+    return null;
+  }
 }
 
 /**

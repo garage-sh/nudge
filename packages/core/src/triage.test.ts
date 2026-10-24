@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderVerdict, type TriageAnswers } from './triage.js';
+import { buildTriageState, renderVerdict, type TriageAnswers } from './triage.js';
 
 /** Réponses du Juge : un bug majeur, avec la confiance donnée pour le Type et la Gravité. */
 function reponses(confiance: { type: number; gravite: number }): TriageAnswers {
@@ -33,5 +33,23 @@ describe('Verdict Incertain', () => {
     const verdict = renderVerdict(reponses({ type: 0.9, gravite: 0.3 }), 'question');
 
     expect(verdict).toMatchObject({ typeRetenu: 'bug', gravite: 'majeure', incertain: true });
+  });
+});
+
+describe('State envoyé au Juge', () => {
+  it('ne transmet de l’URL de la page que l’origine et le chemin', () => {
+    const state = buildTriageState({
+      texte: 'Le virement échoue',
+      typeDeclare: null,
+      contexte: {
+        url: 'https://alice:secret@banque.exemple/virements/nouveau?iban=FR76123&jeton=abc#etape-2',
+      },
+      descriptionProjet: null,
+    });
+
+    expect(state).toEqual({
+      texte: 'Le virement échoue',
+      url: 'https://banque.exemple/virements/nouveau',
+    });
   });
 });
