@@ -112,11 +112,12 @@ export function renderVerdict(
     };
   }
   // Le Juge hésite sur le Type ou sur la Gravité : un Membre devrait vérifier.
-  const incertain =
-    answers.type.confidence < seuils.confiance || answers.gravite.confidence < seuils.confiance;
+  const typeIncertain = answers.type.confidence < seuils.confiance;
+  const incertain = typeIncertain || answers.gravite.confidence < seuils.confiance;
   return {
-    // Verdict Incertain : l'Auteur départage un Juge hésitant s'il a déclaré un Type.
-    typeRetenu: incertain && typeDeclare ? typeDeclare : answers.type.choice,
+    // L'Auteur départage un Juge hésitant sur le Type s'il en a déclaré un (D23) ; une
+    // Gravité hésitante ne dit rien du Type.
+    typeRetenu: typeIncertain && typeDeclare ? typeDeclare : answers.type.choice,
     gravite: answers.gravite.level,
     indesirable: answers.indesirable.probability >= seuils.indesirable,
     manipulation: answers.manipulation.probability >= seuils.manipulation,
