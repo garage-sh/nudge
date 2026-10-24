@@ -1,9 +1,11 @@
 import type { DestinationConfiguree, DestinationAdapterResolver } from '@nudge/core';
 import { estTypeDestination, type TypeDestination } from '@nudge/shared';
 import { adaptateurDiscord } from './discord.js';
+import { adaptateurLinear } from './linear.js';
 import { adaptateurWebhook } from './webhook.js';
 
 export { adaptateurDiscord, type OptionsDiscord } from './discord.js';
+export { adaptateurLinear, type OptionsLinear } from './linear.js';
 export { adaptateurWebhook, type OptionsWebhook } from './webhook.js';
 
 /**
@@ -13,6 +15,7 @@ export { adaptateurWebhook, type OptionsWebhook } from './webhook.js';
 export const DESTINATION_ADAPTERS: Readonly<Record<TypeDestination, DestinationAdapterResolver>> = {
   webhook: (destination) => adaptateurWebhook(destination),
   discord: (destination) => adaptateurDiscord(destination),
+  linear: (destination) => adaptateurLinear(destination),
 };
 
 export class UnknownDestinationTypeError extends Error {

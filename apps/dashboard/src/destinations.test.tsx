@@ -174,6 +174,93 @@ describe('Destinations d’un Projet', () => {
     );
   });
 
+  it('ajoute une équipe Linear : clé d’API en secret, équipe et labels du Type et de la Gravité', async () => {
+    const EQUIPE: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Linear ENG',
+      type: 'linear',
+      config: {
+        equipe: 'ENG',
+        labels: { types: { bug: 'Bug' }, gravites: { bloquante: 'Urgent' } },
+      },
+      secrets: ['cleApi'],
+    };
+    const api = fakeApi({
+      ...routesDeBase([]),
+      'POST /api/projets/projet-1/destinations': {
+        status: 201,
+        body: { destination: EQUIPE, secretsGeneres: {} },
+      },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const formulaire = within(
+      (await screen.findByRole('heading', { name: 'Ajouter une Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.selectOptions(formulaire.getByLabelText('Type'), 'Linear');
+    await userEvent.type(formulaire.getByLabelText('Nom'), 'Linear ENG');
+    const champCle = formulaire.getByLabelText('Clé d’API') as HTMLInputElement;
+    expect(champCle.type).toBe('password');
+    await userEvent.type(champCle, 'lin_api_secret');
+    await userEvent.type(formulaire.getByLabelText('Équipe'), 'ENG');
+    await userEvent.type(formulaire.getByLabelText('Label du Type Bug'), 'Bug');
+    await userEvent.type(formulaire.getByLabelText('Label du Type Avis'), 'x');
+    await userEvent.clear(formulaire.getByLabelText('Label du Type Avis'));
+    await userEvent.type(formulaire.getByLabelText('Label de la Gravité Bloquante'), 'Urgent');
+    await userEvent.click(formulaire.getByRole('button', { name: 'Ajouter' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.appels.find((a) => a.route === 'POST /api/projets/projet-1/destinations')?.corps,
+      ).toEqual({
+        type: 'linear',
+        nom: 'Linear ENG',
+        config: {
+          equipe: 'ENG',
+          labels: { types: { bug: 'Bug' }, gravites: { bloquante: 'Urgent' } },
+        },
+        secrets: { cleApi: 'lin_api_secret' },
+        filtre: { types: ['bug', 'suggestion', 'avis', 'question'], graviteMinimale: null },
+      }),
+    );
+  });
+
+  it('modifie une équipe Linear sans ressaisir la clé d’API, labels repris', async () => {
+    const EQUIPE: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Linear ENG',
+      type: 'linear',
+      config: { equipe: 'ENG', labels: { types: { bug: 'Bug' }, gravites: {} } },
+      secrets: ['cleApi'],
+    };
+    const api = fakeApi({
+      ...routesDeBase([EQUIPE]),
+      'PATCH /api/destinations/destination-1': { status: 200, body: EQUIPE },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const carteEquipe = await carte('Linear ENG');
+    expect(carteEquipe.getByText('Linear')).toBeTruthy();
+    expect(carteEquipe.getByText('Équipe ENG')).toBeTruthy();
+    await userEvent.click(carteEquipe.getByRole('button', { name: 'Modifier' }));
+    const formulaire = within(screen.getByRole('form', { name: 'Modifier Linear ENG' }));
+    const champCle = formulaire.getByLabelText('Clé d’API') as HTMLInputElement;
+    expect(champCle.value).toBe('');
+    expect(champCle.required).toBe(false);
+    expect((formulaire.getByLabelText('Label du Type Bug') as HTMLInputElement).value).toBe('Bug');
+    await userEvent.clear(formulaire.getByLabelText('Label du Type Bug'));
+    await userEvent.click(formulaire.getByRole('button', { name: 'Enregistrer' }));
+
+    await vi.waitFor(() => {
+      const corps = api.appels.find((a) => a.route === 'PATCH /api/destinations/destination-1')
+        ?.corps as Record<string, unknown> | undefined;
+      expect(corps).not.toHaveProperty('secrets');
+      expect(corps?.config).toEqual({ equipe: 'ENG', labels: { types: {}, gravites: {} } });
+    });
+  });
+
   it('affiche le refus de l’API à l’ajout', async () => {
     fakeApi({
       ...routesDeBase([]),

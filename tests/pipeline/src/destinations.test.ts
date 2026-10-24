@@ -134,6 +134,62 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(JSON.stringify(renomme.body)).not.toContain(jeton);
   });
 
+  it('ajoute une équipe Linear : la clé d’API est un secret, l’équipe et les labels sont validés', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'Linear' });
+    const cle = 'lin_api_9f8e7d6c5b4a39281706f5e4d3c2b1a0';
+    const equipe = (config: unknown, secrets?: unknown) => ({
+      type: 'linear',
+      nom: 'Linear ENG',
+      config,
+      ...(secrets === undefined ? {} : { secrets }),
+    });
+    const labels = { types: { bug: ' Bug ' }, gravites: { bloquante: 'Urgent' } };
+
+    for (const [corps, chemin] of [
+      [equipe({ equipe: 'ENG', labels }), /^secrets/],
+      [equipe({ equipe: 'ENG', labels }, { cleApi: '  ' }), /^secrets/],
+      [equipe({ equipe: 'ENG-1', labels }, { cleApi: cle }), /^config\.equipe/],
+      [
+        equipe({ equipe: 'ENG', labels: { types: { bogue: 'Bug' } } }, { cleApi: cle }),
+        /^config\.labels/,
+      ],
+      [
+        equipe({ equipe: 'ENG', labels: { types: { bug: '' } } }, { cleApi: cle }),
+        /^config\.labels/,
+      ],
+    ] as const) {
+      const refus = await membre.post(`/api/projets/${projet.id}/destinations`, corps);
+      expect(refus).toMatchObject({
+        status: 400,
+        body: { erreur: 'requete_invalide', details: [{ chemin: expect.stringMatching(chemin) }] },
+      });
+    }
+
+    const { destination, secretsGeneres } = await creer(
+      projet.id,
+      equipe({ equipe: 'eng', labels }, { cleApi: cle }),
+    );
+    expect(destination).toMatchObject({
+      type: 'linear',
+      config: {
+        equipe: 'ENG',
+        labels: { types: { bug: 'Bug' }, gravites: { bloquante: 'Urgent' } },
+      },
+      secrets: ['cleApi'],
+    });
+    expect(secretsGeneres).toEqual({});
+    const ligne = await pipeline.ligneDestination(destination.id);
+    expect(JSON.stringify(ligne)).not.toContain(cle);
+    const sansLabels = await membre.patch<DestinationVu>(`/api/destinations/${destination.id}`, {
+      config: { equipe: 'OPS' },
+    });
+    expect(sansLabels.body).toMatchObject({
+      config: { equipe: 'OPS', labels: { types: {}, gravites: {} } },
+      secrets: ['cleApi'],
+    });
+    expect(JSON.stringify(sansLabels.body)).not.toContain(cle);
+  });
+
   it('des secrets indéchiffrables (clé d’Instance changée) n’empêchent ni de lister ni de régénérer', async () => {
     const { projet } = await pipeline.createProjet({ nom: 'Clé changée' });
     const { destination } = await creer(projet.id);
