@@ -70,3 +70,59 @@ describe('Balayage des Retours restés Reçu', () => {
     expect(pipeline.juge.requests.filter((r) => r.state.texte === texte)).toHaveLength(1);
   });
 });
+
+/**
+ * Filet contre un Envoi bloqué en attente (D26) : sa mise en queue a échoué après le
+ * commit (Redis tombé pendant le dispatch) ou son job a échoué sans le terminer
+ * (Postgres tombé). Le balayage le remet au dispatch, sans doubler un job en cours.
+ */
+describe('Balayage des Envois restés en attente', () => {
+  let pipeline: Pipeline;
+
+  beforeAll(async () => {
+    pipeline = await startPipeline({ balayage: { delaiMs: 300, intervalleMs: 100 } });
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+  });
+
+  it('un Envoi enregistré mais jamais mis en queue finit livré', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Envoi orphelin' });
+    // Le Filtre ne retient pas le Retour : il reste Trié, sans Envoi ni job.
+    const { destination, fake } = await pipeline.createDestination(projet.id, {
+      filtre: { types: ['question'], graviteMinimale: null },
+    });
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const reponse = await pipeline.postRetour(cleSecrete, { texte: 'Envoi perdu en route' });
+    const { id } = (await reponse.json()) as { id: string };
+    await pipeline.waitForRetour(id, (r) => r.etat === 'trie');
+
+    const envoiId = await pipeline.insererEnvoiSansDispatch(id, destination.id);
+
+    const retour = await pipeline.waitForRetour(
+      id,
+      (r) => r.envois.some((envoi) => envoi.id === envoiId && envoi.statut === 'livre'),
+      10_000,
+    );
+    expect(retour.envois).toHaveLength(1);
+    expect(fake.envois.map((envoi) => envoi.envoiId)).toEqual([envoiId]);
+  });
+
+  it('un Envoi dont le job est en cours n’est pas remis en queue : un seul appel', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Envoi lent' });
+    const { fake } = await pipeline.createDestination(projet.id);
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const release = fake.hold();
+
+    const reponse = await pipeline.postRetour(cleSecrete, { texte: 'Destination lente' });
+    const { id } = (await reponse.json()) as { id: string };
+    await expect.poll(() => fake.attempts.length).toBe(1);
+    // Plusieurs balayages passent pendant que le job attend la Destination.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    release();
+
+    await pipeline.waitForRetour(id, (r) => r.envois.every((envoi) => envoi.statut === 'livre'));
+    expect(fake.attempts).toHaveLength(1);
+  });
+});

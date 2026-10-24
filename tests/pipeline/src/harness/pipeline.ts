@@ -20,6 +20,7 @@ import {
   DESTINATION_ALERTE_ID,
   createProjet,
   destinations,
+  envois,
   parametresInstance,
   readRetour,
   retours,
@@ -144,6 +145,11 @@ export interface Pipeline {
    * avait échoué après l'insertion. Rend son id.
    */
   insererRetourSansTriage(projetId: string, donnees: { texte: string }): Promise<string>;
+  /**
+   * Enregistre un Envoi en attente du Retour vers la Destination sans le mettre en
+   * queue, comme si Redis était tombé entre le commit et la mise en queue. Rend son id.
+   */
+  insererEnvoiSansDispatch(retourId: string, destinationId: string): Promise<string>;
   /** Recule la date de création d'un Retour de `jours` jours, comme s'il était ancien. */
   vieillirRetour(retourId: string, jours: number): Promise<void>;
   /** POST /v1/retours avec la clé secrète du Projet. */
@@ -373,6 +379,14 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .returning({ id: retours.id });
       if (!retour) throw new Error('Retour non enregistré');
       return retour.id;
+    },
+    async insererEnvoiSansDispatch(retourId, destinationId) {
+      const [envoi] = await db
+        .insert(envois)
+        .values({ retourId, destinationId })
+        .returning({ id: envois.id });
+      if (!envoi) throw new Error('Envoi non enregistré');
+      return envoi.id;
     },
     async vieillirRetour(retourId, jours) {
       await db

@@ -12,6 +12,8 @@ export const ALERTES_QUEUE = 'alertes';
 /** Tâches planifiées du worker (jobs répétables) : balayage des Retours restés Reçu… */
 export const MAINTENANCE_QUEUE = 'maintenance';
 export const BALAYAGE_RECUS_JOB = 'balayage-recus';
+/** Balayage des Envois restés en attente sans job de dispatch vivant (D26). */
+export const BALAYAGE_ENVOIS_JOB = 'balayage-envois';
 /** Sonde des Destinations Suspendues dont le refroidissement est écoulé. */
 export const SONDE_SUSPENDUES_JOB = 'sonde-suspendues';
 /** Purge des Retours (et de leurs Captures) plus anciens que la durée de rétention. */

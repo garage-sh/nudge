@@ -33,7 +33,10 @@ export interface WorkerOptions {
   readonly stockageCaptures: StockageCaptures;
   /** URL publique du dashboard (`NUDGE_DASHBOARD_URL`) : lien « voir le Retour » des Envois (D12). */
   readonly dashboardUrl?: string | null;
-  /** Balayage des Retours restés Reçu (D18) ; 5 min de délai, toutes les minutes, à défaut. */
+  /**
+   * Balayages des Retours restés Reçu (D18) et des Envois restés en attente (D26) ;
+   * 5 min de délai, toutes les minutes, à défaut.
+   */
   readonly balayage?: OptionsBalayage;
   /** Période de la purge de rétention ; `PURGE_PAR_DEFAUT` à défaut. */
   readonly purge?: OptionsPurge;
@@ -51,7 +54,10 @@ export interface WorkerOptions {
 export const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
 
 export interface OptionsBalayage {
-  /** Âge au-delà duquel un Retour encore Reçu est remis au Triage. */
+  /**
+   * Âge au-delà duquel un Retour encore Reçu est remis au Triage, et un Envoi en
+   * attente sans job (depuis sa dernière mise à jour) remis au dispatch.
+   */
   readonly delaiMs: number;
   /** Période du balayage. */
   readonly intervalleMs: number;

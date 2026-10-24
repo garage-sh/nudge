@@ -9,6 +9,7 @@ import {
   createSecretCipher,
   jobOptions,
   ALERTES_QUEUE,
+  BALAYAGE_ENVOIS_JOB,
   BALAYAGE_RECUS_JOB,
   PURGE_RETENTION_JOB,
   SONDE_SUSPENDUES_JOB,
@@ -170,6 +171,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: intervalleMs },
       { name: BALAYAGE_RECUS_JOB },
     );
+    await this.maintenanceQueue.upsertJobScheduler(
+      BALAYAGE_ENVOIS_JOB,
+      { every: intervalleMs },
+      { name: BALAYAGE_ENVOIS_JOB },
+    );
     const { intervalleSondeMs } = this.options.suspension ?? SUSPENSION_PAR_DEFAUT;
     await this.maintenanceQueue.upsertJobScheduler(
       SONDE_SUSPENDUES_JOB,
@@ -208,7 +214,8 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
-          if (job.name === BALAYAGE_RECUS_JOB) await this.balayage.handle();
+          if (job.name === BALAYAGE_RECUS_JOB) await this.balayage.balayerRecus();
+          if (job.name === BALAYAGE_ENVOIS_JOB) await this.balayage.balayerEnvois();
           if (job.name === SONDE_SUSPENDUES_JOB) await this.suspension.sonder();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
         },
