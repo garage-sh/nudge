@@ -1579,3 +1579,61 @@ fieldset.champ legend {
   outline-offset: 4px;
   border-radius: 2px;
 }
+
+/* Compteurs : barre latérale, liste des Projets, Membres */
+.nav-libelle {
+  flex: 1;
+  min-width: 0;
+}
+
+.compte-nav {
+  font-size: var(--t-xs);
+  color: var(--discret);
+  font-variant-numeric: tabular-nums;
+}
+
+.compte-nav.revue {
+  color: var(--revue);
+  font-weight: 600;
+}
+
+.projets > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
+.projets > li > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.activite-projet {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  font-size: var(--t-s);
+  color: var(--discret);
+  font-variant-numeric: tabular-nums;
+}
+
+.membres > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.membre-email {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.membres .discret {
+  font-size: var(--t-s);
+}

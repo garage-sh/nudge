@@ -7,6 +7,7 @@ import type {
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
+import { CLE_ACTIVITE_PROJETS } from './projets.js';
 
 const cleDestinations = (projetId: string) => ['projets', projetId, 'destinations'] as const;
 const chemin = (id: string) => `/api/destinations/${encodeURIComponent(id)}`;
@@ -21,7 +22,9 @@ export const useDestinations = (projetId: string) =>
 /** Range une Destination à jour dans la liste du Projet (`null` : retirée). */
 function useRangement(projetId: string) {
   const client = useQueryClient();
-  return (id: string, destination: DestinationVu | null) =>
+  return (id: string, destination: DestinationVu | null) => {
+    // Le nombre de Destinations du Projet change : son activité est relue.
+    void client.invalidateQueries({ queryKey: CLE_ACTIVITE_PROJETS });
     client.setQueryData<DestinationVu[]>(cleDestinations(projetId), (liste = []) => {
       const autres = liste.filter((d) => d.id !== id);
       if (!destination) return autres;
@@ -30,6 +33,7 @@ function useRangement(projetId: string) {
         ? [...liste, destination]
         : liste.map((d) => (d.id === id ? destination : d));
     });
+  };
 }
 
 export function useCreationDestination(projetId: string) {

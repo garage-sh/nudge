@@ -1,6 +1,7 @@
+import type { ActiviteProjetVu } from '@nudge/shared';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { useProjets } from '../api/projets.js';
+import { useActiviteProjets, useProjets } from '../api/projets.js';
 import { useDeconnexion, useSession } from '../api/session.js';
 import { Alertes } from './Alertes.js';
 import { NAVIGATION_INSTANCE, NAVIGATION_PRINCIPALE } from './navigation.js';
@@ -89,6 +90,7 @@ export function Layout() {
 /** Les Projets, en accès direct : la page de chaque Projet mène à ses Destinations. */
 function NavigationProjets() {
   const projets = useProjets();
+  const activite = useActiviteProjets();
   const { pathname } = useLocation();
   return (
     <nav className="nav" aria-label="Projets">
@@ -105,11 +107,32 @@ function NavigationProjets() {
             className={courant ? 'active' : undefined}
             aria-current={courant ? 'page' : undefined}
           >
-            {projet.nom}
+            <span className="nav-libelle">{projet.nom}</span>
+            <CompteProjet activite={activite.data?.get(projet.id)} />
           </NavLink>
         );
       })}
     </nav>
+  );
+}
+
+/** À côté d'un Projet : ses Retours En revue s'il y en a, sinon ceux de la semaine. */
+function CompteProjet({ activite }: { activite: ActiviteProjetVu | undefined }) {
+  if (!activite) return null;
+  if (activite.retoursEnRevue > 0) {
+    return (
+      <span className="compte-nav revue" title="Retours En revue">
+        <span className="visuellement-cache">, Retours En revue : </span>
+        {activite.retoursEnRevue}
+      </span>
+    );
+  }
+  if (activite.retoursSemaine === 0) return null;
+  return (
+    <span className="compte-nav" title="Retours reçus ces sept derniers jours">
+      <span className="visuellement-cache">, Retours cette semaine : </span>
+      {activite.retoursSemaine}
+    </span>
   );
 }
 

@@ -1,8 +1,8 @@
-import type { ProjetVu } from '@nudge/shared';
-import { screen } from '@testing-library/react';
+import type { ActiviteProjetVu, MembreListeVu, ProjetVu } from '@nudge/shared';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { CONNECTE, fakeApi } from './test/fake-api.js';
+import { CONNECTE, fakeApi, MEMBRE } from './test/fake-api.js';
 import { renderDashboard } from './test/render.js';
 
 const BOUTIQUE: ProjetVu = {
@@ -108,6 +108,84 @@ describe('Projets', () => {
 
     expect(await screen.findByText('<img src=x onerror="alert(1)">')).toBeTruthy();
     expect(document.querySelector('img')).toBeNull();
+  });
+});
+
+describe('Activité des Projets', () => {
+  it('montre pour chaque Projet ses Retours de la semaine, En revue, et ses Destinations', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/projets': { status: 200, body: [BOUTIQUE] },
+      'GET /api/projets/activite': {
+        status: 200,
+        body: [
+          {
+            projetId: BOUTIQUE.id,
+            retoursSemaine: 12,
+            retoursEnRevue: 2,
+            destinations: 3,
+            destinationsSuspendues: 1,
+          },
+        ] satisfies ActiviteProjetVu[],
+      },
+    });
+
+    renderDashboard('/projets');
+
+    const liste = await screen.findByRole('list', { name: 'Projets de l’Instance' });
+    const ligne = within(liste).getByRole('listitem');
+    expect(await within(ligne).findByText('12 Retours cette semaine')).toBeTruthy();
+    expect(within(ligne).getByText('2 En revue')).toBeTruthy();
+    expect(within(ligne).getByText('3 Destinations, dont 1 Suspendue')).toBeTruthy();
+  });
+
+  it('signale un Projet sans Destination : ses Retours ne partent nulle part', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/projets': { status: 200, body: [BOUTIQUE] },
+      'GET /api/projets/activite': {
+        status: 200,
+        body: [
+          {
+            projetId: BOUTIQUE.id,
+            retoursSemaine: 0,
+            retoursEnRevue: 0,
+            destinations: 0,
+            destinationsSuspendues: 0,
+          },
+        ] satisfies ActiviteProjetVu[],
+      },
+    });
+
+    renderDashboard('/projets');
+
+    const liste = await screen.findByRole('list', { name: 'Projets de l’Instance' });
+    const ligne = within(liste).getByRole('listitem');
+    expect(await within(ligne).findByText('Aucune Destination')).toBeTruthy();
+  });
+});
+
+describe('Membres', () => {
+  it('liste les Membres de l’Instance et repère le Membre connecté', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/membres': {
+        status: 200,
+        body: [
+          { id: MEMBRE.id, email: MEMBRE.email, depuis: '2026-10-01T09:00:00.000Z' },
+          { id: 'membre-2', email: 'bob@nudge.test', depuis: '2026-10-20T09:00:00.000Z' },
+        ] satisfies MembreListeVu[],
+      },
+    });
+
+    renderDashboard('/membres');
+
+    const liste = await screen.findByRole('list', { name: 'Membres de l’Instance' });
+    const [moi, bob] = within(liste).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+    expect(moi.textContent).toMatch(MEMBRE.email);
+    expect(moi.textContent).toMatch(/vous/);
+    expect(bob.textContent).toMatch(/bob@nudge\.test/);
+    expect(bob.textContent).toMatch(/depuis le 20 octobre 2026/);
   });
 });
 

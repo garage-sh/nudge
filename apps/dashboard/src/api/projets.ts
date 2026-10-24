@@ -1,4 +1,5 @@
 import type {
+  ActiviteProjetVu,
   ModificationProjet,
   NouveauProjet,
   ProjetAvecCleSecrete,
@@ -13,6 +14,17 @@ const chemin = (id: string) => `/api/projets/${encodeURIComponent(id)}`;
 
 export const useProjets = () =>
   useQuery({ queryKey: CLE_PROJETS, queryFn: () => api.get<ProjetVu[]>('/api/projets') });
+
+/** L'activité de chaque Projet, relue comme les alertes : elle bouge sans action du Membre. */
+export const CLE_ACTIVITE_PROJETS = ['activite-projets'] as const;
+
+export const useActiviteProjets = () =>
+  useQuery({
+    queryKey: CLE_ACTIVITE_PROJETS,
+    queryFn: () => api.get<ActiviteProjetVu[]>('/api/projets/activite'),
+    refetchInterval: 30_000,
+    select: (lignes) => new Map(lignes.map((ligne) => [ligne.projetId, ligne])),
+  });
 
 export const useProjet = (id: string) =>
   useQuery({ queryKey: cleProjet(id), queryFn: () => api.get<ProjetVu>(chemin(id)) });
