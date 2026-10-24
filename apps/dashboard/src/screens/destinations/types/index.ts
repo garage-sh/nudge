@@ -1,6 +1,7 @@
 import { estTypeDestination, type TypeDestination } from '@nudge/shared';
 import { formulaireDiscord } from './discord.js';
 import { formulaireLinear } from './linear.js';
+import { formulaireSlack } from './slack.js';
 import type { FormulaireTypeDestination } from './type-destination.js';
 import { formulaireWebhook } from './webhook.js';
 
@@ -13,6 +14,7 @@ export const FORMULAIRES_DESTINATION: {
   webhook: formulaireWebhook,
   discord: formulaireDiscord,
   linear: formulaireLinear,
+  slack: formulaireSlack,
 };
 
 /** Le formulaire de l'un des types, quel qu'il soit. */

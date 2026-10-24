@@ -174,6 +174,50 @@ describe('Destinations d’un Projet', () => {
     );
   });
 
+  it('ajoute un canal Slack : l’URL du webhook entrant part comme un secret', async () => {
+    const CANAL: DestinationVu = {
+      ...RECEPTEUR,
+      nom: 'Canal #bugs',
+      type: 'slack',
+      config: {},
+      secrets: ['url'],
+    };
+    const URL_WEBHOOK = 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXX';
+    const api = fakeApi({
+      ...routesDeBase([]),
+      'POST /api/projets/projet-1/destinations': {
+        status: 201,
+        body: { destination: CANAL, secretsGeneres: {} },
+      },
+    });
+    renderDashboard('/projets/projet-1/destinations');
+
+    const formulaire = within(
+      (await screen.findByRole('heading', { name: 'Ajouter une Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.selectOptions(formulaire.getByLabelText('Type'), 'Slack');
+    await userEvent.type(formulaire.getByLabelText('Nom'), 'Canal #bugs');
+    const champUrl = formulaire.getByLabelText('URL du webhook') as HTMLInputElement;
+    expect(champUrl.type).toBe('password');
+    expect(champUrl.placeholder).toBe('https://hooks.slack.com/services/…');
+    await userEvent.type(champUrl, URL_WEBHOOK);
+    await userEvent.click(formulaire.getByRole('button', { name: 'Ajouter' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.appels.find((a) => a.route === 'POST /api/projets/projet-1/destinations')?.corps,
+      ).toEqual({
+        type: 'slack',
+        nom: 'Canal #bugs',
+        config: {},
+        secrets: { url: URL_WEBHOOK },
+        filtre: { types: ['bug', 'suggestion', 'avis', 'question'], graviteMinimale: null },
+      }),
+    );
+  });
+
   it('ajoute une équipe Linear : clé d’API en secret, équipe et labels du Type et de la Gravité', async () => {
     const EQUIPE: DestinationVu = {
       ...RECEPTEUR,

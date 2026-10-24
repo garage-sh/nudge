@@ -190,6 +190,44 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(JSON.stringify(sansLabels.body)).not.toContain(cle);
   });
 
+  it('ajoute un canal Slack : l’URL du webhook entrant, qui porte son jeton, est un secret validé', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'Slack' });
+    const jeton = 'Xk9fT2qLm8Rv4sWz7Yb3Nc6D';
+    const canal = (url?: string) => ({
+      type: 'slack',
+      nom: 'Canal #bugs',
+      config: {},
+      ...(url === undefined ? {} : { secrets: { url } }),
+    });
+
+    for (const url of [
+      undefined,
+      'https://discord.com/api/webhooks/223704706495545344/jeton',
+      'http://hooks.slack.com/services/T00000000/B00000000/XXXX',
+      'https://hooks.slack.com/services/T00000000/B00000000/XXXX?canal=general',
+      'https://hooks.slack.com.piege.test/services/T00000000/B00000000/XXXX',
+      'https://hooks.slack.com/triggers/T00000000/123/abc',
+    ]) {
+      const refus = await membre.post(`/api/projets/${projet.id}/destinations`, canal(url));
+      expect(refus).toMatchObject({
+        status: 400,
+        body: {
+          erreur: 'requete_invalide',
+          details: [{ chemin: expect.stringMatching(/^secrets/) }],
+        },
+      });
+    }
+
+    const { destination, secretsGeneres } = await creer(
+      projet.id,
+      canal(`https://hooks.slack.com/services/T0A1B2C3D/B0E4F5G6H/${jeton}`),
+    );
+    expect(destination).toMatchObject({ type: 'slack', config: {}, secrets: ['url'] });
+    expect(secretsGeneres).toEqual({});
+    const ligne = await pipeline.ligneDestination(destination.id);
+    expect(JSON.stringify(ligne)).not.toContain(jeton);
+  });
+
   it('des secrets indéchiffrables (clé d’Instance changée) n’empêchent ni de lister ni de régénérer', async () => {
     const { projet } = await pipeline.createProjet({ nom: 'Clé changée' });
     const { destination } = await creer(projet.id);
