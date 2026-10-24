@@ -1,9 +1,16 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { projets, retours, verdicts, type Db } from '@nudge/database';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { corrigerVerdict, projets, retours, verdicts, type Db } from '@nudge/database';
 import {
   LIMITES_DASHBOARD,
   schemaFiltresRetours,
   type ApiErrorBody,
+  type schemaCorrectionVerdict,
   type PageRetours,
   type RetourDetailVu,
   type RetourResumeVu,
@@ -13,8 +20,10 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DB } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
+import { COLONNES_DESTINATION_ENVOI, toEnvoiVu } from './envois.service.js';
 
 type FiltresRetours = z.output<typeof schemaFiltresRetours>;
+type CorrectionVerdict = z.output<typeof schemaCorrectionVerdict>;
 
 /**
  * Position d'un Retour dans la boîte de réception : son instant de création à la
@@ -134,7 +143,7 @@ export class RetoursService {
         projet: { columns: { id: true, nom: true } },
         verdict: true,
         envois: {
-          with: { destination: { columns: { id: true, nom: true, type: true, etat: true } } },
+          with: { destination: { columns: COLONNES_DESTINATION_ENVOI } },
           orderBy: (envois, { asc }) => [asc(envois.createdAt), asc(envois.id)],
         },
       },
@@ -158,22 +167,34 @@ export class RetoursService {
           : null,
       contexte: retour.contexte,
       verdict: retour.verdict ? toVerdictVu(retour.verdict) : null,
-      envois: retour.envois.map((envoi) => ({
-        id: envoi.id,
-        destination: envoi.destination,
-        statut: envoi.statut,
-        lienExterne: envoi.lienExterne,
-        tentatives: envoi.tentatives,
-        derniereErreur: envoi.derniereErreur,
-        createdAt: envoi.createdAt.toISOString(),
-        updatedAt: envoi.updatedAt.toISOString(),
-      })),
+      envois: retour.envois.map(toEnvoiVu),
       createdAt: retour.createdAt.toISOString(),
     };
   }
+
+  /**
+   * Corrige le Verdict d'un Retour et rend le Retour à jour. Les Destinations déjà
+   * servies ne voient rien : seul le rejeu d'un Envoi propage la correction.
+   */
+  async corriger(id: string, correction: CorrectionVerdict): Promise<RetourDetailVu> {
+    if (!isUuid(id)) throw retourIntrouvable();
+    if (!(await corrigerVerdict(this.db, id, correction))) {
+      const [existe] = await this.db
+        .select({ id: retours.id })
+        .from(retours)
+        .where(eq(retours.id, id));
+      throw existe ? retourNonTrie() : retourIntrouvable();
+    }
+    return this.read(id);
+  }
 }
 
-const retourIntrouvable = () => new NotFoundException({ erreur: 'retour_introuvable' });
+/** Un Retour sans Verdict n'a rien à corriger : il attend son Triage. */
+const retourNonTrie = () =>
+  new ConflictException({ erreur: 'retour_non_trie' } satisfies ApiErrorBody);
+
+const retourIntrouvable = () =>
+  new NotFoundException({ erreur: 'retour_introuvable' } satisfies ApiErrorBody);
 
 type VerdictColonnes = Pick<typeof verdicts.$inferSelect, keyof VerdictVu>;
 

@@ -1,7 +1,20 @@
-import type { AuteurVu, Contexte, EnvoiVu, VerdictVu } from '@nudge/shared';
-import type { ReactNode } from 'react';
+import {
+  GRAVITES,
+  STATUTS_ENVOI_REJOUABLES,
+  TYPES_RETOUR,
+  type ActionRevue,
+  type AuteurVu,
+  type Contexte,
+  type EnvoiVu,
+  type Gravite,
+  type RetourDetailVu,
+  type StatutEnvoi,
+  type TypeRetour,
+  type VerdictVu,
+} from '@nudge/shared';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
-import { useRetour } from '../api/retours.js';
+import { useCorrectionVerdict, useRejeu, useRetour, useRevue } from '../api/retours.js';
 import {
   formatDate,
   LIBELLES_CONFIANCE,
@@ -12,7 +25,7 @@ import {
   LIBELLES_STATUT_ENVOI,
   LIBELLES_TYPE,
 } from '../libelles.js';
-import { ErrorMessage, LienExterne, Loading } from '../layout/ui.js';
+import { ConfirmAction, ErrorMessage, LienExterne, Loading } from '../layout/ui.js';
 import { BadgeIncertain } from './retour-badges.js';
 
 /**
@@ -22,7 +35,10 @@ import { BadgeIncertain } from './retour-badges.js';
  */
 export function Retour() {
   const id = useParams().id ?? '';
-  const retour = useRetour(id);
+  // Après une action, le Retour est relu le temps que le worker en tire les suites.
+  const [suivreJusqua, setSuivreJusqua] = useState(0);
+  const suivre = () => setSuivreJusqua(Date.now() + SUIVI_APRES_ACTION_MS);
+  const retour = useRetour(id, { suivreJusqua });
   if (retour.isPending) return <Loading />;
   if (retour.isError) return <ErrorMessage erreur={retour.error} />;
   const detail = retour.data;
@@ -44,8 +60,13 @@ export function Retour() {
       {detail.typeDeclare ? (
         <p className="discret">Type déclaré par l’Auteur : {LIBELLES_TYPE[detail.typeDeclare]}</p>
       ) : null}
+      {actionsDeRevue(detail).length > 0 ? (
+        <Section id="revue" titre="Revue">
+          <Revue retour={detail} apresAction={suivre} />
+        </Section>
+      ) : null}
       <Section id="verdict" titre="Verdict">
-        <Verdict verdict={detail.verdict} />
+        <Verdict retourId={detail.id} verdict={detail.verdict} />
       </Section>
       <Section id="auteur" titre="Auteur">
         <Auteur auteur={detail.auteur} />
@@ -54,9 +75,64 @@ export function Retour() {
         <ContexteRetour contexte={detail.contexte} />
       </Section>
       <Section id="envois" titre="Envois">
-        <Envois envois={detail.envois} />
+        <Envois retourId={detail.id} envois={detail.envois} apresRejeu={suivre} />
       </Section>
     </article>
+  );
+}
+
+/** Durée pendant laquelle le Retour est relu après une action du Membre. */
+const SUIVI_APRES_ACTION_MS = 15_000;
+
+/** Les actions de revue possibles sur ce Retour (l'api fait foi, et refuse les autres). */
+function actionsDeRevue(retour: RetourDetailVu): ActionRevue[] {
+  if (retour.etat === 'en_revue') return ['valider', 'rejeter'];
+  // Seul un Retour Écarté comme Indésirable se réhabilite, pas un Retour rejeté après revue.
+  if (retour.etat === 'ecarte' && retour.verdict?.indesirable && !retour.verdict.manipulation) {
+    return ['rehabiliter'];
+  }
+  return [];
+}
+
+function Revue({ retour, apresAction }: { retour: RetourDetailVu; apresAction: () => void }) {
+  const revue = useRevue(retour.id);
+  const agir = (action: ActionRevue) => revue.mutate(action, { onSuccess: apresAction });
+  const actions = actionsDeRevue(retour);
+  return (
+    <>
+      {retour.etat === 'en_revue' ? (
+        <p>
+          Le Juge soupçonne une tentative de Manipulation du Triage : ce Retour n’a été envoyé nulle
+          part. Validez-le pour le dispatcher, ou rejetez-le.
+        </p>
+      ) : (
+        <p>
+          Écarté comme Indésirable. S’il s’agit d’un vrai Retour, réhabilitez-le : il sera dispatché
+          normalement.
+        </p>
+      )}
+      <div className="actions">
+        {actions.includes('valider') ? (
+          <button type="button" disabled={revue.isPending} onClick={() => agir('valider')}>
+            Valider
+          </button>
+        ) : null}
+        {actions.includes('rejeter') ? (
+          <ConfirmAction
+            libelle="Rejeter"
+            question="Rejeté, le Retour est Écarté et ne pourra plus être réhabilité. Rejeter ?"
+            enCours={revue.isPending}
+            onConfirm={() => agir('rejeter')}
+          />
+        ) : null}
+        {actions.includes('rehabiliter') ? (
+          <button type="button" disabled={revue.isPending} onClick={() => agir('rehabiliter')}>
+            Réhabiliter
+          </button>
+        ) : null}
+      </div>
+      <ErrorMessage erreur={revue.error} />
+    </>
   );
 }
 
@@ -83,8 +159,18 @@ function Proprietes({ lignes }: { lignes: readonly (readonly [string, ReactNode]
   );
 }
 
-function Verdict({ verdict }: { verdict: VerdictVu | null }) {
+function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu | null }) {
+  const [enCorrection, setEnCorrection] = useState(false);
   if (!verdict) return <p className="discret">Ce Retour n’est pas encore trié.</p>;
+  if (enCorrection) {
+    return (
+      <CorrectionVerdict
+        retourId={retourId}
+        verdict={verdict}
+        fermer={() => setEnCorrection(false)}
+      />
+    );
+  }
   return (
     <>
       <Proprietes
@@ -98,7 +184,84 @@ function Verdict({ verdict }: { verdict: VerdictVu | null }) {
         {verdict.indesirable ? <span className="badge">Indésirable</span> : null}
         {verdict.manipulation ? <span className="badge">Manipulation</span> : null}
       </p>
+      <div className="actions">
+        <button type="button" className="secondaire" onClick={() => setEnCorrection(true)}>
+          Corriger
+        </button>
+      </div>
     </>
+  );
+}
+
+/**
+ * Le Membre corrige le Type retenu et la Gravité. Les Destinations déjà servies ne
+ * voient pas la correction : le rejeu d'un Envoi la leur propage.
+ */
+function CorrectionVerdict({
+  retourId,
+  verdict,
+  fermer,
+}: {
+  retourId: string;
+  verdict: VerdictVu;
+  fermer: () => void;
+}) {
+  const correction = useCorrectionVerdict(retourId);
+  const [typeRetenu, setTypeRetenu] = useState<TypeRetour>(verdict.typeRetenu);
+  const [gravite, setGravite] = useState<Gravite | ''>(verdict.gravite ?? '');
+  const soumettre = (evenement: FormEvent) => {
+    evenement.preventDefault();
+    correction.mutate(
+      { typeRetenu, ...(gravite ? { gravite } : {}) },
+      { onSuccess: () => fermer() },
+    );
+  };
+  return (
+    <form onSubmit={soumettre} className="formulaire">
+      <p className="aide">
+        La correction ne change rien chez les Destinations déjà servies : rejouez un Envoi pour la
+        leur propager.
+      </p>
+      <div className="champ">
+        <label htmlFor="correction-type">Type retenu</label>
+        <select
+          id="correction-type"
+          value={typeRetenu}
+          onChange={(e) => setTypeRetenu(e.target.value as TypeRetour)}
+        >
+          {TYPES_RETOUR.map((valeur) => (
+            <option key={valeur} value={valeur}>
+              {LIBELLES_TYPE[valeur]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="champ">
+        <label htmlFor="correction-gravite">Gravité</label>
+        <select
+          id="correction-gravite"
+          value={gravite}
+          onChange={(e) => setGravite(e.target.value as Gravite | '')}
+        >
+          {/* Une Gravité non évaluée (mode dégradé) se fixe, mais ne s'efface pas. */}
+          {verdict.gravite ? null : <option value="">Non évaluée</option>}
+          {GRAVITES.map((valeur) => (
+            <option key={valeur} value={valeur}>
+              {LIBELLES_GRAVITE[valeur]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <ErrorMessage erreur={correction.error} />
+      <div className="actions">
+        <button type="submit" disabled={correction.isPending}>
+          Enregistrer
+        </button>
+        <button type="button" className="secondaire" onClick={fermer}>
+          Annuler
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -136,7 +299,24 @@ function ContexteRetour({ contexte }: { contexte: Contexte }) {
   );
 }
 
-function Envois({ envois }: { envois: readonly EnvoiVu[] }) {
+const estRejouable = (statut: StatutEnvoi): boolean =>
+  (STATUTS_ENVOI_REJOUABLES as readonly StatutEnvoi[]).includes(statut);
+
+/**
+ * Les Envois, avec leur statut et le lien vers l'objet créé. Un Envoi livré ou en
+ * échec se rejoue, avec le Verdict courant : pour rattraper un échec ou propager une
+ * correction.
+ */
+function Envois({
+  retourId,
+  envois,
+  apresRejeu,
+}: {
+  retourId: string;
+  envois: readonly EnvoiVu[];
+  apresRejeu: () => void;
+}) {
+  const rejeu = useRejeu(retourId);
   if (envois.length === 0) {
     return <p className="discret">Aucun Envoi.</p>;
   }
@@ -157,6 +337,19 @@ function Envois({ envois }: { envois: readonly EnvoiVu[] }) {
           </p>
           {envoi.lienExterne ? <LienExterne href={envoi.lienExterne} /> : null}
           {envoi.derniereErreur ? <p className="alerte">{envoi.derniereErreur}</p> : null}
+          {estRejouable(envoi.statut) ? (
+            <div className="actions">
+              <button
+                type="button"
+                className="secondaire"
+                disabled={rejeu.isPending}
+                onClick={() => rejeu.mutate(envoi.id, { onSuccess: apresRejeu })}
+              >
+                Rejouer
+              </button>
+            </div>
+          ) : null}
+          {rejeu.variables === envoi.id ? <ErrorMessage erreur={rejeu.error} /> : null}
         </li>
       ))}
     </ul>

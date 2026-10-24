@@ -2,6 +2,7 @@ import { Inject, Module, type DynamicModule, type OnApplicationShutdown } from '
 import {
   createSecretCipher,
   DEFAULT_QUEUE_PREFIX,
+  DISPATCH_QUEUE,
   jobOptions,
   TRIAGE_QUEUE,
   type RetryPolicy,
@@ -9,14 +10,14 @@ import {
 import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { SECRET_CIPHER, DB, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import { SECRET_CIPHER, DB, DISPATCH_QUEUE_TOKEN, TRIAGE_QUEUE_TOKEN } from './tokens.js';
 
 export interface InfraOptions {
   readonly databaseUrl: string;
   readonly redisUrl: string;
   /** Préfixe des clés BullMQ : isole plusieurs Instances (ou tests) sur un même Redis. */
   readonly queuePrefix?: string;
-  /** Retry des jobs de triage ; les tests le raccourcissent. */
+  /** Retry des jobs de triage et de dispatch ; les tests le raccourcissent. */
   readonly retryPolicy?: RetryPolicy;
   /** Clé d'Instance (`NUDGE_ENCRYPTION_KEY`, 32 octets en base64) : chiffre les secrets stockés. */
   readonly cleChiffrement: string;
@@ -30,10 +31,21 @@ export class InfraModule implements OnApplicationShutdown {
   constructor(
     @Inject(DB_CONNECTION) private readonly connexion: DbConnection,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
+    @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   static forRoot(options: InfraOptions): DynamicModule {
+    const queue = (nom: string) => ({
+      useFactory: (redis: Redis) =>
+        new Queue(nom, {
+          connection: redis,
+          prefix: options.queuePrefix ?? DEFAULT_QUEUE_PREFIX,
+          // Les mêmes options que celles du worker : un job rejoué y est retenté pareil.
+          defaultJobOptions: jobOptions(options.retryPolicy),
+        }),
+      inject: [REDIS],
+    });
     return {
       module: InfraModule,
       global: true,
@@ -45,23 +57,15 @@ export class InfraModule implements OnApplicationShutdown {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
         },
-        {
-          provide: TRIAGE_QUEUE_TOKEN,
-          useFactory: (redis: Redis) =>
-            new Queue(TRIAGE_QUEUE, {
-              connection: redis,
-              prefix: options.queuePrefix ?? DEFAULT_QUEUE_PREFIX,
-              defaultJobOptions: jobOptions(options.retryPolicy),
-            }),
-          inject: [REDIS],
-        },
+        { provide: TRIAGE_QUEUE_TOKEN, ...queue(TRIAGE_QUEUE) },
+        { provide: DISPATCH_QUEUE_TOKEN, ...queue(DISPATCH_QUEUE) },
       ],
-      exports: [DB, TRIAGE_QUEUE_TOKEN, SECRET_CIPHER],
+      exports: [DB, TRIAGE_QUEUE_TOKEN, DISPATCH_QUEUE_TOKEN, SECRET_CIPHER],
     };
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await this.triageQueue.close();
+    await Promise.all([this.triageQueue.close(), this.dispatchQueue.close()]);
     await this.redis.quit();
     await this.connexion.close();
   }

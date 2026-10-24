@@ -1,4 +1,4 @@
-import type { EtatRetour } from '@nudge/shared';
+import type { ActionRevue, EtatRetour } from '@nudge/shared';
 import type { Verdict } from './triage.js';
 
 /**
@@ -20,9 +20,7 @@ export function etatApresTriage(
   return 'trie';
 }
 
-/** Les transitions qu'un Membre déclenche sur un Retour retenu par le Triage. */
-export const ACTIONS_REVUE = ['valider', 'rejeter', 'rehabiliter'] as const;
-export type ActionRevue = (typeof ACTIONS_REVUE)[number];
+export { ACTIONS_REVUE, type ActionRevue } from '@nudge/shared';
 
 /**
  * État de départ exigé et état d'arrivée de chaque transition de revue. Valider et

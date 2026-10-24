@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createApi, RevueService } from '@nudge/api';
+import { createApi } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -26,7 +26,7 @@ import {
 } from '@nudge/database';
 import type { ConfigJuge } from '@nudge/judge';
 import { resolveDestinationAdapter as adaptateursReels } from '@nudge/destinations';
-import type { RetourEntrant } from '@nudge/shared';
+import type { EtatRetour, RetourEntrant } from '@nudge/shared';
 import {
   createWorker,
   type OptionsBalayage,
@@ -118,7 +118,7 @@ export interface Pipeline {
   postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
   /**
    * Transition de revue (valider, rejeter, réhabiliter) telle que le dashboard la
-   * déclenchera (#9) : par le `RevueService` de l'api.
+   * déclenche : `POST /api/retours/:id/revue`, par le Membre de `signIn()`.
    */
   revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue>;
   /**
@@ -249,6 +249,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     }
   };
 
+  let membre: DashboardClient | undefined;
   const pipeline: Pipeline = {
     url,
     get juge() {
@@ -315,7 +316,17 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         headers: { 'content-type': 'application/json', authorization: `Bearer ${cleSecrete}` },
         body: JSON.stringify(corps),
       }),
-    revoir: (retourId, action) => api.get(RevueService).revoir(retourId, action),
+    async revoir(retourId, action) {
+      membre ??= await pipeline.signIn();
+      const { status, body } = await membre.post<{ etat: EtatRetour }>(
+        `/api/retours/${retourId}/revue`,
+        { action },
+      );
+      if (status === 200) return { statut: 'applique', etat: body.etat };
+      if (status === 409) return { statut: 'refuse', etat: body.etat };
+      if (status === 404) return { statut: 'introuvable' };
+      throw new Error(`revoir : réponse inattendue ${status} ${JSON.stringify(body)}`);
+    },
     rejouerTriage: (retourId) => rejouer(TRIAGE_QUEUE, { retourId }),
     rejouerDispatch: (envoiId) => rejouer(DISPATCH_QUEUE, { envoiId }),
     async parametresInstance() {

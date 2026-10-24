@@ -1,4 +1,5 @@
 import { TRANSITIONS_REVUE, type ActionRevue, type ResultatRevue } from '@nudge/core';
+import type { Gravite, TypeRetour } from '@nudge/shared';
 import { and, eq, exists } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { retours, verdicts } from './schema.js';
@@ -50,4 +51,23 @@ export async function annulerRevue(db: Db, retourId: string, action: ActionRevue
     .update(retours)
     .set({ etat: depuis })
     .where(and(eq(retours.id, retourId), eq(retours.etat, vers)));
+}
+
+/**
+ * Corrige le Type retenu et / ou la Gravité du Verdict d'un Retour. Vérifié par un
+ * Membre, le Verdict n'est plus Incertain ; les réponses brutes du Juge restent telles
+ * quelles. Rien n'est remis en queue : seul le rejeu d'un Envoi propage la correction.
+ * Rend faux si le Retour n'a pas (encore) de Verdict.
+ */
+export async function corrigerVerdict(
+  db: Db,
+  retourId: string,
+  correction: { readonly typeRetenu?: TypeRetour; readonly gravite?: Gravite },
+): Promise<boolean> {
+  const corriges = await db
+    .update(verdicts)
+    .set({ ...correction, incertain: false })
+    .where(eq(verdicts.retourId, retourId))
+    .returning({ id: verdicts.id });
+  return corriges.length > 0;
 }

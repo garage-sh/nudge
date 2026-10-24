@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ACTIONS_REVUE,
   ETATS_RETOUR,
   exigeUrlBase,
   FOURNISSEURS_JUGE,
@@ -332,3 +333,21 @@ export interface RetourDetailVu {
   readonly envois: readonly EnvoiVu[];
   readonly createdAt: string;
 }
+
+/** Revue d'un Retour par un Membre (`POST /api/retours/:id/revue`). */
+export const schemaRevue = z.strictObject({ action: z.enum(ACTIONS_REVUE) });
+export type Revue = z.input<typeof schemaRevue>;
+
+/**
+ * Correction du Verdict par un Membre (`PATCH /api/retours/:id/verdict`) : le Type
+ * retenu, la Gravité, ou les deux. Sans effet chez les Destinations déjà servies.
+ */
+export const schemaCorrectionVerdict = z
+  .strictObject({
+    typeRetenu: z.enum(TYPES_RETOUR).optional(),
+    gravite: z.enum(GRAVITES).optional(),
+  })
+  .refine((correction) => correction.typeRetenu !== undefined || correction.gravite !== undefined, {
+    message: 'Type retenu ou Gravité attendu',
+  });
+export type CorrectionVerdict = z.input<typeof schemaCorrectionVerdict>;

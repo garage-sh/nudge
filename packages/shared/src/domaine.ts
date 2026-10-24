@@ -25,6 +25,20 @@ export const STATUTS_ENVOI = ['en_attente', 'livre', 'echec', 'retenu'] as const
 export type StatutEnvoi = (typeof STATUTS_ENVOI)[number];
 
 /**
+ * Statuts d'où un Membre peut rejouer un Envoi : terminé, livré ou en échec. Un Envoi
+ * en attente a déjà un job en cours ; un Envoi retenu attend que sa Destination soit
+ * de nouveau active, et la sonde le libère.
+ */
+export const STATUTS_ENVOI_REJOUABLES = [
+  'livre',
+  'echec',
+] as const satisfies readonly StatutEnvoi[];
+
+/** Les transitions qu'un Membre déclenche sur un Retour retenu par le Triage. */
+export const ACTIONS_REVUE = ['valider', 'rejeter', 'rehabiliter'] as const;
+export type ActionRevue = (typeof ACTIONS_REVUE)[number];
+
+/**
  * Classe d'un échec d'Envoi (littéraux de la spec) :
  * - `transient` : 5xx, 429, timeout — retenté, compte pour la Suspension ;
  * - `auth` : identifiants refusés — Suspension immédiate, sans retry ;

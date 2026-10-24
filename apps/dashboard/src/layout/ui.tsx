@@ -8,6 +8,11 @@ const MESSAGES: Record<string, string> = {
   invitation_invalide: 'Ce lien d’invitation est invalide, expiré ou déjà utilisé.',
   projet_introuvable: 'Ce Projet n’existe pas.',
   retour_introuvable: 'Ce Retour n’existe pas.',
+  transition_refusee: 'Ce Retour a changé entre-temps : voici son état actuel.',
+  retour_non_trie: 'Ce Retour n’est pas encore trié : il n’a pas de Verdict à corriger.',
+  envoi_introuvable: 'Cet Envoi n’existe plus.',
+  envoi_non_rejouable:
+    'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
   destination_introuvable: 'Cette Destination n’existe plus.',
   type_destination_inconnu: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
   session_requise: 'Votre session a expiré : reconnectez-vous.',
