@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { readRetentionInstance, retours, supprimerRetours, type Db } from '@nudge/database';
-import { asc, lt } from 'drizzle-orm';
+import { and, asc, lt, notInArray } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { DB, OPTIONS } from './tokens.js';
 
@@ -28,11 +28,19 @@ export class PurgeProcessor {
     if (jours === null) return;
     const avant = new Date(Date.now() - jours * JOUR_MS);
     let total = 0;
+    // Retours gardés pendant ce passage (Capture non effacée) : les lots suivants les
+    // sautent, pour qu'une Capture qui résiste ne bloque pas la purge des autres.
+    const gardes: string[] = [];
     for (;;) {
       const lot = await this.db
         .select({ id: retours.id })
         .from(retours)
-        .where(lt(retours.createdAt, avant))
+        .where(
+          and(
+            lt(retours.createdAt, avant),
+            gardes.length > 0 ? notInArray(retours.id, gardes) : undefined,
+          ),
+        )
         .orderBy(asc(retours.createdAt))
         .limit(LOT);
       const { supprimes, echecs } = await supprimerRetours(
@@ -43,10 +51,10 @@ export class PurgeProcessor {
       total += supprimes.length;
       for (const { retourId, erreur } of echecs) {
         this.logger.error(`Capture du Retour ${retourId} non effacée : purge retentée`, erreur);
+        gardes.push(retourId);
       }
-      // Lot incomplet : plus rien d'expiré. Aucun effacement : le stockage refuse tout,
-      // le passage suivant retentera plutôt que de boucler sur les mêmes Retours.
-      if (lot.length < LOT || supprimes.length === 0) break;
+      // Lot incomplet : plus rien d'expiré ce passage ; le suivant retentera les gardés.
+      if (lot.length < LOT) break;
     }
     if (total > 0) this.logger.log(`Rétention de ${jours} j : ${total} Retour(s) purgé(s)`);
   }

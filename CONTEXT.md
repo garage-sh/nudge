@@ -15,7 +15,7 @@ Un court texte facultatif qui dit au Juge ce qu'est le Projet et ce qui y est cr
 _Avoid_: Prompt, contexte
 
 **Retour**:
-Un message laissé par un utilisateur d'un Projet (bug, suggestion, avis, question). C'est l'objet central de nudge, conservé dans la durée.
+Un message laissé par un utilisateur d'un Projet (bug, suggestion, avis, question). C'est l'objet central de nudge, conservé tant qu'aucune Suppression ni la Rétention ne l'efface.
 _Avoid_: Feedback, ticket, message, report
 
 **Source**:
@@ -123,3 +123,11 @@ _Avoid_: Admin, user, utilisateur
 **Capture**:
 Une capture d'écran jointe à un Retour à l'initiative de l'Auteur, après masquage éventuel. Elle n'est jamais transmise au Juge.
 _Avoid_: Screenshot, pièce jointe
+
+**Suppression**:
+L'effacement définitif d'un Retour et de sa Capture par un Membre, par exemple pour une demande d'effacement de l'Auteur. Les objets déjà créés chez les Destinations restent. À distinguer d'Écarté, où le Retour est conservé.
+_Avoid_: Archivage, rejet
+
+**Rétention**:
+La durée facultative, au niveau de l'Instance, au-delà de laquelle les Retours et leurs Captures sont purgés automatiquement. Illimitée par défaut.
+_Avoid_: Expiration, TTL, archivage

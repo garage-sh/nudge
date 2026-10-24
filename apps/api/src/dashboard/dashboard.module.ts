@@ -22,6 +22,7 @@ import { DestinationsService } from './destinations/destinations.service.js';
 import { DestinationAlerteService } from './instance/destination-alerte.service.js';
 import { InstanceController } from './instance/instance.controller.js';
 import { JugeInstanceService } from './instance/juge-instance.service.js';
+import { RetentionInstanceService } from './instance/retention-instance.service.js';
 import { ProjetsController } from './projets/projets.controller.js';
 import { ProjetsService } from './projets/projets.service.js';
 import { EnvoisController } from './retours/envois.controller.js';
@@ -72,6 +73,7 @@ export class DashboardModule implements NestModule {
         RevueService,
         EnvoisService,
         JugeInstanceService,
+        RetentionInstanceService,
         DestinationAlerteService,
         AlertesService,
         DestinationsService,

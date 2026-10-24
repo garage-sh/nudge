@@ -16,10 +16,16 @@ export async function readRetour(db: Db, id: string) {
 
 export type RetourLu = NonNullable<Awaited<ReturnType<typeof readRetour>>>;
 
-/** Ce que `supprimerRetours` a fait : les Retours supprimés, et ceux gardés faute d'effacer leur Capture. */
+/** Un Retour gardé parce que l'image de sa Capture n'a pas pu être effacée. */
+export interface EchecSuppression {
+  readonly retourId: string;
+  readonly erreur: unknown;
+}
+
+/** Ce que `supprimerRetours` a fait : les Retours supprimés, et ceux gardés. */
 export interface SuppressionRetours {
   readonly supprimes: readonly string[];
-  readonly echecs: readonly { readonly retourId: string; readonly erreur: unknown }[];
+  readonly echecs: readonly EchecSuppression[];
 }
 
 /**
@@ -38,7 +44,7 @@ export async function supprimerRetours(
     .select({ retourId: captures.retourId, cle: captures.cle })
     .from(captures)
     .where(inArray(captures.retourId, [...ids]));
-  const echecs: { retourId: string; erreur: unknown }[] = [];
+  const echecs: EchecSuppression[] = [];
   for (const { retourId, cle } of aEffacer) {
     try {
       await supprimerCapture(cle);

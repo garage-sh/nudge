@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 export {
   type OptionsBalayage,
-  type OptionsRetention,
+  type OptionsPurge,
   type OptionsSuspension,
   type Suspension,
   type SurSuspension,

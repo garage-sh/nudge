@@ -35,7 +35,7 @@ import { stockageDisque, type StockageCaptures } from '@nudge/stockage';
 import {
   createWorker,
   type OptionsBalayage,
-  type OptionsRetention,
+  type OptionsPurge,
   type OptionsSuspension,
   type Suspension,
 } from '@nudge/worker';
@@ -82,7 +82,7 @@ export interface PipelineOptions {
    */
   readonly stockage?: StockageCaptures;
   /** Période de la purge de rétention ; celle du worker sinon. */
-  readonly retention?: OptionsRetention;
+  readonly purge?: OptionsPurge;
 }
 
 export interface Pipeline {
@@ -255,7 +255,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
-    ...(options.retention ? { retention: options.retention } : {}),
+    ...(options.purge ? { purge: options.purge } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     surSuspension: (suspension) => {
       suspensions.push(suspension);

@@ -22,7 +22,9 @@ export type NomFiltre = (typeof FILTRES_RETOURS)[number];
 /** Valeurs lues telles quelles dans l'URL : l'api les valide (400 sinon). */
 export type FiltresRetours = Partial<Record<NomFiltre, string>>;
 
-const cleListe = (filtres: FiltresRetours) => ['retours', 'liste', filtres] as const;
+/** Préfixe de toutes les pages de la boîte de réception, quels que soient les filtres. */
+const CLE_LISTES = ['retours', 'liste'] as const;
+const cleListe = (filtres: FiltresRetours) => [...CLE_LISTES, filtres] as const;
 const cleRetour = (id: string) => ['retours', 'detail', id] as const;
 
 function cheminRetours(filtres: FiltresRetours, curseur: string | null): string {
@@ -80,7 +82,7 @@ function useApresAction(id: string) {
   return (retour?: RetourDetailVu) => {
     if (retour) client.setQueryData(cleRetour(id), retour);
     else void client.invalidateQueries({ queryKey: cleRetour(id) });
-    void client.invalidateQueries({ queryKey: ['retours', 'liste'] });
+    void client.invalidateQueries({ queryKey: CLE_LISTES });
     // Un Retour revu quitte les badges « en revue ».
     void client.invalidateQueries({ queryKey: CLE_ALERTES });
   };
@@ -128,7 +130,7 @@ export function useSuppressionRetour(id: string, quitter: () => void) {
     onSuccess: () => {
       quitter();
       client.removeQueries({ queryKey: cleRetour(id) });
-      void client.invalidateQueries({ queryKey: ['retours', 'liste'] });
+      void client.invalidateQueries({ queryKey: CLE_LISTES });
       void client.invalidateQueries({ queryKey: CLE_ALERTES });
     },
   });

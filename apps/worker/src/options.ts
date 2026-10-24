@@ -35,8 +35,8 @@ export interface WorkerOptions {
   readonly dashboardUrl?: string | null;
   /** Balayage des Retours restés Reçu (D18) ; 5 min de délai, toutes les minutes, à défaut. */
   readonly balayage?: OptionsBalayage;
-  /** Période de la purge de rétention ; `RETENTION_PAR_DEFAUT` à défaut. */
-  readonly retention?: OptionsRetention;
+  /** Période de la purge de rétention ; `PURGE_PAR_DEFAUT` à défaut. */
+  readonly purge?: OptionsPurge;
   /** Seuil de Suspension, refroidissement et période de la sonde ; `SUSPENSION_PAR_DEFAUT` à défaut. */
   readonly suspension?: OptionsSuspension;
   /**
@@ -56,7 +56,7 @@ export interface OptionsBalayage {
 
 export const BALAYAGE_PAR_DEFAUT: OptionsBalayage = { delaiMs: 5 * 60_000, intervalleMs: 60_000 };
 
-export interface OptionsRetention {
+export interface OptionsPurge {
   /**
    * Période de la purge des Retours plus anciens que la durée de rétention de
    * l'Instance (relue en base à chaque passage).
@@ -65,7 +65,7 @@ export interface OptionsRetention {
 }
 
 /** Une purge par heure : la durée de rétention se compte en jours. */
-export const RETENTION_PAR_DEFAUT: OptionsRetention = { intervalleMs: 60 * 60_000 };
+export const PURGE_PAR_DEFAUT: OptionsPurge = { intervalleMs: 60 * 60_000 };
 
 export interface OptionsSuspension {
   /** Échecs transient consécutifs au-delà desquels (inclus) la Destination est Suspendue. */

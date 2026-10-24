@@ -161,7 +161,7 @@ describe('Rétention des Retours', () => {
   const { stockage, objetsDe } = stockageMemoire();
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage, retention: { intervalleMs: 100 } });
+    pipeline = await startPipeline({ stockage, purge: { intervalleMs: 100 } });
     membre = await pipeline.signIn();
   });
 
@@ -243,5 +243,65 @@ describe('Rétention des Retours', () => {
       body: { jours: null },
     });
     expect((await membre.get('/api/instance/retention')).body).toEqual({ jours: null });
+  });
+});
+
+describe('Rétention des Retours, stockage capricieux', () => {
+  let pipeline: Pipeline;
+  const memoire = stockageMemoire();
+  /** Clés que le stockage refuse d'effacer. */
+  const refusees = new Set<string>();
+  const stockage: StockageCaptures = {
+    ...memoire.stockage,
+    supprimer: (cle) =>
+      refusees.has(cle)
+        ? Promise.reject(new Error('objet verrouillé'))
+        : memoire.stockage.supprimer(cle),
+  };
+
+  beforeAll(async () => {
+    pipeline = await startPipeline({ stockage, purge: { intervalleMs: 100 } });
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+  });
+
+  it('garde le Retour dont la Capture résiste, purge les autres, et le purge quand elle cède', async () => {
+    const membre = await pipeline.signIn();
+    const { clePublique } = await pipeline.createProjet({
+      nom: 'Purge partielle',
+      originesAutorisees: [ORIGINE],
+    });
+    const poster = async (texte: string) => {
+      const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
+        texte,
+        capture: capturePng,
+      });
+      const { id } = (await reponse.json()) as { id: string };
+      await pipeline.waitForRetour(id, (r) => r.etat !== 'recu');
+      return id;
+    };
+    // Le plus ancien résiste : il ne doit pas bloquer la purge des suivants.
+    const resistant = await poster('Capture verrouillée');
+    const purgeable = await poster('Capture effaçable');
+    await pipeline.vieillirRetour(resistant, 40);
+    await pipeline.vieillirRetour(purgeable, 35);
+    for (const cle of memoire.objetsDe(resistant)) refusees.add(cle);
+
+    await membre.put('/api/instance/retention', { jours: 30 });
+
+    await expect
+      .poll(async () => (await membre.get(`/api/retours/${purgeable}`)).status, { timeout: 5000 })
+      .toBe(404);
+    expect(memoire.objetsDe(purgeable)).toEqual([]);
+    expect((await membre.get(`/api/retours/${resistant}`)).status).toBe(200);
+    expect(await statutCapture(membre, resistant)).toBe(200);
+
+    refusees.clear();
+    await expect
+      .poll(async () => (await membre.get(`/api/retours/${resistant}`)).status, { timeout: 5000 })
+      .toBe(404);
+    expect(memoire.objetsDe(resistant)).toEqual([]);
   });
 });

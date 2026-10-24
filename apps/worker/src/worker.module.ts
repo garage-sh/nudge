@@ -41,7 +41,7 @@ import {
 import { JugeResolver } from './juge-resolver.js';
 import {
   BALAYAGE_PAR_DEFAUT,
-  RETENTION_PAR_DEFAUT,
+  PURGE_PAR_DEFAUT,
   SUSPENSION_PAR_DEFAUT,
   type SurSuspension,
   type WorkerOptions,
@@ -176,10 +176,10 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: intervalleSondeMs },
       { name: SONDE_SUSPENDUES_JOB },
     );
-    const retention = this.options.retention ?? RETENTION_PAR_DEFAUT;
+    const purge = this.options.purge ?? PURGE_PAR_DEFAUT;
     await this.maintenanceQueue.upsertJobScheduler(
       PURGE_RETENTION_JOB,
-      { every: retention.intervalleMs },
+      { every: purge.intervalleMs },
       { name: PURGE_RETENTION_JOB },
     );
     this.workers = [
