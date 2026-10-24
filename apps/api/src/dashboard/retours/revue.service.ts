@@ -22,21 +22,7 @@ export class RevueService {
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue<TriageJob>,
   ) {}
 
-  /** En revue → Trié, puis Dispatché si un Filtre le retient. */
-  valider(retourId: string): Promise<ResultatRevue> {
-    return this.revoir(retourId, 'valider');
-  }
-
-  /** En revue → Écarté. */
-  rejeter(retourId: string): Promise<ResultatRevue> {
-    return this.revoir(retourId, 'rejeter');
-  }
-
-  /** Écarté (Indésirable) → Trié, puis Dispatché si un Filtre le retient. */
-  rehabiliter(retourId: string): Promise<ResultatRevue> {
-    return this.revoir(retourId, 'rehabiliter');
-  }
-
+  /** Valider ou réhabiliter rend le Retour Trié, puis Dispatché si un Filtre le retient. */
   async revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue> {
     if (!isUuid(retourId)) return { statut: 'introuvable' };
     const resultat = await revoirRetour(this.db, retourId, action);
