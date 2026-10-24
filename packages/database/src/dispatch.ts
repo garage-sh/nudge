@@ -28,7 +28,7 @@ export async function creerEnvoisManquants(
     .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
     .from(verdicts)
     .where(eq(verdicts.retourId, retourId));
-  if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
+  if (!verdict) throw new Error(`Retour ${retourId} à dispatcher sans Verdict`);
   const destinationsDuProjet = await tx
     .select({
       id: destinations.id,
@@ -55,7 +55,12 @@ export async function creerEnvoisManquants(
     .update(retours)
     .set({ etat: 'dispatche' })
     .where(and(eq(retours.id, retourId), eq(retours.etat, 'trie')));
-  return crees as EnvoiCree[];
+  return crees.map(({ id, statut }) => {
+    if (statut !== 'en_attente' && statut !== 'retenu') {
+      throw new Error(`Envoi ${id} créé au statut inattendu ${statut}`);
+    }
+    return { id, statut };
+  });
 }
 
 export type ResultatRedispatch =
