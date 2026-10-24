@@ -218,6 +218,12 @@ export interface MembreVu {
   readonly email: string;
 }
 
+/** Un Membre dans la liste des Membres : depuis quand il a un compte. */
+export interface MembreListeVu extends MembreVu {
+  /** Création du compte (ISO 8601). */
+  readonly depuis: string;
+}
+
 export interface SessionVue {
   readonly membre: MembreVu;
 }
@@ -244,6 +250,19 @@ export interface ProjetVu {
   readonly clePublique: string;
   readonly originesAutorisees: readonly string[];
   readonly createdAt: string;
+}
+
+/**
+ * L'activité d'un Projet, pour la liste des Projets et la barre latérale : de quoi
+ * repérer le Projet qui reçoit des Retours ou qui demande l'attention d'un Membre.
+ */
+export interface ActiviteProjetVu {
+  readonly projetId: string;
+  /** Retours reçus ces sept derniers jours. */
+  readonly retoursSemaine: number;
+  readonly retoursEnRevue: number;
+  readonly destinations: number;
+  readonly destinationsSuspendues: number;
 }
 
 /** Réponse d'une création de Projet ou d'une régénération de la clé secrète. */

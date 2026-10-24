@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/co
 import {
   schemaModificationProjet,
   schemaNouveauProjet,
+  type ActiviteProjetVu,
   type ProjetAvecCleSecrete,
   type ProjetVu,
 } from '@nudge/shared';
@@ -17,6 +18,12 @@ export class ProjetsController {
   @Get()
   lister(): Promise<ProjetVu[]> {
     return this.projets.list();
+  }
+
+  /** Déclarée avant `:id`, qu'elle masquerait sinon. */
+  @Get('activite')
+  activite(): Promise<ActiviteProjetVu[]> {
+    return this.projets.activite();
   }
 
   /** 201 avec la clé secrète, lisible cette seule fois. */

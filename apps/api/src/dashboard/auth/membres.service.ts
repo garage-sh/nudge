@@ -1,7 +1,7 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { membres, type Db } from '@nudge/database';
-import type { MembreVu } from '@nudge/shared';
-import { eq, sql } from 'drizzle-orm';
+import type { MembreListeVu, MembreVu } from '@nudge/shared';
+import { asc, eq, sql } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
 import { hashMotDePasse, verifyMotDePasse } from './mot-de-passe.js';
 
@@ -19,6 +19,18 @@ export class MembresService {
   private empreinteLeurre: Promise<string> | null = null;
 
   constructor(@Inject(DB) private readonly db: Db) {}
+
+  /** Tous les Membres de l'Instance, du plus ancien au plus récent ; jamais d'empreinte. */
+  async lister(): Promise<MembreListeVu[]> {
+    const lignes = await this.db
+      .select({ id: membres.id, email: membres.email, createdAt: membres.createdAt })
+      .from(membres)
+      .orderBy(asc(membres.createdAt), asc(membres.id));
+    return lignes.map(({ createdAt, ...membre }) => ({
+      ...membre,
+      depuis: createdAt.toISOString(),
+    }));
+  }
 
   async setupRequired(): Promise<boolean> {
     const [premier] = await this.db.select({ id: membres.id }).from(membres).limit(1);

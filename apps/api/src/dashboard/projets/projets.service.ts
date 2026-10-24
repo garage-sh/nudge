@@ -1,8 +1,15 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { generateCleSecrete, generateClePublique, hashCleSecrete } from '@nudge/core';
-import { createProjet, projets, type Db, type Projet } from '@nudge/database';
-import type { ProjetAvecCleSecrete, ProjetVu } from '@nudge/shared';
-import { asc, eq } from 'drizzle-orm';
+import {
+  createProjet,
+  destinations,
+  projets,
+  retours,
+  type Db,
+  type Projet,
+} from '@nudge/database';
+import type { ActiviteProjetVu, ProjetAvecCleSecrete, ProjetVu } from '@nudge/shared';
+import { asc, eq, sql, type SQL } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
 
@@ -30,6 +37,32 @@ export class ProjetsService {
   async list(): Promise<ProjetVu[]> {
     const lignes = await this.db.select().from(projets).orderBy(asc(projets.createdAt));
     return lignes.map(toProjetVu);
+  }
+
+  /**
+   * L'activité de chaque Projet, en une requête : Retours des sept derniers jours et
+   * En revue, Destinations et Suspendues. Tous les Projets y sont, même sans activité.
+   */
+  activite(): Promise<ActiviteProjetVu[]> {
+    const compte = (requete: SQL) => sql<number>`(${requete})::int`;
+    return this.db
+      .select({
+        projetId: projets.id,
+        retoursSemaine: compte(
+          sql`select count(*) from ${retours} where ${retours.projetId} = ${projets.id} and ${retours.createdAt} > now() - interval '7 days'`,
+        ),
+        retoursEnRevue: compte(
+          sql`select count(*) from ${retours} where ${retours.projetId} = ${projets.id} and ${retours.etat} = 'en_revue'`,
+        ),
+        destinations: compte(
+          sql`select count(*) from ${destinations} where ${destinations.projetId} = ${projets.id}`,
+        ),
+        destinationsSuspendues: compte(
+          sql`select count(*) from ${destinations} where ${destinations.projetId} = ${projets.id} and ${destinations.etat} = 'suspendue'`,
+        ),
+      })
+      .from(projets)
+      .orderBy(asc(projets.createdAt));
   }
 
   async read(id: string): Promise<ProjetVu> {

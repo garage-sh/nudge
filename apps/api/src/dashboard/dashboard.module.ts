@@ -11,6 +11,7 @@ import { AlertesService } from './alertes/alertes.service.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
+import { MembresController } from './auth/membres.controller.js';
 import { MembresService } from './auth/membres.service.js';
 import type { SessionCookieOptions } from './auth/session-cookie.js';
 import { SessionController } from './auth/session.controller.js';
@@ -44,6 +45,7 @@ const CONTROLLERS = [
   SetupController,
   SessionController,
   InvitationsController,
+  MembresController,
   ProjetsController,
   RetoursController,
   EnvoisController,
