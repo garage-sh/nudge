@@ -76,6 +76,32 @@ export const ACTIONS_REVUE = ['valider', 'rejeter', 'rehabiliter'] as const;
 export type ActionRevue = (typeof ACTIONS_REVUE)[number];
 
 /**
+ * État de départ exigé et état d'arrivée de chaque transition de revue. Valider et
+ * réhabiliter rendent le Retour Trié : le Dispatch le fait ensuite passer Dispatché
+ * (ou le laisse Trié si aucun Filtre ne le retient), comme un Retour fraîchement trié.
+ * Réhabiliter ne s'applique qu'à un Retour Écarté comme Indésirable, pas à un Retour
+ * rejeté après revue (`horsManipulation` : son Verdict ne doit pas être Manipulation).
+ */
+export const TRANSITIONS_REVUE = {
+  valider: { depuis: 'en_revue', vers: 'trie', horsManipulation: false },
+  rejeter: { depuis: 'en_revue', vers: 'ecarte', horsManipulation: false },
+  rehabiliter: { depuis: 'ecarte', vers: 'trie', horsManipulation: true },
+} as const satisfies Record<
+  ActionRevue,
+  { depuis: EtatRetour; vers: EtatRetour; horsManipulation: boolean }
+>;
+
+/** Les actions de revue qu'un Membre peut déclencher sur un Retour, selon son état et son Verdict. */
+export const actionsDeRevuePermises = (
+  etat: EtatRetour,
+  verdict: { readonly manipulation: boolean } | null,
+): ActionRevue[] =>
+  ACTIONS_REVUE.filter((action) => {
+    const { depuis, horsManipulation } = TRANSITIONS_REVUE[action];
+    return etat === depuis && (!horsManipulation || verdict?.manipulation === false);
+  });
+
+/**
  * Classe d'un échec d'Envoi (littéraux de la spec) :
  * - `transient` : 5xx, 429, timeout — retenté, compte pour la Suspension ;
  * - `auth` : identifiants refusés — Suspension immédiate, sans retry ;

@@ -1,4 +1,4 @@
-import type { ActionRevue, EtatRetour } from '@nudge/shared';
+import type { EtatRetour } from '@nudge/shared';
 import type { Verdict } from './triage.js';
 
 /**
@@ -20,20 +20,8 @@ export function etatApresTriage(
   return 'trie';
 }
 
-export { ACTIONS_REVUE, type ActionRevue } from '@nudge/shared';
-
-/**
- * État de départ exigé et état d'arrivée de chaque transition de revue. Valider et
- * réhabiliter rendent le Retour Trié : le Dispatch le fait ensuite passer Dispatché
- * (ou le laisse Trié si aucun Filtre ne le retient), comme un Retour fraîchement trié.
- * Réhabiliter ne s'applique qu'à un Retour Écarté comme Indésirable, pas à un
- * Retour rejeté après revue.
- */
-export const TRANSITIONS_REVUE = {
-  valider: { depuis: 'en_revue', vers: 'trie' },
-  rejeter: { depuis: 'en_revue', vers: 'ecarte' },
-  rehabiliter: { depuis: 'ecarte', vers: 'trie' },
-} as const satisfies Record<ActionRevue, { depuis: EtatRetour; vers: EtatRetour }>;
+/** Règle de revue partagée avec le dashboard (`actionsDeRevuePermises`). */
+export { ACTIONS_REVUE, TRANSITIONS_REVUE, type ActionRevue } from '@nudge/shared';
 
 export type ResultatRevue =
   | { readonly statut: 'applique'; readonly etat: EtatRetour }

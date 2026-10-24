@@ -14,9 +14,9 @@ export async function revoirRetour(
   retourId: string,
   action: ActionRevue,
 ): Promise<ResultatRevue> {
-  const { depuis, vers } = TRANSITIONS_REVUE[action];
+  const { depuis, vers, horsManipulation } = TRANSITIONS_REVUE[action];
   const conditions = [eq(retours.id, retourId), eq(retours.etat, depuis)];
-  if (action === 'rehabiliter') {
+  if (horsManipulation) {
     // Écarté comme Indésirable seulement : un Retour suspect de Manipulation a été rejeté.
     conditions.push(
       exists(

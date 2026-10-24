@@ -1,4 +1,5 @@
 import {
+  actionsDeRevuePermises,
   estEnvoiRejouable,
   estRetourRedispatchable,
   GRAVITES,
@@ -69,7 +70,7 @@ export function Retour() {
       {detail.typeDeclare ? (
         <p className="discret">Type déclaré par l’Auteur : {LIBELLES_TYPE[detail.typeDeclare]}</p>
       ) : null}
-      {actionsDeRevue(detail).length > 0 ? (
+      {actionsDeRevuePermises(detail.etat, detail.verdict).length > 0 ? (
         <Section id="revue" titre="Revue">
           <Revue retour={detail} apresAction={suivre} />
         </Section>
@@ -104,20 +105,11 @@ export function Retour() {
 /** Durée pendant laquelle le Retour est relu après une action du Membre. */
 const SUIVI_APRES_ACTION_MS = 15_000;
 
-/** Les actions de revue possibles sur ce Retour (l'api fait foi, et refuse les autres). */
-function actionsDeRevue(retour: RetourDetailVu): ActionRevue[] {
-  if (retour.etat === 'en_revue') return ['valider', 'rejeter'];
-  // Seul un Retour Écarté comme Indésirable se réhabilite, pas un Retour rejeté après revue.
-  if (retour.etat === 'ecarte' && retour.verdict?.indesirable && !retour.verdict.manipulation) {
-    return ['rehabiliter'];
-  }
-  return [];
-}
-
 function Revue({ retour, apresAction }: { retour: RetourDetailVu; apresAction: () => void }) {
   const revue = useRevue(retour.id);
   const agir = (action: ActionRevue) => revue.mutate(action, { onSuccess: apresAction });
-  const actions = actionsDeRevue(retour);
+  // L'api fait foi, et refuse les autres actions.
+  const actions = actionsDeRevuePermises(retour.etat, retour.verdict);
   return (
     <>
       {retour.etat === 'en_revue' ? (
