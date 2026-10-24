@@ -14,6 +14,8 @@ import { SessionController } from './auth/session.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
+import { InstanceController } from './instance/instance.controller.js';
+import { JugeInstanceService } from './instance/juge-instance.service.js';
 import { ProjetsController } from './projets/projets.controller.js';
 import { ProjetsService } from './projets/projets.service.js';
 import { RetoursController } from './retours/retours.controller.js';
@@ -32,6 +34,7 @@ const CONTROLLERS = [
   InvitationsController,
   ProjetsController,
   RetoursController,
+  InstanceController,
 ];
 
 /**
@@ -53,6 +56,7 @@ export class DashboardModule implements NestModule {
         ProjetsService,
         RetoursService,
         RevueService,
+        JugeInstanceService,
         SessionGuard,
         AuthThrottleGuard,
       ],

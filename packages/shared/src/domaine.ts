@@ -31,3 +31,22 @@ export type StatutEnvoi = (typeof STATUTS_ENVOI)[number];
  */
 export const FOURNISSEURS_JUGE = ['typesafe', 'openrouter', 'auto_heberge'] as const;
 export type FournisseurJuge = (typeof FOURNISSEURS_JUGE)[number];
+
+/**
+ * Modèle demandé quand l'Instance n'en choisit pas : l'alias du dernier Jev chez
+ * TypeSafe, pplx-decider figé chez OpenRouter (les seuils du Triage ne bougent pas avec
+ * un alias), et le modèle de Decider for Mac, serveur local publié par Perplexity.
+ */
+export const MODELES_JUGE_PAR_DEFAUT: Readonly<Record<FournisseurJuge, string>> = {
+  typesafe: 'jev-latest',
+  openrouter: 'perplexity/pplx-decider-v1.2',
+  auto_heberge: 'pplx-decider-flash-v1.2',
+};
+
+/** TypeSafe et OpenRouter exigent une clé API ; un serveur auto-hébergé peut s'en passer. */
+export const exigeCleApi = (fournisseur: FournisseurJuge): boolean =>
+  fournisseur !== 'auto_heberge';
+
+/** Un Juge auto-hébergé n'a pas d'adresse par défaut. */
+export const exigeUrlBase = (fournisseur: FournisseurJuge): boolean =>
+  fournisseur === 'auto_heberge';

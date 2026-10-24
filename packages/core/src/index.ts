@@ -4,3 +4,4 @@ export * from './destination.js';
 export * from './filtre.js';
 export * from './queues.js';
 export * from './triage.js';
+export * from './chiffrement.js';

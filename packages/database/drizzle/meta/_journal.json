@@ -22,6 +22,13 @@
       "when": 1792797640308,
       "tag": "0002_boite_de_reception",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792799742412,
+      "tag": "0003_parametres_instance",
+      "breakpoints": true
     }
   ]
 }

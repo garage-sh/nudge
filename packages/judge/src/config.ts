@@ -1,4 +1,4 @@
-import { FOURNISSEURS_JUGE, type FournisseurJuge } from '@nudge/shared';
+import { exigeCleApi, exigeUrlBase, FOURNISSEURS_JUGE, type FournisseurJuge } from '@nudge/shared';
 import { jugeAutoHeberge } from './auto-heberge.js';
 import { jugeOpenRouter } from './openrouter.js';
 import type { Juge } from './port.js';
@@ -13,14 +13,6 @@ export interface ConfigJuge {
   /** Requise pour un serveur auto-hébergé ; remplace l'hôte du fournisseur sinon (proxy). */
   readonly urlBase: string | null;
 }
-
-/** Le fournisseur exige-t-il une clé API ? */
-export const exigeCleApi = (fournisseur: FournisseurJuge): boolean =>
-  fournisseur !== 'auto_heberge';
-
-/** Le fournisseur exige-t-il une URL de base ? */
-export const exigeUrlBase = (fournisseur: FournisseurJuge): boolean =>
-  fournisseur === 'auto_heberge';
 
 /** L'adaptateur du fournisseur choisi. Lève si la configuration est incomplète. */
 export function creerJuge(

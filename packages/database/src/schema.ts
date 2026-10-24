@@ -3,6 +3,7 @@ import {
   CONFIANCES_AUTEUR,
   ETATS_DESTINATION,
   ETATS_RETOUR,
+  FOURNISSEURS_JUGE,
   GRAVITES,
   SOURCES,
   STATUTS_ENVOI,
@@ -10,14 +11,16 @@ import {
   type Auteur,
   type Contexte,
 } from '@nudge/shared';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -31,6 +34,7 @@ export const etatRetourEnum = pgEnum('etat_retour', ETATS_RETOUR);
 export const confianceAuteurEnum = pgEnum('confiance_auteur', CONFIANCES_AUTEUR);
 export const etatDestinationEnum = pgEnum('etat_destination', ETATS_DESTINATION);
 export const statutEnvoiEnum = pgEnum('statut_envoi', STATUTS_ENVOI);
+export const fournisseurJugeEnum = pgEnum('fournisseur_juge', FOURNISSEURS_JUGE);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -159,6 +163,27 @@ export const envois = pgTable(
   },
   // Idempotence : un Envoi par couple (Retour, Destination).
   (t) => [unique('envois_retour_destination_uniq').on(t.retourId, t.destinationId)],
+);
+
+/**
+ * Paramètres de l'Instance (D6) : une seule ligne, `id = 1`, absente tant que rien
+ * n'est configuré. Le Juge choisi ici prime sur les variables `NUDGE_JUDGE_*`. Les
+ * paramètres d'Instance à venir (Destination d'alerte, durée de rétention)
+ * s'ajoutent en colonnes de cette même ligne.
+ */
+export const parametresInstance = pgTable(
+  'parametres_instance',
+  {
+    id: smallint('id').primaryKey().default(1),
+    /** `null` : pas de Juge choisi pour l'Instance (repli sur l'environnement). */
+    jugeFournisseur: fournisseurJugeEnum('juge_fournisseur'),
+    jugeModele: text('juge_modele'),
+    jugeUrlBase: text('juge_url_base'),
+    /** Clé API du Juge, chiffrée par la clé d'Instance (`CONTEXTE_CLE_JUGE`). */
+    jugeCleChiffree: text('juge_cle_chiffree'),
+    ...timestamps,
+  },
+  (t) => [check('parametres_instance_ligne_unique', sql`${t.id} = 1`)],
 );
 
 export const projetsRelations = relations(projets, ({ many }) => ({

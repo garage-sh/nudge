@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import {
   ETATS_RETOUR,
+  exigeUrlBase,
+  FOURNISSEURS_JUGE,
   GRAVITES,
   SOURCES,
   TYPES_RETOUR,
   type ConfianceAuteur,
   type EtatDestination,
   type EtatRetour,
+  type FournisseurJuge,
   type Gravite,
   type Source,
   type StatutEnvoi,
@@ -32,6 +35,9 @@ export const LIMITES_DASHBOARD = {
   retoursParPageMax: 100,
   /** Caractères du texte d'un Retour repris dans la boîte de réception. */
   apercuRetour: 280,
+  modeleJuge: 200,
+  urlJuge: 2048,
+  cleJuge: 1000,
 } as const;
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(LIMITES_DASHBOARD.email));
@@ -116,6 +122,66 @@ export const schemaModificationProjet = z.strictObject({
   originesAutorisees: originesAutorisees.optional(),
 });
 export type ModificationProjet = z.input<typeof schemaModificationProjet>;
+
+/** Texte facultatif : une chaîne vide vaut « pas de valeur ». */
+const facultatif = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((valeur) => (valeur ? valeur : null));
+
+/** URL de base d'un Juge : http(s), sans requête ni identifiants. */
+const urlJuge = facultatif(LIMITES_DASHBOARD.urlJuge).refine(
+  (valeur) => {
+    if (valeur === null) return true;
+    try {
+      const url = new URL(valeur);
+      return (
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        !url.search &&
+        !url.hash &&
+        !url.username &&
+        !url.password
+      );
+    } catch {
+      return false;
+    }
+  },
+  { message: 'URL http(s) attendue, sans paramètres ni identifiants' },
+);
+
+/**
+ * Choix du Juge de l'Instance. `fournisseur: null` : aucun Juge choisi (repli sur
+ * les variables `NUDGE_JUDGE_*`, sinon mode dégradé). `cleApi` absente : la clé
+ * enregistrée est gardée si le fournisseur ne change pas ; `null` l'efface.
+ */
+export const schemaJugeInstance = z
+  .strictObject({
+    fournisseur: z.enum(FOURNISSEURS_JUGE).nullable(),
+    modele: facultatif(LIMITES_DASHBOARD.modeleJuge).optional(),
+    urlBase: urlJuge.optional(),
+    cleApi: facultatif(LIMITES_DASHBOARD.cleJuge).optional(),
+  })
+  .superRefine((juge, ctx) => {
+    if (juge.fournisseur && exigeUrlBase(juge.fournisseur) && !juge.urlBase) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['urlBase'],
+        message: 'URL du serveur requise pour un Juge auto-hébergé',
+      });
+    }
+  });
+export type JugeInstance = z.input<typeof schemaJugeInstance>;
+
+/** Le Juge de l'Instance tel que le dashboard le lit : la clé n'est jamais rendue. */
+export interface JugeInstanceVu {
+  readonly fournisseur: FournisseurJuge | null;
+  readonly modele: string | null;
+  readonly urlBase: string | null;
+  readonly cleConfiguree: boolean;
+}
 
 /** Corps d'erreur de l'api : un code stable, et le détail des champs refusés le cas échéant. */
 export interface ApiErrorBody {

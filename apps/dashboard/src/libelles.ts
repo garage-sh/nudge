@@ -2,6 +2,7 @@ import type {
   ConfianceAuteur,
   EtatDestination,
   EtatRetour,
+  FournisseurJuge,
   Gravite,
   Source,
   StatutEnvoi,
@@ -58,3 +59,9 @@ export const LIBELLES_ETAT_DESTINATION: Record<EtatDestination, string> = {
 const FORMAT_DATE = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 
 export const formatDate = (iso: string): string => FORMAT_DATE.format(new Date(iso));
+
+export const LIBELLES_FOURNISSEUR_JUGE: Record<FournisseurJuge, string> = {
+  typesafe: 'TypeSafe (Jev)',
+  openrouter: 'OpenRouter (pplx-decider)',
+  auto_heberge: 'pplx-decider auto-hébergé (API Decisions)',
+};

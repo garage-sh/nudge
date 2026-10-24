@@ -1,12 +1,7 @@
+import { MODELES_JUGE_PAR_DEFAUT } from '@nudge/shared';
 import { jugeDecisions } from './decisions-http.js';
 import type { Juge } from './port.js';
 import { joindre, type OptionsAdaptateur } from './url.js';
-
-/**
- * Modèle servi par Decider for Mac, le serveur local publié par Perplexity
- * (https://docs.perplexity.ai/docs/decisions/decider-for-mac).
- */
-export const MODELE_AUTO_HEBERGE = 'pplx-decider-flash-v1.2';
 
 /**
  * pplx-decider auto-hébergé : tout serveur exposant l'API Decisions de Perplexity,
@@ -20,7 +15,7 @@ export function jugeAutoHeberge(
   return jugeDecisions({
     fournisseur: 'Serveur Decisions',
     url: joindre(options.urlBase, '/v1/decisions'),
-    modele: options.modele ?? MODELE_AUTO_HEBERGE,
+    modele: options.modele ?? MODELES_JUGE_PAR_DEFAUT.auto_heberge,
     cleApi: options.cleApi ?? null,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });

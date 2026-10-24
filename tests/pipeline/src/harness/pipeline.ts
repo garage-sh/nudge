@@ -1,16 +1,18 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createApi, RevueService } from '@nudge/api';
 import type { ActionRevue, DestinationConfiguree, ResultatRevue, SeuilsTriage } from '@nudge/core';
 import {
   connectDb,
   createDestination,
   createProjet,
+  parametresInstance,
   readRetour,
   retours,
   runMigrations,
   type Projet,
   type RetourLu,
 } from '@nudge/database';
+import type { ConfigJuge } from '@nudge/judge';
 import type { RetourEntrant } from '@nudge/shared';
 import { createWorker, type OptionsBalayage } from '@nudge/worker';
 import { Client } from 'pg';
@@ -20,8 +22,14 @@ import { FakeDestination } from './fake-destination.js';
 import { FakeJuge } from './fake-juge.js';
 
 export interface PipelineOptions {
-  /** `null` : worker en mode dégradé, sans Juge. Par défaut, un `FakeJuge`. */
-  readonly juge?: FakeJuge | null;
+  /**
+   * `null` : worker en mode dégradé, sans Juge. `'instance'` : le Juge choisi pour
+   * l'Instance (paramètres en base, puis `jugeParDefaut`), comme en production.
+   * Par défaut, un `FakeJuge`.
+   */
+  readonly juge?: FakeJuge | null | 'instance';
+  /** Avec `juge: 'instance'` : le Juge des variables `NUDGE_JUDGE_*`. */
+  readonly jugeParDefaut?: ConfigJuge;
   /** Seuils de la politique de Verdict du worker ; ceux par défaut sinon. */
   readonly seuilsTriage?: SeuilsTriage;
   /** Délai de réponse du Juge avant abandon et retry ; celui du worker sinon. */
@@ -64,6 +72,8 @@ export interface Pipeline {
    * déclenchera (#9) : par le `RevueService` de l'api.
    */
   revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue>;
+  /** La ligne des paramètres d'Instance telle qu'en base (secrets chiffrés), ou `null`. */
+  parametresInstance(): Promise<typeof parametresInstance.$inferSelect | null>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
   readRetour(id: string): Promise<RetourLu | null>;
   /** Attend que le Retour satisfasse `condition` (5 s par défaut) et le rend. */
@@ -118,6 +128,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   await runMigrations(databaseUrl.toString());
 
   const juge = options.juge === undefined ? new FakeJuge() : options.juge;
+  const fakeJuge = juge === 'instance' ? null : juge;
   const fakes = new Map<string, FakeDestination>();
   const fakeFor = (destinationId: string) => {
     let fake = fakes.get(destinationId);
@@ -132,13 +143,14 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     databaseUrl: databaseUrl.toString(),
     redisUrl,
     queuePrefix: `nudge-test-${suffixe}`,
+    cleChiffrement: randomBytes(32).toString('base64'),
     // Retries rapides : les tests d'échecs transitoires restent courts.
     retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
   };
   const worker = await createWorker({
     ...infra,
-    juge,
+    ...(juge === 'instance' ? { jugeParDefaut: options.jugeParDefaut ?? null } : { juge }),
     ...(options.seuilsTriage ? { seuilsTriage: options.seuilsTriage } : {}),
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
@@ -152,8 +164,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const pipeline: Pipeline = {
     url,
     get juge() {
-      if (!juge) throw new Error('Ce pipeline tourne sans Juge');
-      return juge;
+      if (!fakeJuge) throw new Error('Ce pipeline tourne sans FakeJuge');
+      return fakeJuge;
     },
     createProjet: (donnees) => createProjet(db, donnees),
     async createDestination(projetId, donnees = {}) {
@@ -191,6 +203,10 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         body: JSON.stringify(corps),
       }),
     revoir: (retourId, action) => api.get(RevueService).revoir(retourId, action),
+    async parametresInstance() {
+      const [ligne] = await db.select().from(parametresInstance);
+      return ligne ?? null;
+    },
     readRetour: (id) => readRetour(db, id),
     async waitForRetour(id, condition, delaiMs = 5000) {
       const limite = Date.now() + delaiMs;

@@ -1,9 +1,15 @@
 import { Inject, Module, type DynamicModule, type OnApplicationShutdown } from '@nestjs/common';
-import { DEFAULT_QUEUE_PREFIX, jobOptions, TRIAGE_QUEUE, type RetryPolicy } from '@nudge/core';
+import {
+  chiffreurDepuisCle,
+  DEFAULT_QUEUE_PREFIX,
+  jobOptions,
+  TRIAGE_QUEUE,
+  type RetryPolicy,
+} from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { DB, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import { CHIFFREUR, DB, TRIAGE_QUEUE_TOKEN } from './tokens.js';
 
 export interface InfraOptions {
   readonly databaseUrl: string;
@@ -12,6 +18,8 @@ export interface InfraOptions {
   readonly queuePrefix?: string;
   /** Retry des jobs de triage ; les tests le raccourcissent. */
   readonly retryPolicy?: RetryPolicy;
+  /** Clé d'Instance (`NUDGE_ENCRYPTION_KEY`, 32 octets en base64) : chiffre les secrets stockés. */
+  readonly cleChiffrement: string;
 }
 
 const DB_CONNECTION = Symbol('DB_CONNECTION');
@@ -32,6 +40,7 @@ export class InfraModule implements OnApplicationShutdown {
       providers: [
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
+        { provide: CHIFFREUR, useFactory: () => chiffreurDepuisCle(options.cleChiffrement) },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
@@ -47,7 +56,7 @@ export class InfraModule implements OnApplicationShutdown {
           inject: [REDIS],
         },
       ],
-      exports: [DB, TRIAGE_QUEUE_TOKEN],
+      exports: [DB, TRIAGE_QUEUE_TOKEN, CHIFFREUR],
     };
   }
 

@@ -19,7 +19,7 @@ export class ApiError extends Error {
 export const isSessionLost = (erreur: unknown): boolean =>
   erreur instanceof ApiError && erreur.status === 401;
 
-type Methode = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Methode = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /**
  * Appel à l'API du dashboard (`/api/…`, même origine : le cookie de session
@@ -51,6 +51,7 @@ export async function apiFetch<T>(methode: Methode, chemin: string, corps?: unkn
 export const api = {
   get: <T>(chemin: string) => apiFetch<T>('GET', chemin),
   post: <T>(chemin: string, corps?: unknown) => apiFetch<T>('POST', chemin, corps),
+  put: <T>(chemin: string, corps?: unknown) => apiFetch<T>('PUT', chemin, corps),
   patch: <T>(chemin: string, corps?: unknown) => apiFetch<T>('PATCH', chemin, corps),
   delete: <T>(chemin: string) => apiFetch<T>('DELETE', chemin),
 };

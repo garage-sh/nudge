@@ -1,6 +1,6 @@
 import type { LogLevel } from '@nestjs/common';
 import type { DestinationAdapterResolver, RetryPolicy, SeuilsTriage } from '@nudge/core';
-import type { Juge } from '@nudge/judge';
+import type { ConfigJuge, Juge } from '@nudge/judge';
 
 export interface WorkerOptions {
   readonly databaseUrl: string;
@@ -9,8 +9,15 @@ export interface WorkerOptions {
   readonly queuePrefix?: string;
   /** Retry des jobs de dispatch ; les tests le raccourcissent. */
   readonly retryPolicy?: RetryPolicy;
-  /** `null` : mode dégradé sans Juge. */
-  readonly juge: Juge | null;
+  /** Clé d'Instance (`NUDGE_ENCRYPTION_KEY`, 32 octets en base64) : déchiffre la clé du Juge. */
+  readonly cleChiffrement: string;
+  /**
+   * Juge fixe, qui court-circuite celui de l'Instance (tests) ; `null` : mode dégradé.
+   * Absent : le Juge choisi pour l'Instance, à défaut `jugeParDefaut`.
+   */
+  readonly juge?: Juge | null;
+  /** Juge des variables `NUDGE_JUDGE_*`, quand l'Instance n'en a pas choisi. */
+  readonly jugeParDefaut?: ConfigJuge | null;
   /** Délai au-delà duquel une requête au Juge est abandonnée et retentée (30 s par défaut). */
   readonly delaiJugeMs?: number;
   /** Seuils de la politique de Verdict ; `SEUILS_TRIAGE_PAR_DEFAUT` à défaut. */

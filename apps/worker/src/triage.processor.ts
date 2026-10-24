@@ -14,7 +14,8 @@ import { ErreurJugeTransitoire, type Juge, type RequeteJuge } from '@nudge/judge
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
-import { DB, JUGE, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
+import { JugeInstance } from './juge-instance.js';
+import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
 
 const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
 
@@ -28,7 +29,7 @@ export class TriageProcessor {
 
   constructor(
     @Inject(DB) private readonly db: Db,
-    @Inject(JUGE) private readonly juge: Juge | null,
+    private readonly jugeInstance: JugeInstance,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
@@ -60,8 +61,9 @@ export class TriageProcessor {
     projet: { description: string | null };
   }): Promise<void> {
     // Une erreur du Juge remonte : BullMQ retente avec backoff, le Retour reste Reçu.
-    const reponses = this.juge
-      ? await this.jugerAvecDelai(this.juge, {
+    const juge = await this.jugeInstance.courant();
+    const reponses = juge
+      ? await this.jugerAvecDelai(juge, {
           instructions: TRIAGE_INSTRUCTIONS,
           state: buildTriageState({
             texte: retour.texte,

@@ -6,4 +6,5 @@ export const NAVIGATION: readonly { readonly chemin: string; readonly libelle: s
   { chemin: '/retours', libelle: 'Boîte de réception' },
   { chemin: '/projets', libelle: 'Projets' },
   { chemin: '/membres', libelle: 'Membres' },
+  { chemin: '/parametres', libelle: 'Paramètres' },
 ];

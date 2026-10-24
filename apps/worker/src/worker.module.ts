@@ -22,12 +22,12 @@ import { BalayageProcessor } from './balayage.processor.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import {
   DB,
-  JUGE,
   OPTIONS,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
   TRIAGE_QUEUE_TOKEN,
 } from './tokens.js';
+import { JugeInstance } from './juge-instance.js';
 import { BALAYAGE_PAR_DEFAUT, type WorkerOptions } from './options.js';
 import { TriageProcessor } from './triage.processor.js';
 
@@ -57,7 +57,6 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       module: WorkerModule,
       providers: [
         { provide: OPTIONS, useValue: options },
-        { provide: JUGE, useValue: options.juge },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
@@ -95,6 +94,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
             }),
           inject: [REDIS],
         },
+        JugeInstance,
         TriageProcessor,
         DispatchProcessor,
         BalayageProcessor,
