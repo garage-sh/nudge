@@ -91,9 +91,21 @@ export function formatJour(iso: string, maintenant = new Date()): string {
 }
 
 export const LIBELLES_FOURNISSEUR_JUGE: Record<FournisseurJuge, string> = {
-  typesafe: 'TypeSafe (Jev)',
-  openrouter: 'OpenRouter (pplx-decider)',
-  auto_heberge: 'pplx-decider auto-hébergé (API Decisions)',
+  typesafe: 'TypeSafe',
+  openrouter: 'OpenRouter',
+  auto_heberge: 'Votre serveur (API Decisions)',
+};
+
+/**
+ * Ce qu'est chaque fournisseur de Juge : où tourne le modèle de décision, et lequel
+ * s'y choisit. Le modèle n'est jamais le nom du fournisseur.
+ */
+export const DESCRIPTIONS_FOURNISSEUR_JUGE: Record<FournisseurJuge, string> = {
+  typesafe: 'Les modèles de décision de TypeSafe, avec votre clé API TypeSafe.',
+  openrouter:
+    'Les modèles de décision proposés par OpenRouter, par son API Decisions, avec votre clé API OpenRouter.',
+  auto_heberge:
+    'Le modèle de décision de votre choix, servi par votre propre serveur : tout serveur qui expose l’API Decisions convient. La clé est facultative.',
 };
 
 /** Classe d'un échec d'Envoi, telle qu'un Membre la lit. */

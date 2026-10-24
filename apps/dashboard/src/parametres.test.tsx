@@ -36,6 +36,26 @@ describe('Paramètres de l’Instance : Juge', () => {
     expect(screen.queryByLabelText('Clé API')).toBeNull();
   });
 
+  it('présente des fournisseurs, pas un modèle : le modèle se choisit chez chacun', async () => {
+    fakeApi({
+      'GET /api/session': CONNECTE,
+      'GET /api/instance/retention': { status: 200, body: { jours: null } },
+      'GET /api/instance/alerte': SANS_DESTINATION_ALERTE,
+      'GET /api/instance/juge': { status: 200, body: SANS_JUGE },
+    });
+    renderDashboard('/parametres');
+
+    const fournisseur = await screen.findByLabelText('Fournisseur');
+    expect(
+      within(fournisseur)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Aucun (mode dégradé)', 'TypeSafe', 'OpenRouter', 'Votre serveur (API Decisions)']);
+    await userEvent.selectOptions(fournisseur, 'auto_heberge');
+    expect(screen.getByText(/modèle de décision de votre choix/)).toBeTruthy();
+    expect(screen.getByLabelText('Modèle')).toBeTruthy();
+  });
+
   it('choisit OpenRouter avec une clé, envoyée une fois et jamais réaffichée', async () => {
     const api = fakeApi({
       'GET /api/session': CONNECTE,

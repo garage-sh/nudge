@@ -33,7 +33,7 @@ import {
   PageHeader,
   StatutEnregistrement,
 } from '../layout/ui.js';
-import { LIBELLES_FOURNISSEUR_JUGE } from '../libelles.js';
+import { DESCRIPTIONS_FOURNISSEUR_JUGE, LIBELLES_FOURNISSEUR_JUGE } from '../libelles.js';
 import { ResultatTest, SecretsGeneres, type SecretsMontres } from './destinations/Destinations.js';
 import { FormulaireDestination } from './destinations/FormulaireDestination.js';
 import { FORMULAIRES_DESTINATION } from './destinations/types/index.js';
@@ -243,8 +243,10 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
     <form onSubmit={soumettre} onChange={() => choix.reset()} className="formulaire encadre">
       <h2>Juge</h2>
       <p className="aide">
-        Le modèle de décision qui trie les Retours. Sans Juge, nudge tourne en mode dégradé : le
-        Type déclaré est retenu, sans Gravité ni détection d’Indésirable.
+        Le modèle de décision qui trie les Retours : il répond aux questions du Triage par des
+        probabilités, là où un modèle de chat rédigerait du texte. Choisissez où il tourne, puis
+        lequel. Sans Juge, nudge tourne en mode dégradé : le Type déclaré est retenu, sans Gravité
+        ni détection d’Indésirable.
       </p>
       <div className="champ">
         <label htmlFor="fournisseur-juge">Fournisseur</label>
@@ -260,6 +262,7 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
             </option>
           ))}
         </select>
+        {fournisseur ? <p className="aide">{DESCRIPTIONS_FOURNISSEUR_JUGE[fournisseur]}</p> : null}
       </div>
       {fournisseur ? (
         <>
@@ -268,7 +271,7 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
             value={modele}
             placeholder={MODELES_JUGE_PAR_DEFAUT[fournisseur]}
             onChange={(e) => setModele(e.target.value)}
-            aide="Vide : le modèle par défaut."
+            aide={`Le nom du modèle chez ce fournisseur. Vide : ${MODELES_JUGE_PAR_DEFAUT[fournisseur]}.`}
           />
           <Field
             libelle={exigeUrlBase(fournisseur) ? 'URL du serveur' : 'URL de base (facultative)'}
@@ -276,11 +279,11 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
             type="url"
             required={exigeUrlBase(fournisseur)}
             value={urlBase}
-            placeholder={exigeUrlBase(fournisseur) ? 'http://decider:8080' : ''}
+            placeholder={exigeUrlBase(fournisseur) ? 'http://juge:8080' : ''}
             onChange={(e) => setUrlBase(e.target.value)}
             aide={
               exigeUrlBase(fournisseur)
-                ? 'Tout serveur de l’API Decisions : nudge appelle <URL>/v1/decisions.'
+                ? 'L’adresse de votre serveur : nudge y appelle <URL>/v1/decisions.'
                 : 'Seulement pour passer par un proxy ; vide : l’API du fournisseur.'
             }
           />
