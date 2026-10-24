@@ -42,7 +42,10 @@ describe('Destinations d’un Projet', () => {
 
     await userEvent.click(await screen.findByRole('link', { name: 'Destinations' }));
 
-    expect(await screen.findByRole('heading', { name: 'Destinations de Boutique' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Récepteur interne' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Destinations' }).getAttribute('aria-current')).toBe(
+      'page',
+    );
   });
 
   it('liste les Destinations avec leur type, leur état et leur Filtre', async () => {
@@ -53,7 +56,8 @@ describe('Destinations d’un Projet', () => {
     expect(recepteur.getByText('Webhook')).toBeTruthy();
     expect(recepteur.getByText('Active')).toBeTruthy();
     expect(recepteur.getByText('https://recepteur.test/nudge')).toBeTruthy();
-    expect(recepteur.getByText('Bug, Question · Gravité Majeure ou plus')).toBeTruthy();
+    expect(recepteur.getByText('Bug, Question')).toBeTruthy();
+    expect(recepteur.getByText('Majeure ou plus')).toBeTruthy();
   });
 
   it('annonce un Projet sans Destination', async () => {
@@ -423,7 +427,9 @@ describe('Destinations d’un Projet', () => {
     await userEvent.selectOptions(formulaire.getByLabelText('Gravité minimale'), '');
     await userEvent.click(formulaire.getByRole('button', { name: 'Enregistrer' }));
 
-    expect(await screen.findByText('Bug · toute Gravité')).toBeTruthy();
+    const modifiee = await carte('Récepteur interne');
+    expect(modifiee.getByText('Bug')).toBeTruthy();
+    expect(modifiee.getByText('toute Gravité')).toBeTruthy();
     expect(
       api.appels.find((a) => a.route === 'PATCH /api/destinations/destination-1')?.corps,
     ).toEqual({

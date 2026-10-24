@@ -76,16 +76,26 @@ export function Layout() {
 /** Les Projets, en accès direct : la page de chaque Projet mène à ses Destinations. */
 function NavigationProjets() {
   const projets = useProjets();
+  const { pathname } = useLocation();
   return (
     <nav className="nav" aria-label="Projets">
       <NavLink to="/projets" end className="nav-titre">
         Projets
       </NavLink>
-      {(projets.data ?? []).map((projet) => (
-        <NavLink key={projet.id} to={`/projets/${encodeURIComponent(projet.id)}`}>
-          {projet.nom}
-        </NavLink>
-      ))}
+      {(projets.data ?? []).map((projet) => {
+        const base = `/projets/${encodeURIComponent(projet.id)}`;
+        return (
+          <NavLink
+            key={projet.id}
+            to={`${base}/destinations`}
+            className={() =>
+              pathname === base || pathname.startsWith(`${base}/`) ? 'active' : undefined
+            }
+          >
+            {projet.nom}
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }

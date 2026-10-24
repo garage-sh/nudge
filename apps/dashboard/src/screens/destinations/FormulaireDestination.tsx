@@ -164,15 +164,17 @@ export function FormulaireDestination({
         </>
       )}
       <ErrorMessage erreur={erreur} />
-      <button type="submit" disabled={enCours}>
-        {libelleBouton}
-      </button>
-      {onAnnuler ? (
-        <button type="button" className="secondaire" onClick={onAnnuler}>
-          Annuler
+      <div className="actions">
+        <button type="submit" disabled={enCours}>
+          {libelleBouton}
         </button>
-      ) : null}
-      {actions}
+        {onAnnuler ? (
+          <button type="button" className="fantome" onClick={onAnnuler}>
+            Annuler
+          </button>
+        ) : null}
+        {actions}
+      </div>
     </form>
   );
 }

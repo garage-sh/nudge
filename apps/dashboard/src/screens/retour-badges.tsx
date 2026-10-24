@@ -31,13 +31,16 @@ export function JaugeGravite({
   gravite,
   grande = false,
   visible = false,
+  libelle: libelleVisible,
 }: {
   gravite: Gravite | null | undefined;
   grande?: boolean;
   visible?: boolean;
+  /** Le texte affiché à côté de la jauge, à la place du nom de la Gravité. */
+  libelle?: string;
 }) {
   const niveau = gravite ? GRAVITES.indexOf(gravite) + 1 : 0;
-  const libelle = gravite ? LIBELLES_GRAVITE[gravite] : 'Sans Gravité';
+  const libelle = libelleVisible ?? (gravite ? LIBELLES_GRAVITE[gravite] : 'Sans Gravité');
   return (
     <span className="porte-jauge">
       <span className={grande ? 'jauge grande' : 'jauge'} data-niveau={niveau} aria-hidden="true">
@@ -46,7 +49,7 @@ export function JaugeGravite({
         <span />
         <span />
       </span>
-      {visible ? (
+      {visible || libelleVisible ? (
         <span>{libelle}</span>
       ) : (
         <span className="visuellement-cache">{gravite ? `Gravité ${libelle}` : libelle}</span>

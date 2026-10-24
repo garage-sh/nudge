@@ -7,7 +7,7 @@ import {
   type ResultatTestDestination,
 } from '@nudge/shared';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import {
   useCreationDestination,
   useDestinations,
@@ -20,16 +20,14 @@ import { useProjet } from '../../api/projets.js';
 import {
   ConfirmAction,
   CopyableValue,
+  EmptyState,
   ErrorMessage,
   LienExterne,
   Loading,
 } from '../../layout/ui.js';
-import {
-  LIBELLES_CLASSE_ECHEC,
-  LIBELLES_ETAT_DESTINATION,
-  LIBELLES_GRAVITE,
-  LIBELLES_TYPE,
-} from '../../libelles.js';
+import { LIBELLES_CLASSE_ECHEC, LIBELLES_GRAVITE, LIBELLES_TYPE } from '../../libelles.js';
+import { EnteteProjet } from '../Projet.js';
+import { JaugeGravite, PastilleEtatDestination } from '../retour-badges.js';
 import { FormulaireDestination } from './FormulaireDestination.js';
 import { formulaireDe, FORMULAIRES_DESTINATION } from './types/index.js';
 
@@ -51,6 +49,7 @@ export function Destinations() {
   const projet = useProjet(projetId);
   const destinations = useDestinations(projetId);
   const [secretsMontres, setSecretsMontres] = useState<SecretsMontres | null>(null);
+  const [ajoutOuvert, setAjoutOuvert] = useState(false);
   if (projet.isPending || destinations.isPending) return <Loading />;
   if (projet.isError) return <ErrorMessage erreur={projet.error} />;
   if (destinations.isError) return <ErrorMessage erreur={destinations.error} />;
@@ -60,25 +59,48 @@ export function Destinations() {
         ? { type: destination.type, nom: destination.nom, secrets }
         : null,
     );
+  const aucune = destinations.data.length === 0;
+  // Sans Destination, le formulaire d'ajout est la seule chose à faire : il est ouvert.
+  const formulaireOuvert = ajoutOuvert || aucune;
 
   return (
     <section>
-      <p className="discret">
-        <Link to={`/projets/${encodeURIComponent(projetId)}`}>← {projet.data.nom}</Link>
-      </p>
-      <h1>Destinations de {projet.data.nom}</h1>
-      <p className="aide">
+      <EnteteProjet
+        projet={projet.data}
+        actions={
+          formulaireOuvert ? null : (
+            <button type="button" onClick={() => setAjoutOuvert(true)}>
+              Ajouter une Destination
+            </button>
+          )
+        }
+      />
+      <p className="aide intro-onglet">
         Chaque Retour Trié part vers toutes les Destinations dont le Filtre le retient.
       </p>
       {secretsMontres ? <SecretsGeneres {...secretsMontres} /> : null}
-      {destinations.data.length === 0 ? (
-        <p className="discret">Aucune Destination : les Retours Triés ne partent nulle part.</p>
+      {formulaireOuvert ? (
+        <Ajout
+          projetId={projetId}
+          montrer={montrer}
+          onAjoutee={() => setAjoutOuvert(false)}
+          onAnnuler={aucune ? undefined : () => setAjoutOuvert(false)}
+        />
+      ) : null}
+      {aucune ? (
+        <EmptyState titre="Aucune Destination : les Retours Triés ne partent nulle part.">
+          Ajoutez-en une ci-dessus : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord,
+          ou votre propre webhook.
+        </EmptyState>
       ) : (
-        destinations.data.map((destination) => (
-          <CarteDestination key={destination.id} destination={destination} montrer={montrer} />
-        ))
+        <ul className="liste destinations">
+          {destinations.data.map((destination) => (
+            <li key={destination.id}>
+              <LigneDestination destination={destination} montrer={montrer} />
+            </li>
+          ))}
+        </ul>
       )}
-      <Ajout projetId={projetId} montrer={montrer} />
     </section>
   );
 }
@@ -103,12 +125,24 @@ export function SecretsGeneres({ type, nom, secrets }: SecretsMontres) {
   );
 }
 
-const resumeFiltre = ({ types, graviteMinimale }: FiltreVu): string =>
-  `${types.map((type) => LIBELLES_TYPE[type]).join(', ')} · ${
-    graviteMinimale ? `Gravité ${LIBELLES_GRAVITE[graviteMinimale]} ou plus` : 'toute Gravité'
-  }`;
+/** Le Filtre, lisible : les Types retenus, et le seuil de Gravité en jauge. */
+function ResumeFiltre({ filtre: { types, graviteMinimale } }: { filtre: FiltreVu }) {
+  return (
+    <p className="destination-filtre">
+      <span>{types.map((type) => LIBELLES_TYPE[type]).join(', ')}</span>
+      {graviteMinimale ? (
+        <JaugeGravite
+          gravite={graviteMinimale}
+          libelle={`${LIBELLES_GRAVITE[graviteMinimale]} ou plus`}
+        />
+      ) : (
+        <span>toute Gravité</span>
+      )}
+    </p>
+  );
+}
 
-function CarteDestination({
+function LigneDestination({
   destination,
   montrer,
 }: {
@@ -150,16 +184,33 @@ function CarteDestination({
 
   const aDesSecretsGeneres = formulaire && Object.keys(formulaire.secretsGeneres).length > 0;
   return (
-    <article className="encadre">
-      <h2>{destination.nom}</h2>
-      <p>
-        <span>{formulaire?.libelle ?? destination.type}</span> ·{' '}
-        <span>{LIBELLES_ETAT_DESTINATION[destination.etat]}</span>
-      </p>
-      {formulaire ? <p className="lien-brut">{formulaire.resume(destination.config)}</p> : null}
-      <p className="discret">{resumeFiltre(destination.filtre)}</p>
+    <article className="destination" data-etat={destination.etat}>
+      <div className="destination-ligne">
+        <div className="destination-nom">
+          <h2>{destination.nom}</h2>
+          <p>
+            <span className="destination-type">{formulaire?.libelle ?? destination.type}</span>
+            {formulaire ? (
+              <span className="destination-cible">{formulaire.resume(destination.config)}</span>
+            ) : null}
+          </p>
+        </div>
+        <ResumeFiltre filtre={destination.filtre} />
+        <PastilleEtatDestination etat={destination.etat} />
+      </div>
+      {destination.etat === 'suspendue' ? (
+        <p className="probleme">
+          Ses Envois échouent de façon répétée : ils sont retenus et repartiront dès qu’elle
+          redeviendra joignable. Vérifiez sa configuration, puis testez-la.
+        </p>
+      ) : null}
       <div className="actions">
-        <button type="button" disabled={test.isPending} onClick={() => test.mutate()}>
+        <button
+          type="button"
+          className="secondaire"
+          disabled={test.isPending}
+          onClick={() => test.mutate()}
+        >
           Tester
         </button>
         {formulaire ? (
@@ -222,14 +273,21 @@ export function ResultatTest({
   );
 }
 
-function Ajout({ projetId, montrer }: { projetId: string; montrer: MontrerSecrets }) {
+function Ajout({
+  projetId,
+  montrer,
+  onAjoutee,
+  onAnnuler,
+}: {
+  projetId: string;
+  montrer: MontrerSecrets;
+  onAjoutee: () => void;
+  onAnnuler?: () => void;
+}) {
   const creation = useCreationDestination(projetId);
-  // Chaque ajout remonte le formulaire, qui repart vide.
-  const [ajouts, setAjouts] = useState(0);
   const type = TYPES_DESTINATION[0];
   return (
     <FormulaireDestination
-      key={ajouts}
       titre="Ajouter une Destination"
       initiales={{
         type,
@@ -241,11 +299,12 @@ function Ajout({ projetId, montrer }: { projetId: string; montrer: MontrerSecret
       libelleBouton="Ajouter"
       enCours={creation.isPending}
       erreur={creation.error}
+      onAnnuler={onAnnuler}
       onSubmit={(valeurs) =>
         creation.mutate(valeurs, {
           onSuccess: (resultat) => {
             montrer(resultat.destination, resultat.secretsGeneres);
-            setAjouts((n) => n + 1);
+            onAjoutee();
           },
         })
       }

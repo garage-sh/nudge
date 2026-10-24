@@ -1,13 +1,20 @@
 import type { ProjetVu } from '@nudge/shared';
-import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { NavLink, useLocation, useNavigate, useParams } from 'react-router';
 import {
   useModificationProjet,
   useProjet,
   useRegenerationClePublique,
   useRegenerationCleSecrete,
 } from '../api/projets.js';
-import { ConfirmAction, Loading, Field, ErrorMessage, CopyableValue } from '../layout/ui.js';
+import {
+  ConfirmAction,
+  CopyableValue,
+  ErrorMessage,
+  Field,
+  Loading,
+  PageHeader,
+} from '../layout/ui.js';
 
 /** État de navigation : la clé secrète d'un Projet tout juste créé. */
 export interface CleSecreteState {
@@ -38,14 +45,39 @@ export function Projet() {
   if (projet.isError) return <ErrorMessage erreur={projet.error} />;
   return (
     <section>
-      <h1>{projet.data.nom}</h1>
-      <p>
-        <Link to="destinations">Destinations</Link> : où partent les Retours Triés de ce Projet.
-      </p>
-      <Cles projet={projet.data} />
-      <Informations projet={projet.data} />
-      <Origines projet={projet.data} />
+      <EnteteProjet projet={projet.data} />
+      <div className="reglages">
+        <Cles projet={projet.data} />
+        <Informations projet={projet.data} />
+        <Origines projet={projet.data} />
+      </div>
     </section>
+  );
+}
+
+/**
+ * En-tête commun aux pages d'un Projet : son nom, sa description et les onglets
+ * Destinations (où partent ses Retours) et Réglages (clés, informations, origines).
+ */
+export function EnteteProjet({ projet, actions }: { projet: ProjetVu; actions?: ReactNode }) {
+  const base = `/projets/${encodeURIComponent(projet.id)}`;
+  return (
+    <>
+      <PageHeader
+        titre={projet.nom}
+        retour={{ to: '/projets', libelle: 'Projets' }}
+        description={projet.description}
+        actions={actions}
+      />
+      <nav className="onglets" aria-label="Sections du Projet">
+        <NavLink to={`${base}/destinations`} end>
+          Destinations
+        </NavLink>
+        <NavLink to={base} end>
+          Réglages
+        </NavLink>
+      </nav>
+    </>
   );
 }
 

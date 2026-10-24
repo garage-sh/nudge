@@ -1343,6 +1343,13 @@ fieldset.champ {
   border: 0;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.formulaire .champ {
+  max-width: 640px;
 }
 
 fieldset.champ legend {
@@ -1357,7 +1364,7 @@ fieldset.champ legend {
   gap: 0.4rem;
   min-height: 30px;
   padding: 0 0.65rem;
-  margin: 0 0.4rem 0.4rem 0;
+  margin: 0;
   border: 1px solid var(--bordure-forte);
   border-radius: var(--r-controle);
   font-weight: 400;
@@ -1389,4 +1396,116 @@ fieldset.champ legend {
 .retour-cote .encadre > p,
 .retour-cote .aide {
   font-size: var(--t-s);
+}
+
+/* Pages d'un Projet : onglets sous l'en-tête */
+.onglets {
+  display: flex;
+  gap: 1.25rem;
+  margin: -0.5rem 0 1.5rem;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.onglets a {
+  padding: 0.5rem 0;
+  margin-bottom: -1px;
+  color: var(--discret);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.onglets a:hover {
+  color: var(--texte);
+}
+
+.onglets a.active {
+  color: var(--texte);
+  border-bottom-color: var(--accent);
+}
+
+.intro-onglet {
+  margin: -0.75rem 0 1rem;
+}
+
+.reglages {
+  max-width: 760px;
+}
+
+/* Destinations d'un Projet */
+.destinations > li {
+  padding: 1rem 1.1rem;
+}
+
+.destinations .encadre {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.destination {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.destination-ligne {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.destination-nom h2 {
+  margin: 0 0 0.15rem;
+  font-size: var(--t-m);
+}
+
+.destination-nom p {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  font-size: var(--t-s);
+  color: var(--discret);
+  min-width: 0;
+}
+
+.destination-cible {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+
+.destination-filtre {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  font-size: var(--t-s);
+  color: var(--discret);
+}
+
+.destination .actions {
+  gap: 0.4rem;
+}
+
+.probleme {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--r-controle);
+  background: var(--retenu-doux);
+  color: var(--retenu);
+  font-size: var(--t-s);
+}
+
+@media (max-width: 700px) {
+  .destination-ligne {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .destination-filtre {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
