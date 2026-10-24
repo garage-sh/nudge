@@ -2,6 +2,7 @@ import {
   Inject,
   Module,
   type DynamicModule,
+  type FactoryProvider,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
@@ -23,7 +24,7 @@ import {
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
-import { Queue, Worker, type Job } from 'bullmq';
+import { Queue, Worker, type DefaultJobOptions, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { AlertesService } from './alertes.service.js';
 import { BalayageProcessor } from './balayage.processor.js';
@@ -53,6 +54,18 @@ import { TriageProcessor } from './triage.processor.js';
 const DB_CONNECTION = Symbol('DB_CONNECTION');
 const REDIS = Symbol('REDIS');
 const MAINTENANCE_QUEUE_TOKEN = Symbol('MAINTENANCE_QUEUE');
+
+/** Une queue BullMQ sur la connexion Redis du worker, avec ses options de job par défaut. */
+const queueProvider = (
+  provide: symbol,
+  name: string,
+  prefix: string,
+  defaultJobOptions: DefaultJobOptions,
+): FactoryProvider<Queue> => ({
+  provide,
+  useFactory: (redis: Redis) => new Queue(name, { connection: redis, prefix, defaultJobOptions }),
+  inject: [REDIS],
+});
 
 /** BullMQ ne relancera plus ce job s'il échoue. */
 const derniereTentative = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
@@ -111,46 +124,18 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
         },
-        {
-          provide: DISPATCH_QUEUE_TOKEN,
-          useFactory: (redis: Redis) =>
-            new Queue(DISPATCH_QUEUE, {
-              connection: redis,
-              prefix,
-              defaultJobOptions: jobOptions(options.retryPolicy),
-            }),
-          inject: [REDIS],
-        },
-        {
-          provide: TRIAGE_QUEUE_TOKEN,
-          useFactory: (redis: Redis) =>
-            new Queue(TRIAGE_QUEUE, {
-              connection: redis,
-              prefix,
-              defaultJobOptions: jobOptions(options.retryPolicy),
-            }),
-          inject: [REDIS],
-        },
-        {
-          provide: ALERTES_QUEUE_TOKEN,
-          useFactory: (redis: Redis) =>
-            new Queue(ALERTES_QUEUE, {
-              connection: redis,
-              prefix,
-              defaultJobOptions: jobOptions(options.retryPolicy),
-            }),
-          inject: [REDIS],
-        },
-        {
-          provide: MAINTENANCE_QUEUE_TOKEN,
-          useFactory: (redis: Redis) =>
-            new Queue(MAINTENANCE_QUEUE, {
-              connection: redis,
-              prefix,
-              defaultJobOptions: { removeOnComplete: 100, removeOnFail: 1000 },
-            }),
-          inject: [REDIS],
-        },
+        queueProvider(
+          DISPATCH_QUEUE_TOKEN,
+          DISPATCH_QUEUE,
+          prefix,
+          jobOptions(options.retryPolicy),
+        ),
+        queueProvider(TRIAGE_QUEUE_TOKEN, TRIAGE_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(ALERTES_QUEUE_TOKEN, ALERTES_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(MAINTENANCE_QUEUE_TOKEN, MAINTENANCE_QUEUE, prefix, {
+          removeOnComplete: 100,
+          removeOnFail: 1000,
+        }),
         JugeResolver,
         TriageProcessor,
         DispatchProcessor,
