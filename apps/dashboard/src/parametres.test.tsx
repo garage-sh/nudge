@@ -162,6 +162,11 @@ describe('Paramètres de l’Instance : rétention', () => {
     expect(duree.value).toBe('');
     await userEvent.type(duree, '90');
     await userEvent.click(within(bloc).getByRole('button', { name: 'Enregistrer la rétention' }));
+    // Passer d'illimitée à une durée efface des Retours : confirmation d'abord.
+    expect(within(bloc).getByRole('group').textContent).toMatch(
+      /plus de 90 jours .* effacés définitivement/,
+    );
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Confirmer' }));
 
     expect(await within(bloc).findByText(/Enregistré/)).toBeTruthy();
     expect(api.appels.find((a) => a.route === 'PUT /api/instance/retention')?.corps).toEqual({
@@ -185,5 +190,36 @@ describe('Paramètres de l’Instance : rétention', () => {
       jours: null,
     });
     expect(bloc.textContent).toMatch(/illimitée/);
+  });
+
+  it('demande confirmation avant de raccourcir la durée, et n’envoie rien si on annule', async () => {
+    const api = fakeApi(routes(90));
+    renderDashboard('/parametres');
+
+    const bloc = await screen.findByRole('region', { name: 'Rétention des Retours' });
+    const duree = within(bloc).getByLabelText('Durée de rétention (jours)') as HTMLInputElement;
+    await userEvent.clear(duree);
+    await userEvent.type(duree, '7');
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Enregistrer la rétention' }));
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Annuler' }));
+
+    expect(api.appels.some((a) => a.route === 'PUT /api/instance/retention')).toBe(false);
+    expect(duree.value).toBe('7');
+  });
+
+  it('allonge la durée sans confirmation : rien de plus n’est effacé', async () => {
+    const api = fakeApi(routes(30));
+    renderDashboard('/parametres');
+
+    const bloc = await screen.findByRole('region', { name: 'Rétention des Retours' });
+    const duree = within(bloc).getByLabelText('Durée de rétention (jours)') as HTMLInputElement;
+    await userEvent.clear(duree);
+    await userEvent.type(duree, '90');
+    await userEvent.click(within(bloc).getByRole('button', { name: 'Enregistrer la rétention' }));
+
+    expect(await within(bloc).findByText(/Enregistré/)).toBeTruthy();
+    expect(api.appels.find((a) => a.route === 'PUT /api/instance/retention')?.corps).toEqual({
+      jours: 90,
+    });
   });
 });

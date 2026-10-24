@@ -24,7 +24,7 @@ export function Projets() {
         }
       />
       {projets.isPending ? <Loading /> : null}
-      <ErrorMessage erreur={projets.error} />
+      <ErrorMessage erreur={projets.error} onRetry={() => void projets.refetch()} />
       {formulaireOuvert ? (
         <NouveauProjet onAnnuler={aucun ? undefined : () => setAjoutOuvert(false)} />
       ) : null}

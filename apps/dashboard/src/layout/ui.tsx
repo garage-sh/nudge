@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../api/client.js';
 
@@ -32,11 +39,29 @@ export function errorMessage(erreur: unknown): string {
   return MESSAGES[erreur.code] ?? `Erreur inattendue (${erreur.code}).`;
 }
 
-export function ErrorMessage({ erreur }: { erreur: unknown }) {
+/** L'erreur, en clair ; `onRetry` ajoute « Réessayer » (une lecture qui a échoué). */
+export function ErrorMessage({ erreur, onRetry }: { erreur: unknown; onRetry?: () => void }) {
   if (!erreur) return null;
   return (
     <p role="alert" className="alerte">
-      {errorMessage(erreur)}
+      <span>{errorMessage(erreur)}</span>
+      {onRetry ? (
+        <button type="button" className="secondaire" onClick={onRetry}>
+          Réessayer
+        </button>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * « Enregistré. », annoncé : une région `status` toujours présente, remplie après un
+ * enregistrement réussi. Le formulaire l'efface dès qu'on le modifie (`reset` de la mutation).
+ */
+export function StatutEnregistrement({ enregistre }: { enregistre: boolean }) {
+  return (
+    <p role="status" className="statut-enregistrement">
+      {enregistre ? 'Enregistré.' : ''}
     </p>
   );
 }
@@ -128,7 +153,8 @@ export function Pastille({
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & { libelle: string; aide?: ReactNode };
 
 export function Field({ libelle, aide, id, ...input }: FieldProps) {
-  const identifiant = id ?? `champ-${libelle.toLowerCase().replace(/\W+/g, '-')}`;
+  const genere = useId();
+  const identifiant = id ?? genere;
   return (
     <div className="champ">
       <label htmlFor={identifiant}>{libelle}</label>
@@ -188,9 +214,59 @@ export function CopyableValue({ valeur, libelle }: { valeur: string; libelle: st
 }
 
 /**
+ * Rend le focus à un bouton quand ce qu'il a ouvert (un formulaire, une édition) se
+ * referme : `ouvert` passe de vrai à faux. Renvoie la ref à poser sur ce bouton.
+ */
+export function useFocusAuRetour(ouvert: boolean) {
+  const bouton = useRef<HTMLButtonElement>(null);
+  const etaitOuvert = useRef(ouvert);
+  useEffect(() => {
+    if (etaitOuvert.current && !ouvert) bouton.current?.focus();
+    etaitOuvert.current = ouvert;
+  }, [ouvert]);
+  return bouton;
+}
+
+/**
+ * La question d'une confirmation sur place, avec Confirmer et Annuler. Le focus va sur
+ * Annuler (le choix sûr) ; Échap annule.
+ */
+export function Confirmation({
+  question,
+  enCours,
+  onConfirm,
+  onAnnuler,
+}: {
+  question: string;
+  enCours?: boolean;
+  onConfirm: () => void;
+  onAnnuler: () => void;
+}) {
+  const annuler = useRef<HTMLButtonElement>(null);
+  useEffect(() => annuler.current?.focus(), []);
+  return (
+    <div
+      className="confirmation"
+      role="group"
+      aria-label={question}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onAnnuler();
+      }}
+    >
+      <span>{question}</span>
+      <button type="button" className="danger" disabled={enCours} onClick={onConfirm}>
+        Confirmer
+      </button>
+      <button ref={annuler} type="button" className="secondaire" onClick={onAnnuler}>
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+/**
  * Action irréversible en deux temps : le bouton demande une confirmation sur place.
- * À l'ouverture, le focus va sur Annuler (le choix sûr) ; Échap ou Annuler le rendent
- * au bouton d'origine.
+ * Fermée, la confirmation rend le focus au bouton d'origine.
  */
 export function ConfirmAction({
   libelle,
@@ -205,11 +281,9 @@ export function ConfirmAction({
 }) {
   const [ouverte, setOuverte] = useState(false);
   const declencheur = useRef<HTMLButtonElement>(null);
-  const annuler = useRef<HTMLButtonElement>(null);
   const aRendreLeFocus = useRef(false);
   useEffect(() => {
-    if (ouverte) annuler.current?.focus();
-    else if (aRendreLeFocus.current) {
+    if (!ouverte && aRendreLeFocus.current) {
       aRendreLeFocus.current = false;
       declencheur.current?.focus();
     }
@@ -231,31 +305,15 @@ export function ConfirmAction({
     );
   }
   return (
-    <div
-      className="confirmation"
-      role="group"
-      aria-label={question}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') fermer();
+    <Confirmation
+      question={question}
+      enCours={enCours}
+      onAnnuler={fermer}
+      onConfirm={() => {
+        fermer();
+        onConfirm();
       }}
-    >
-      <span>{question}</span>
-      <button
-        type="button"
-        className="danger"
-        disabled={enCours}
-        onClick={() => {
-          aRendreLeFocus.current = true;
-          setOuverte(false);
-          onConfirm();
-        }}
-      >
-        Confirmer
-      </button>
-      <button ref={annuler} type="button" className="secondaire" onClick={fermer}>
-        Annuler
-      </button>
-    </div>
+    />
   );
 }
 

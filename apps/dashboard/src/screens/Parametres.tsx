@@ -24,7 +24,15 @@ import {
   useRetraitAlerte,
   useTestAlerte,
 } from '../api/instance.js';
-import { ConfirmAction, ErrorMessage, Field, Loading, PageHeader } from '../layout/ui.js';
+import {
+  ConfirmAction,
+  Confirmation,
+  ErrorMessage,
+  Field,
+  Loading,
+  PageHeader,
+  StatutEnregistrement,
+} from '../layout/ui.js';
 import { LIBELLES_FOURNISSEUR_JUGE } from '../libelles.js';
 import { ResultatTest, SecretsGeneres, type SecretsMontres } from './destinations/Destinations.js';
 import { FormulaireDestination } from './destinations/FormulaireDestination.js';
@@ -46,7 +54,14 @@ export function Parametres() {
       />
       <div className="reglages">
         {juge.isPending || alerte.isPending || retention.isPending ? <Loading /> : null}
-        <ErrorMessage erreur={juge.error ?? alerte.error ?? retention.error} />
+        <ErrorMessage
+          erreur={juge.error ?? alerte.error ?? retention.error}
+          onRetry={() => {
+            void juge.refetch();
+            void alerte.refetch();
+            void retention.refetch();
+          }}
+        />
         {juge.data ? <Juge juge={juge.data} /> : null}
         {alerte.data ? <DestinationAlerte destination={alerte.data.destination} /> : null}
         {retention.data ? <Retention retention={retention.data} /> : null}
@@ -61,15 +76,21 @@ export function Parametres() {
  */
 function Retention({ retention }: { retention: RetentionVu }) {
   const [jours, setJours] = useState(retention.jours === null ? '' : String(retention.jours));
+  // Une durée plus courte efface des Retours : elle attend la confirmation du Membre.
+  const [aConfirmer, setAConfirmer] = useState<number | null>(null);
   const changement = useChangementRetention();
+  const enregistrer = (valeur: number | null) => changement.mutate({ jours: valeur });
   const soumettre = (evenement: FormEvent) => {
     evenement.preventDefault();
-    changement.mutate({ jours: jours === '' ? null : Number(jours) });
+    const valeur = jours === '' ? null : Number(jours);
+    const efface = valeur !== null && (retention.jours === null || valeur < retention.jours);
+    if (efface) setAConfirmer(valeur);
+    else enregistrer(valeur);
   };
   return (
     <section className="encadre" aria-labelledby="parametres-retention">
       <h2 id="parametres-retention">Rétention des Retours</h2>
-      <form onSubmit={soumettre} className="formulaire">
+      <form onSubmit={soumettre} onChange={() => changement.reset()} className="formulaire">
         <p className="aide">
           {retention.jours === null
             ? 'Rétention illimitée : aucun Retour n’est effacé automatiquement.'
@@ -88,10 +109,24 @@ function Retention({ retention }: { retention: RetentionVu }) {
           aide="Vide : rétention illimitée. L’effacement est définitif."
         />
         <ErrorMessage erreur={changement.error} />
-        <button type="submit" disabled={changement.isPending}>
-          Enregistrer la rétention
-        </button>
-        {changement.isSuccess ? <span className="discret"> Enregistré.</span> : null}
+        {aConfirmer === null ? (
+          <div className="actions">
+            <button type="submit" disabled={changement.isPending}>
+              Enregistrer la rétention
+            </button>
+          </div>
+        ) : (
+          <Confirmation
+            question={`Les Retours de plus de ${aConfirmer} jours et leurs Captures seront effacés définitivement à la prochaine purge. Enregistrer ?`}
+            enCours={changement.isPending}
+            onAnnuler={() => setAConfirmer(null)}
+            onConfirm={() => {
+              enregistrer(aConfirmer);
+              setAConfirmer(null);
+            }}
+          />
+        )}
+        <StatutEnregistrement enregistre={changement.isSuccess} />
       </form>
     </section>
   );
@@ -174,7 +209,7 @@ function DestinationAlerte({ destination }: { destination: DestinationAlerteVu |
             : 'Aucune Destination d’alerte : les alertes ne partent nulle part.'}
         </p>
         {test.data ? <ResultatTest resultat={test.data} livre="Alerte d’exemple livrée." /> : null}
-        {configuration.isSuccess ? <p className="discret">Enregistré.</p> : null}
+        <StatutEnregistrement enregistre={configuration.isSuccess} />
       </FormulaireDestination>
       {secretsMontres ? <SecretsGeneres {...secretsMontres} /> : null}
     </>
@@ -205,7 +240,7 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
   };
 
   return (
-    <form onSubmit={soumettre} className="formulaire encadre">
+    <form onSubmit={soumettre} onChange={() => choix.reset()} className="formulaire encadre">
       <h2>Juge</h2>
       <p className="aide">
         Le modèle de décision qui trie les Retours. Sans Juge, nudge tourne en mode dégradé : le
@@ -265,10 +300,12 @@ function Juge({ juge }: { juge: JugeInstanceVu }) {
         </>
       ) : null}
       <ErrorMessage erreur={choix.error} />
-      <button type="submit" disabled={choix.isPending}>
-        Enregistrer
-      </button>
-      {choix.isSuccess ? <span className="discret"> Enregistré.</span> : null}
+      <div className="actions">
+        <button type="submit" disabled={choix.isPending}>
+          Enregistrer
+        </button>
+      </div>
+      <StatutEnregistrement enregistre={choix.isSuccess} />
     </form>
   );
 }

@@ -6,7 +6,7 @@ import {
   type FiltreVu,
   type ResultatTestDestination,
 } from '@nudge/shared';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import {
   useCreationDestination,
@@ -24,6 +24,7 @@ import {
   ErrorMessage,
   LienExterne,
   Loading,
+  useFocusAuRetour,
 } from '../../layout/ui.js';
 import { LIBELLES_CLASSE_ECHEC, LIBELLES_GRAVITE, LIBELLES_TYPE } from '../../libelles.js';
 import { EnteteProjet, ProjetIntrouvable } from '../Projet.js';
@@ -50,13 +51,16 @@ export function Destinations() {
   const destinations = useDestinations(projetId);
   const [secretsMontres, setSecretsMontres] = useState<SecretsMontres | null>(null);
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
+  const [ajoutee, setAjoutee] = useState<string | null>(null);
   if (projet.isPending || destinations.isPending) return <Loading />;
-  if (projet.isError) return <ProjetIntrouvable erreur={projet.error} />;
+  if (projet.isError) {
+    return <ProjetIntrouvable erreur={projet.error} onRetry={() => void projet.refetch()} />;
+  }
   if (destinations.isError) {
     return (
       <section>
         <EnteteProjet projet={projet.data} />
-        <ErrorMessage erreur={destinations.error} />
+        <ErrorMessage erreur={destinations.error} onRetry={() => void destinations.refetch()} />
       </section>
     );
   }
@@ -90,7 +94,10 @@ export function Destinations() {
         <Ajout
           projetId={projetId}
           montrer={montrer}
-          onAjoutee={() => setAjoutOuvert(false)}
+          onAjoutee={(id) => {
+            setAjoutee(id);
+            setAjoutOuvert(false);
+          }}
           onAnnuler={aucune ? undefined : () => setAjoutOuvert(false)}
         />
       ) : null}
@@ -103,7 +110,11 @@ export function Destinations() {
         <ul className="liste destinations">
           {destinations.data.map((destination) => (
             <li key={destination.id}>
-              <LigneDestination destination={destination} montrer={montrer} />
+              <LigneDestination
+                destination={destination}
+                montrer={montrer}
+                focus={destination.id === ajoutee}
+              />
             </li>
           ))}
         </ul>
@@ -152,11 +163,19 @@ function ResumeFiltre({ filtre: { types, graviteMinimale } }: { filtre: FiltreVu
 function LigneDestination({
   destination,
   montrer,
+  focus = false,
 }: {
   destination: DestinationVu;
   montrer: MontrerSecrets;
+  /** La Destination vient d'être ajoutée : son nom prend le focus. */
+  focus?: boolean;
 }) {
   const [enEdition, setEnEdition] = useState(false);
+  const modifier = useFocusAuRetour(enEdition);
+  const titre = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focus) titre.current?.focus();
+  }, [focus]);
   const formulaire = formulaireDe(destination.type);
   const modification = useModificationDestination(destination.projetId, destination.id);
   const suppression = useSuppressionDestination(destination.projetId, destination.id);
@@ -194,7 +213,9 @@ function LigneDestination({
     <article className="destination" data-etat={destination.etat}>
       <div className="destination-ligne">
         <div className="destination-nom">
-          <h2>{destination.nom}</h2>
+          <h2 ref={titre} tabIndex={-1}>
+            {destination.nom}
+          </h2>
           <p>
             <span className="destination-type">{formulaire?.libelle ?? destination.type}</span>
             {formulaire ? (
@@ -221,7 +242,12 @@ function LigneDestination({
           Tester
         </button>
         {formulaire ? (
-          <button type="button" className="secondaire" onClick={() => setEnEdition(true)}>
+          <button
+            ref={modifier}
+            type="button"
+            className="secondaire"
+            onClick={() => setEnEdition(true)}
+          >
             Modifier
           </button>
         ) : null}
@@ -288,7 +314,7 @@ function Ajout({
 }: {
   projetId: string;
   montrer: MontrerSecrets;
-  onAjoutee: () => void;
+  onAjoutee: (id: string) => void;
   onAnnuler?: () => void;
 }) {
   const creation = useCreationDestination(projetId);
@@ -311,7 +337,7 @@ function Ajout({
         creation.mutate(valeurs, {
           onSuccess: (resultat) => {
             montrer(resultat.destination, resultat.secretsGeneres);
-            onAjoutee();
+            onAjoutee(resultat.destination.id);
           },
         })
       }

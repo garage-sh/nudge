@@ -33,7 +33,14 @@ import {
   LIBELLES_SOURCE,
   LIBELLES_TYPE,
 } from '../libelles.js';
-import { ConfirmAction, ErrorMessage, LienExterne, Loading, Pastille } from '../layout/ui.js';
+import {
+  ConfirmAction,
+  ErrorMessage,
+  LienExterne,
+  Loading,
+  Pastille,
+  useFocusAuRetour,
+} from '../layout/ui.js';
 import {
   BadgeIncertain,
   JaugeGravite,
@@ -61,7 +68,7 @@ export function Retour() {
     return (
       <>
         <Fil versListe={versListe} />
-        <ErrorMessage erreur={retour.error} />
+        <ErrorMessage erreur={retour.error} onRetry={() => void retour.refetch()} />
       </>
     );
   }
@@ -309,6 +316,8 @@ function Proprietes({ lignes }: { lignes: readonly (readonly [string, ReactNode]
 
 function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu | null }) {
   const [enCorrection, setEnCorrection] = useState(false);
+  // Le formulaire refermé, le focus revient sur « Corriger ».
+  const corriger = useFocusAuRetour(enCorrection);
   if (!verdict) return <p className="discret">Ce Retour n’est pas encore trié.</p>;
   if (enCorrection) {
     return (
@@ -338,7 +347,12 @@ function Verdict({ retourId, verdict }: { retourId: string; verdict: VerdictVu |
         </p>
       ) : null}
       <div className="actions">
-        <button type="button" className="secondaire" onClick={() => setEnCorrection(true)}>
+        <button
+          ref={corriger}
+          type="button"
+          className="secondaire"
+          onClick={() => setEnCorrection(true)}
+        >
           Corriger
         </button>
       </div>
@@ -510,7 +524,9 @@ function Envois({
               <LienExterne href={envoi.lienExterne} />
             </p>
           ) : null}
-          {envoi.derniereErreur ? <p className="alerte">{envoi.derniereErreur}</p> : null}
+          {envoi.derniereErreur ? (
+            <p className="alerte">Dernière erreur : {envoi.derniereErreur}</p>
+          ) : null}
           {rejeu.variables === envoi.id ? <ErrorMessage erreur={rejeu.error} /> : null}
         </li>
       ))}

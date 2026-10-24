@@ -507,11 +507,23 @@ code {
 
 /* Messages */
 .alerte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
   background: var(--danger-doux);
   color: var(--danger);
   border-radius: var(--r-controle);
   padding: 0.55rem 0.75rem;
   margin: 0 0 1rem;
+}
+
+.statut-enregistrement {
+  margin: 0;
+  color: var(--succes);
+  font-size: var(--t-s);
+  font-weight: 500;
 }
 
 .avertissement {
@@ -1037,7 +1049,7 @@ button.danger {
     grid-column: 2;
     white-space: normal;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
   }
 
@@ -1124,8 +1136,7 @@ button.plus {
 
 .precedent-suivant [aria-disabled='true'] {
   color: var(--discret);
-  opacity: 0.6;
-  border: 1px solid var(--bordure);
+  border: 1px dashed var(--bordure-forte);
 }
 
 .retour-grille {
@@ -1562,4 +1573,9 @@ fieldset.champ legend {
 
 .filtre:focus-within {
   border-color: var(--accent);
+}
+
+.destination-nom h2:focus-visible {
+  outline-offset: 4px;
+  border-radius: 2px;
 }

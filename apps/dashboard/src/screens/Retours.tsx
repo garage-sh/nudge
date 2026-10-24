@@ -73,7 +73,14 @@ export function Retours() {
       <PageHeader titre="Boîte de réception" />
       <Vues etat={filtres.etat} parametres={parametres} />
       <Filtres filtres={filtres} filtrer={filtrer} />
-      {retours.isFetchNextPageError ? null : <ErrorMessage erreur={retours.error} />}
+      {retours.isFetchNextPageError ? null : (
+        <ErrorMessage erreur={retours.error} onRetry={() => void retours.refetch()} />
+      )}
+      <p role="status" className="visuellement-cache">
+        {retours.isSuccess
+          ? `${lignes.length} Retour${lignes.length > 1 ? 's' : ''} affiché${lignes.length > 1 ? 's' : ''}${retours.hasNextPage ? ', d’autres à charger' : ''}.`
+          : ''}
+      </p>
       {retours.isPending ? (
         <div className="liste-retours">
           <Loading />
@@ -122,7 +129,9 @@ export function Retours() {
           {retours.isFetchingNextPage ? 'Chargement…' : 'Afficher plus'}
         </button>
       ) : null}
-      {retours.isFetchNextPageError ? <ErrorMessage erreur={retours.error} /> : null}
+      {retours.isFetchNextPageError ? (
+        <ErrorMessage erreur={retours.error} onRetry={() => void retours.fetchNextPage()} />
+      ) : null}
     </section>
   );
 }

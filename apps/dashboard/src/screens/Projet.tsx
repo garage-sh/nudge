@@ -14,6 +14,7 @@ import {
   Field,
   Loading,
   PageHeader,
+  StatutEnregistrement,
 } from '../layout/ui.js';
 
 /** État de navigation : la clé secrète d'un Projet tout juste créé. */
@@ -42,7 +43,9 @@ export function Projet() {
   const id = useParams().id ?? '';
   const projet = useProjet(id);
   if (projet.isPending) return <Loading />;
-  if (projet.isError) return <ProjetIntrouvable erreur={projet.error} />;
+  if (projet.isError) {
+    return <ProjetIntrouvable erreur={projet.error} onRetry={() => void projet.refetch()} />;
+  }
   return (
     <section>
       <EnteteProjet projet={projet.data} />
@@ -56,11 +59,11 @@ export function Projet() {
 }
 
 /** Le Projet n'a pas pu être lu : le cadre reste, avec le chemin vers la liste des Projets. */
-export function ProjetIntrouvable({ erreur }: { erreur: unknown }) {
+export function ProjetIntrouvable({ erreur, onRetry }: { erreur: unknown; onRetry: () => void }) {
   return (
     <section>
       <PageHeader titre="Projet" retour={{ to: '/projets', libelle: 'Projets' }} />
-      <ErrorMessage erreur={erreur} />
+      <ErrorMessage erreur={erreur} onRetry={onRetry} />
     </section>
   );
 }
@@ -141,7 +144,7 @@ function Informations({ projet }: { projet: ProjetVu }) {
     modification.mutate({ nom, description });
   };
   return (
-    <form onSubmit={soumettre} className="formulaire encadre">
+    <form onSubmit={soumettre} onChange={() => modification.reset()} className="formulaire encadre">
       <h2>Informations</h2>
       <Field
         libelle="Nom du Projet"
@@ -163,10 +166,12 @@ function Informations({ projet }: { projet: ProjetVu }) {
         </p>
       </div>
       <ErrorMessage erreur={modification.error} />
-      <button type="submit" disabled={modification.isPending}>
-        Enregistrer
-      </button>
-      {modification.isSuccess ? <span className="discret"> Enregistré.</span> : null}
+      <div className="actions">
+        <button type="submit" disabled={modification.isPending}>
+          Enregistrer
+        </button>
+      </div>
+      <StatutEnregistrement enregistre={modification.isSuccess} />
     </form>
   );
 }
@@ -186,7 +191,7 @@ function Origines({ projet }: { projet: ProjetVu }) {
     );
   };
   return (
-    <form onSubmit={soumettre} className="formulaire encadre">
+    <form onSubmit={soumettre} onChange={() => modification.reset()} className="formulaire encadre">
       <h2>Origines autorisées</h2>
       <div className="champ">
         <label htmlFor="origines-projet">Une origine par ligne</label>
@@ -202,10 +207,12 @@ function Origines({ projet }: { projet: ProjetVu }) {
         </p>
       </div>
       <ErrorMessage erreur={modification.error} />
-      <button type="submit" disabled={modification.isPending}>
-        Enregistrer
-      </button>
-      {modification.isSuccess ? <span className="discret"> Enregistré.</span> : null}
+      <div className="actions">
+        <button type="submit" disabled={modification.isPending}>
+          Enregistrer
+        </button>
+      </div>
+      <StatutEnregistrement enregistre={modification.isSuccess} />
     </form>
   );
 }
