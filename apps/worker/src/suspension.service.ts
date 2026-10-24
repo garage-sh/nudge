@@ -8,7 +8,7 @@ import type {
 } from '@nudge/core';
 import { destinations, envois, toDestinationConfiguree, type Db } from '@nudge/database';
 import type { Queue } from 'bullmq';
-import { and, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, eq, lte, ne, sql } from 'drizzle-orm';
 import {
   SUSPENSION_PAR_DEFAUT,
   type OptionsSuspension,
@@ -31,18 +31,29 @@ type Echec = Extract<ResultatEnvoi, { statut: 'echec' }>;
 /** Ce que devient un Envoi après un échec. */
 export type IssueEchec = 'retenu' | 'a_retenter' | 'echec';
 
+/** Au-delà, une sonde sans réponse compte comme injoignable. */
+const DELAI_SONDE_MS = 10_000;
+
+const motif = (classe: string, message: string) => `${classe}: ${message}`;
+
+/** Un Envoi précis, tant qu'il attend sa livraison. */
+const envoiEnAttente = (envoiId: string) =>
+  and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
+
 /**
- * Suspension des Destinations (circuit breaker, forme reprise des connecteurs
- * d'alliances-pa). Chaque transition de la Destination est un UPDATE conditionnel sur
- * son état courant : deux workers qui échouent en même temps ne la suspendent qu'une
- * fois, et une sonde ne réactive pas une Destination qu'un autre vient de réactiver.
+ * Issue des Envois et Suspension des Destinations. Chaque transition est un UPDATE
+ * conditionnel sur l'état courant : deux workers qui échouent en même temps ne
+ * suspendent la Destination qu'une fois, une sonde ne réactive pas une Destination
+ * déjà réactivée, et un Envoi ne change de statut que depuis celui qu'on a lu.
  *
- * - `transient` : compte un échec consécutif ; au seuil, la Destination est Suspendue ;
+ * - `transient` : un échec consécutif de plus ; au seuil, la Destination est Suspendue ;
  * - `auth` : la Destination est Suspendue aussitôt ;
- * - `permanent` : l'Envoi échoue, le compte d'échecs consécutifs repart de zéro.
+ * - `permanent` : l'Envoi échoue ; la Destination a répondu, la série repart de zéro.
  *
- * L'Envoi d'une Destination Suspendue est retenu, sans appel sortant ; quand la sonde
- * la trouve joignable, ses Envois retenus repartent.
+ * L'Envoi d'une Destination Suspendue est retenu, sans appel sortant. Les Envois
+ * retenus d'une Destination active sont remis en queue à chaque passage de la sonde,
+ * jusqu'à ce que leur job les reprenne : une libération interrompue (redémarrage,
+ * Redis indisponible) est rattrapée au passage suivant.
  */
 @Injectable()
 export class SuspensionService {
@@ -61,30 +72,53 @@ export class SuspensionService {
     this.politique = options.suspension ?? SUSPENSION_PAR_DEFAUT;
   }
 
-  /**
-   * Retient l'Envoi en attente si sa Destination est Suspendue. Le verrou partagé sur
-   * la Destination empêche une réactivation de passer entre la lecture et la retenue
-   * (l'Envoi manquerait sa libération). Rend vrai si l'Envoi est retenu.
-   */
-  async retenirSiSuspendue(envoiId: string, destinationId: string): Promise<boolean> {
-    return this.db.transaction(async (tx) => {
-      const [destination] = await tx
-        .select({ etat: destinations.etat })
-        .from(destinations)
-        .where(eq(destinations.id, destinationId))
-        .for('share');
-      if (destination?.etat !== 'suspendue') return false;
-      await tx
-        .update(envois)
-        .set({ statut: 'retenu' })
-        .where(and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente')));
-      return true;
-    });
+  /** Retient un Envoi en attente, sans appel sortant (sa Destination est Suspendue). */
+  async retenir(envoiId: string): Promise<void> {
+    await this.db
+      .update(envois)
+      .set({ statut: 'retenu', retenuLe: sql`now()` })
+      .where(envoiEnAttente(envoiId));
   }
 
-  /** Une livraison remet à zéro le compte d'échecs consécutifs. */
-  async apresLivraison(destinationId: string): Promise<void> {
-    await this.remettreAZero(destinationId);
+  /**
+   * Reprend un Envoi retenu dont la Destination est active : il repasse en attente.
+   * Rend faux s'il n'était plus retenu (un autre job l'a déjà repris).
+   */
+  async reprendre(envoiId: string): Promise<boolean> {
+    const repris = await this.db
+      .update(envois)
+      .set({ statut: 'en_attente', retenuLe: null })
+      .where(and(eq(envois.id, envoiId), eq(envois.statut, 'retenu')))
+      .returning({ id: envois.id });
+    return repris.length > 0;
+  }
+
+  /**
+   * Un job de libération arrivé quand la Destination est de nouveau Suspendue : la
+   * retenue recommence, et la prochaine libération aura un nouvel id de job.
+   */
+  async prolongerRetenue(envoiId: string): Promise<void> {
+    await this.db
+      .update(envois)
+      .set({ retenuLe: sql`now()` })
+      .where(and(eq(envois.id, envoiId), eq(envois.statut, 'retenu')));
+  }
+
+  /** L'Envoi est livré ; la série d'échecs consécutifs de sa Destination repart de zéro. */
+  async apresLivraison(
+    envoi: { readonly id: string; readonly destinationId: string },
+    lienExterne: string | null,
+  ): Promise<void> {
+    await this.db
+      .update(envois)
+      .set({
+        statut: 'livre',
+        lienExterne,
+        tentatives: sql`${envois.tentatives} + 1`,
+        derniereErreur: null,
+      })
+      .where(envoiEnAttente(envoi.id));
+    await this.remettreAZero(envoi.destinationId);
   }
 
   /**
@@ -97,56 +131,53 @@ export class SuspensionService {
     resultat: Echec,
     derniereTentative: boolean,
   ): Promise<IssueEchec> {
-    const enAttente = and(eq(envois.id, envoi.id), eq(envois.statut, 'en_attente'));
     const tentatives = sql`${envois.tentatives} + 1`;
-    const derniereErreur = `${resultat.classe}: ${resultat.message}`;
+    const derniereErreur = motif(resultat.classe, resultat.message);
 
     if (resultat.classe === 'permanent') {
       await this.db
         .update(envois)
         .set({ statut: 'echec', tentatives, derniereErreur })
-        .where(enAttente);
-      // La Destination a répondu : la série d'échecs transient est rompue.
+        .where(envoiEnAttente(envoi.id));
       await this.remettreAZero(envoi.destinationId);
       return 'echec';
     }
     const { classe, message } = resultat;
 
     const { issue, suspension } = await this.db.transaction(async (tx) => {
-      // L'UPDATE verrouille la Destination jusqu'au commit : les échecs concurrents
-      // se comptent l'un après l'autre et une réactivation attend la retenue.
+      // Verrou jusqu'au commit : les échecs concurrents se comptent l'un après l'autre.
       const [destination] = await tx
-        .update(destinations)
-        .set({
-          echecsConsecutifs:
-            classe === 'transient'
-              ? sql`${destinations.echecsConsecutifs} + 1`
-              : sql`${destinations.echecsConsecutifs}`,
-        })
+        .select({ etat: destinations.etat })
+        .from(destinations)
         .where(eq(destinations.id, envoi.destinationId))
-        .returning({ etat: destinations.etat, echecsConsecutifs: destinations.echecsConsecutifs });
-      const doitSuspendre =
-        destination?.etat === 'active' &&
-        (classe === 'auth' || destination.echecsConsecutifs >= this.politique.seuilEchecs);
-      const suspension = doitSuspendre
-        ? await this.suspendre(tx, envoi.destinationId, classe, message)
-        : null;
+        .for('update');
+      let suspension: Suspension | null = null;
+      if (destination?.etat === 'active') {
+        const seuilAtteint =
+          classe === 'transient' &&
+          (await this.compterEchec(tx, envoi.destinationId)) >= this.politique.seuilEchecs;
+        if (classe === 'auth' || seuilAtteint) {
+          suspension = await this.suspendre(tx, envoi.destinationId, classe, message);
+        }
+      }
 
-      const issue: IssueEchec =
-        destination?.etat === 'suspendue' || suspension
-          ? 'retenu'
-          : derniereTentative
-            ? 'echec'
-            : 'a_retenter';
-      await tx
-        .update(envois)
-        .set({
-          tentatives,
-          derniereErreur,
-          ...(issue === 'a_retenter' ? {} : { statut: issue }),
-        })
-        .where(enAttente);
-      return { issue, suspension };
+      const suspendue = destination?.etat === 'suspendue' || suspension !== null;
+      if (suspendue) {
+        await tx
+          .update(envois)
+          .set({ statut: 'retenu', retenuLe: sql`now()`, tentatives, derniereErreur })
+          .where(envoiEnAttente(envoi.id));
+        return { issue: 'retenu' as const, suspension };
+      }
+      if (derniereTentative) {
+        await tx
+          .update(envois)
+          .set({ statut: 'echec', tentatives, derniereErreur })
+          .where(envoiEnAttente(envoi.id));
+        return { issue: 'echec' as const, suspension };
+      }
+      await tx.update(envois).set({ tentatives, derniereErreur }).where(envoiEnAttente(envoi.id));
+      return { issue: 'a_retenter' as const, suspension };
     });
 
     if (suspension) await this.notifier(suspension);
@@ -155,9 +186,8 @@ export class SuspensionService {
 
   /**
    * Tâche planifiée : sonde chaque Destination Suspendue dont le refroidissement est
-   * écoulé et réactive celles qui répondent, puis libère les Envois retenus de toute
-   * Destination active (celles qu'elle vient de réactiver, et le filet d'une
-   * libération interrompue).
+   * écoulé et réactive celles qui répondent, puis remet en queue les Envois retenus
+   * de toute Destination active.
    */
   async sonder(): Promise<void> {
     // Réserver la sonde en repoussant la suivante : deux passages concurrents ne
@@ -173,7 +203,7 @@ export class SuspensionService {
       const sante = await this.sante(destination);
       if (!sante.joignable) {
         this.logger.warn(
-          `Destination ${destination.id} toujours injoignable (${sante.classe}: ${sante.message}) : reste Suspendue`,
+          `Destination ${destination.id} toujours injoignable (${motif(sante.classe, sante.message)}) : reste Suspendue`,
         );
         continue;
       }
@@ -190,13 +220,7 @@ export class SuspensionService {
         .returning({ id: destinations.id });
       if (reactivee) this.logger.log(`Destination ${destination.id} joignable : de nouveau active`);
     }
-
-    const aLiberer = await this.db
-      .selectDistinct({ id: envois.destinationId })
-      .from(envois)
-      .innerJoin(destinations, eq(destinations.id, envois.destinationId))
-      .where(and(eq(envois.statut, 'retenu'), eq(destinations.etat, 'active')));
-    for (const { id } of aLiberer) await this.liberer(id);
+    await this.liberer();
   }
 
   /**
@@ -214,7 +238,7 @@ export class SuspensionService {
       .set({
         etat: 'suspendue',
         suspendueLe: sql`now()`,
-        motifSuspension: `${classe}: ${message}`,
+        motifSuspension: motif(classe, message),
         prochaineSondeLe: this.finRefroidissement(),
       })
       .where(and(eq(destinations.id, destinationId), eq(destinations.etat, 'active')))
@@ -230,7 +254,7 @@ export class SuspensionService {
 
   private async notifier(suspension: Suspension): Promise<void> {
     this.logger.warn(
-      `Destination ${suspension.destinationId} Suspendue (${suspension.classe}: ${suspension.message})`,
+      `Destination ${suspension.destinationId} Suspendue (${motif(suspension.classe, suspension.message)})`,
     );
     try {
       await this.surSuspension(suspension);
@@ -242,45 +266,57 @@ export class SuspensionService {
   }
 
   /**
-   * Les Envois retenus repartent en queue. Repassés en attente avant la mise en queue
-   * (un job ne sert qu'un Envoi en attente), puis remis en retenue si elle échoue :
-   * le passage suivant de la sonde les reprendra.
+   * Remet en queue les Envois retenus des Destinations actives, sans les modifier : le
+   * job les reprend lui-même. L'id de job tient à la retenue en cours, de sorte qu'un
+   * passage suivant ne double pas un job encore en attente.
    */
-  private async liberer(destinationId: string): Promise<void> {
-    const liberes = await this.db
-      .update(envois)
-      .set({ statut: 'en_attente' })
-      .where(and(eq(envois.destinationId, destinationId), eq(envois.statut, 'retenu')))
-      .returning({ id: envois.id });
-    if (liberes.length === 0) return;
-    const ids = liberes.map(({ id }) => id);
-    try {
-      // Pas d'id de job imposé : celui de la première tentative (id de l'Envoi) est
-      // déjà pris par un job terminé.
-      await this.dispatchQueue.addBulk(
-        ids.map((envoiId) => ({ name: 'dispatch', data: { envoiId } })),
-      );
-    } catch (erreur) {
-      await this.db
-        .update(envois)
-        .set({ statut: 'retenu' })
-        .where(and(inArray(envois.id, ids), eq(envois.statut, 'en_attente')));
-      throw erreur;
-    }
-    this.logger.log(`Destination ${destinationId} : ${ids.length} Envoi(s) retenu(s) libéré(s)`);
+  private async liberer(): Promise<void> {
+    const retenus = await this.db
+      .select({ id: envois.id, retenuLe: envois.retenuLe })
+      .from(envois)
+      .innerJoin(destinations, eq(destinations.id, envois.destinationId))
+      .where(and(eq(envois.statut, 'retenu'), eq(destinations.etat, 'active')));
+    if (retenus.length === 0) return;
+    await this.dispatchQueue.addBulk(
+      retenus.map(({ id, retenuLe }) => ({
+        name: 'dispatch',
+        data: { envoiId: id },
+        opts: { jobId: `${id}-liberation-${retenuLe?.getTime() ?? 0}` },
+      })),
+    );
+  }
+
+  /** Un échec transient de plus ; rend la série en cours. */
+  private async compterEchec(tx: Transaction, destinationId: string): Promise<number> {
+    const [destination] = await tx
+      .update(destinations)
+      .set({ echecsConsecutifs: sql`${destinations.echecsConsecutifs} + 1` })
+      .where(eq(destinations.id, destinationId))
+      .returning({ echecsConsecutifs: destinations.echecsConsecutifs });
+    return destination?.echecsConsecutifs ?? 0;
   }
 
   private async sante(destination: typeof destinations.$inferSelect): Promise<SanteDestination> {
+    let minuteur: NodeJS.Timeout | undefined;
+    const expiration = new Promise<never>((_, reject) => {
+      minuteur = setTimeout(
+        () => reject(new Error(`sans réponse après ${DELAI_SONDE_MS} ms`)),
+        DELAI_SONDE_MS,
+      );
+    });
     try {
-      return await this.resolveDestinationAdapter(
+      const adaptateur = this.resolveDestinationAdapter(
         toDestinationConfiguree(destination, this.cipher),
-      ).healthCheck();
+      );
+      return await Promise.race([adaptateur.healthCheck(), expiration]);
     } catch (erreur) {
       return {
         joignable: false,
         classe: 'transient',
         message: erreur instanceof Error ? erreur.message : String(erreur),
       };
+    } finally {
+      clearTimeout(minuteur);
     }
   }
 

@@ -7,7 +7,7 @@ import {
   type SecretCipher,
 } from '@nudge/core';
 import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
@@ -42,13 +42,20 @@ export class DispatchProcessor {
         retour: { with: { projet: true, verdict: true } },
       },
     });
-    if (!envoi || envoi.statut !== 'en_attente') return;
+    if (!envoi) return;
     const { destination, retour } = envoi;
-    // Destination Suspendue : l'Envoi est retenu sans appel sortant.
-    if (
-      destination.etat === 'suspendue' &&
-      (await this.suspension.retenirSiSuspendue(envoiId, destination.id))
-    ) {
+    if (envoi.statut === 'retenu') {
+      // Job de libération : l'Envoi repart si sa Destination est active.
+      if (destination.etat === 'suspendue') {
+        await this.suspension.prolongerRetenue(envoiId);
+        return;
+      }
+      if (!(await this.suspension.reprendre(envoiId))) return;
+    } else if (envoi.statut !== 'en_attente') {
+      return;
+    } else if (destination.etat === 'suspendue') {
+      // Destination Suspendue : l'Envoi est retenu sans appel sortant.
+      await this.suspension.retenir(envoiId);
       return;
     }
     if (!retour.verdict) {
@@ -86,16 +93,7 @@ export class DispatchProcessor {
     );
 
     if (resultat.statut === 'livre') {
-      await this.db
-        .update(envois)
-        .set({
-          statut: 'livre',
-          lienExterne: resultat.lienExterne,
-          tentatives: sql`${envois.tentatives} + 1`,
-          derniereErreur: null,
-        })
-        .where(and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente')));
-      await this.suspension.apresLivraison(destination.id);
+      await this.suspension.apresLivraison(envoi, resultat.lienExterne);
       return;
     }
     const issue = await this.suspension.apresEchec(envoi, resultat, derniereTentative);

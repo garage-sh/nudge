@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 
 export {
-  SUSPENSION_PAR_DEFAUT,
   type OptionsBalayage,
   type OptionsSuspension,
   type Suspension,

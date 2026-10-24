@@ -34,7 +34,10 @@ export interface WorkerOptions {
   readonly balayage?: OptionsBalayage;
   /** Seuil de Suspension, refroidissement et période de la sonde ; `SUSPENSION_PAR_DEFAUT` à défaut. */
   readonly suspension?: OptionsSuspension;
-  /** Observateur de chaque passage d'une Destination en Suspendue (tests). */
+  /**
+   * Appelé à chaque passage d'une Destination en Suspendue (fournit `SUR_SUSPENSION`) ;
+   * rien à défaut.
+   */
   readonly surSuspension?: SurSuspension;
   readonly logger?: false | LogLevel[];
 }
@@ -57,7 +60,7 @@ export interface OptionsSuspension {
   readonly intervalleSondeMs: number;
 }
 
-/** Forme reprise du disjoncteur des connecteurs d'alliances-pa : 5 échecs, 5 min, 1 min. */
+/** Valeurs reprises d'alliances-pa : 5 échecs, 5 min de refroidissement, sonde chaque minute. */
 export const SUSPENSION_PAR_DEFAUT: OptionsSuspension = {
   seuilEchecs: 5,
   refroidissementMs: 5 * 60_000,
@@ -77,7 +80,8 @@ export interface Suspension {
 
 /**
  * Point d'accroche de chaque passage en Suspendue : appelé une fois par transition,
- * après qu'elle est enregistrée en base (jamais pour une Destination déjà Suspendue).
- * Une erreur levée ici est journalisée sans annuler la Suspension.
+ * après son commit en base (jamais pour une Destination déjà Suspendue). Au plus une
+ * fois : un arrêt du worker entre le commit et l'appel le perd, l'état en base reste
+ * la référence. Une erreur levée ici est journalisée sans annuler la Suspension.
  */
 export type SurSuspension = (suspension: Suspension) => void | Promise<void>;

@@ -1,5 +1,5 @@
 {
-  "id": "49e4912b-a786-4ea3-93fc-21a748a29128",
+  "id": "5d92c791-0abb-436b-8646-e1a858cc660d",
   "prevId": "08c6f450-8acf-4397-9e72-9f213a987c7c",
   "version": "7",
   "dialect": "postgresql",
@@ -178,6 +178,12 @@
         "derniere_erreur": {
           "name": "derniere_erreur",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retenu_le": {
+          "name": "retenu_le",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

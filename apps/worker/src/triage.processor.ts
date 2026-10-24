@@ -18,7 +18,7 @@ import {
   type RequeteJuge,
 } from '@nudge/judge';
 import type { Queue } from 'bullmq';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { JugeResolver } from './juge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
@@ -168,8 +168,6 @@ export class TriageProcessor {
       .from(verdicts)
       .where(eq(verdicts.retourId, retourId));
     if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
-    // Verrou partagé : une Destination ne peut pas être réactivée (et libérer ses Envois
-    // retenus) avant que les Envois retenus créés ici soient visibles.
     const destinationsDuProjet = await tx
       .select({
         id: destinations.id,
@@ -178,8 +176,7 @@ export class TriageProcessor {
         filtreGraviteMinimale: destinations.filtreGraviteMinimale,
       })
       .from(destinations)
-      .where(eq(destinations.projetId, projetId))
-      .for('share');
+      .where(eq(destinations.projetId, projetId));
     const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
     if (cibles.length === 0) return;
     await tx
@@ -189,7 +186,7 @@ export class TriageProcessor {
           retourId,
           destinationId: d.id,
           // Destination Suspendue : l'Envoi est retenu d'emblée, sans job ni appel sortant.
-          statut: d.etat === 'suspendue' ? ('retenu' as const) : ('en_attente' as const),
+          ...(d.etat === 'suspendue' ? { statut: 'retenu' as const, retenuLe: sql`now()` } : {}),
         })),
       )
       .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] });

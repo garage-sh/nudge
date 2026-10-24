@@ -179,6 +179,11 @@ export const envois = pgTable(
     lienExterne: text('lien_externe'),
     tentatives: integer('tentatives').notNull().default(0),
     derniereErreur: text('derniere_erreur'),
+    /**
+     * Début de la retenue en cours (`statut = 'retenu'`), `null` sinon : distingue les
+     * retenues successives d'un même Envoi, et donc leurs jobs de libération.
+     */
+    retenuLe: timestamp('retenu_le', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

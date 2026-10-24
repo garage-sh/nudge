@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { echec, startPipeline, type Pipeline } from './harness/index.js';
 
 /**
- * Échecs d'Envoi et Suspension d'une Destination (forme reprise des connecteurs
- * d'alliances-pa) : un échec transient est retenté et compte pour la Suspension, un
+ * Échecs d'Envoi et Suspension d'une Destination (forme reprise de ce
+ * qu'alliances-pa documente pour ses workers) : un échec transient est retenté et compte pour la Suspension, un
  * échec auth suspend sans retry, un échec permanent n'échoue que l'Envoi. Une
  * Destination Suspendue retient ses Envois sans appel sortant, jusqu'à ce qu'une
  * sonde la trouve joignable.
@@ -182,6 +182,29 @@ describe('Échecs d’Envoi et Suspension des Destinations', () => {
       await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'retenu'));
     }
     expect(pipeline.suspensions.filter((s) => s.destinationId === destination.id)).toHaveLength(1);
+  });
+
+  it('une libération interrompue (Destination réactivée, Envois jamais remis en queue) est rattrapée par la sonde', async () => {
+    const { destination, fake, poster } = await projetAvecDestination('Libération interrompue');
+    fake.scriptSends(echec('auth', 'HTTP 401'));
+    fake.scriptHealth(
+      ...Array.from({ length: 50 }, () => ({
+        joignable: false as const,
+        classe: 'auth' as const,
+        message: 'HTTP 401',
+      })),
+    );
+    const id = await poster('Retenu puis oublié');
+    await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'retenu'));
+
+    // Comme un worker arrêté juste après avoir réactivé la Destination.
+    await pipeline.reactiverSansLiberer(destination.id);
+
+    const retour = await pipeline.waitForRetour(id, (r) =>
+      r.envois.some((e) => e.statut === 'livre'),
+    );
+    expect(retour.envois).toMatchObject([{ statut: 'livre', tentatives: 2 }]);
+    expect(fake.envois).toHaveLength(1);
   });
 });
 

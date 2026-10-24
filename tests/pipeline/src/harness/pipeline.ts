@@ -97,6 +97,11 @@ export interface Pipeline {
    * déchiffrent plus, comme après un changement de `NUDGE_ENCRYPTION_KEY`.
    */
   rendreSecretsIndechiffrables(destinationId: string): Promise<void>;
+  /**
+   * Remet une Destination Suspendue en active sans libérer ses Envois retenus, comme un
+   * worker arrêté entre la réactivation et la remise en queue.
+   */
+  reactiverSansLiberer(destinationId: string): Promise<void>;
   /** Un navigateur anonyme sur l'API du dashboard (il garde son cookie de session). */
   dashboard(): DashboardClient;
   /**
@@ -277,6 +282,12 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .set({
           secretsChiffres: chiffrerSecretsDestination(autreCle, destinationId, { perdu: 'x' }),
         })
+        .where(eq(destinations.id, destinationId));
+    },
+    async reactiverSansLiberer(destinationId) {
+      await db
+        .update(destinations)
+        .set({ etat: 'active', suspendueLe: null, motifSuspension: null, prochaineSondeLe: null })
         .where(eq(destinations.id, destinationId));
     },
     dashboard: () => new DashboardClient(url),
