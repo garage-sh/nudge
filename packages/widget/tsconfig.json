@@ -1,0 +1,7 @@
+{
+  "extends": "@nudge/typescript-config/react.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "e2e", "*.config.ts"]
+}

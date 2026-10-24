@@ -5,3 +5,5 @@ coverage
 packages/database/drizzle/meta
 yarn.lock
 LICENSE
+test-results
+playwright-report

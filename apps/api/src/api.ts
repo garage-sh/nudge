@@ -4,8 +4,9 @@ import type { LogLevel } from '@nestjs/common';
 import type { DestinationAdapterResolver } from '@nudge/core';
 import { ApiModule } from './api.module.js';
 import type { InfraOptions } from './infra/infra.module.js';
+import type { IngestionOptions } from './api.module.js';
 
-export interface ApiOptions extends InfraOptions {
+export interface ApiOptions extends InfraOptions, IngestionOptions {
   /** `false` coupe les logs Nest (tests). */
   readonly logger?: false | LogLevel[];
   /**

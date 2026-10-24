@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createApi } from '@nudge/api';
+import { createApi, type LimitesWidget } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -66,6 +66,8 @@ export interface PipelineOptions {
   readonly suspension?: OptionsSuspension;
   /** Répliques du worker sur les mêmes queues et la même base (1 par défaut). */
   readonly repliquesWorker?: number;
+  /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
+  readonly limitesWidget?: LimitesWidget;
 }
 
 export interface Pipeline {
@@ -79,6 +81,7 @@ export interface Pipeline {
   createProjet(donnees: {
     nom: string;
     description?: string | null;
+    originesAutorisees?: readonly string[];
   }): Promise<{ projet: Projet; clePublique: string; cleSecrete: string }>;
   /**
    * Une Destination du Projet créée directement en base (seed), servie par une
@@ -116,6 +119,15 @@ export interface Pipeline {
   insererRetourSansTriage(projetId: string, donnees: { texte: string }): Promise<string>;
   /** POST /v1/retours avec la clé secrète du Projet. */
   postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
+  /**
+   * POST /v1/retours avec la clé publique du Projet, comme le Widget depuis une page
+   * de l'origine `origine` (`null` : sans en-tête Origin).
+   */
+  postRetourWidget(
+    clePublique: string,
+    origine: string | null,
+    corps: RetourEntrant | Record<string, unknown>,
+  ): Promise<Response>;
   /**
    * Transition de revue (valider, rejeter, réhabiliter) telle que le dashboard la
    * déclenche : `POST /api/retours/:id/revue`, par le Membre de `signIn()`.
@@ -226,7 +238,12 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const workers = await Promise.all(
     Array.from({ length: options.repliquesWorker ?? 1 }, () => createWorker(workerOptions)),
   );
-  const api = await createApi({ ...infra, sessionCookieSecure: false, resolveDestinationAdapter });
+  const api = await createApi({
+    ...infra,
+    sessionCookieSecure: false,
+    resolveDestinationAdapter,
+    ...(options.limitesWidget ? { limitesWidget: options.limitesWidget } : {}),
+  });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
   const { db, close } = connectDb(databaseUrl.toString());
@@ -314,6 +331,16 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       fetch(`${url}/v1/retours`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${cleSecrete}` },
+        body: JSON.stringify(corps),
+      }),
+    postRetourWidget: (clePublique, origine, corps) =>
+      fetch(`${url}/v1/retours`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${clePublique}`,
+          ...(origine ? { origin: origine } : {}),
+        },
         body: JSON.stringify(corps),
       }),
     async revoir(retourId, action) {

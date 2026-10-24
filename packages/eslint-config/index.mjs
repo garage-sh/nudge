@@ -6,7 +6,15 @@ import tseslint from 'typescript-eslint';
 /** Configuration ESLint (flat) commune au monorepo. Le formatage relève de Prettier. */
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/.turbo/**', '.yarn/**', '**/drizzle/meta/**'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.turbo/**',
+      '.yarn/**',
+      '**/drizzle/meta/**',
+      '**/test-results/**',
+      '**/playwright-report/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

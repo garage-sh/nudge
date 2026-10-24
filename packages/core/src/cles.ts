@@ -6,9 +6,15 @@ export interface ProjetKeys {
   readonly cleSecrete: string;
 }
 
-export const generateClePublique = (): string => `nk_pub_${randomBytes(18).toString('base64url')}`;
+/** Préfixes des clés : l'ingestion choisit sa voie (Widget ou serveur) d'après lui. */
+export const PREFIXE_CLE_PUBLIQUE = 'nk_pub_';
+export const PREFIXE_CLE_SECRETE = 'nk_sec_';
 
-export const generateCleSecrete = (): string => `nk_sec_${randomBytes(32).toString('base64url')}`;
+export const generateClePublique = (): string =>
+  `${PREFIXE_CLE_PUBLIQUE}${randomBytes(18).toString('base64url')}`;
+
+export const generateCleSecrete = (): string =>
+  `${PREFIXE_CLE_SECRETE}${randomBytes(32).toString('base64url')}`;
 
 export function generateProjetKeys(): ProjetKeys {
   return { clePublique: generateClePublique(), cleSecrete: generateCleSecrete() };

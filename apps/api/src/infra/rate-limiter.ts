@@ -19,6 +19,13 @@ export class RateLimiter {
     return fenetre.compte <= this.options.limit;
   }
 
+  /** Temps restant avant la fin de la fenêtre courante de `cle` (0 si aucune n'est ouverte). */
+  msAvantReprise(cle: string, maintenant = Date.now()): number {
+    const fenetre = this.fenetres.get(cle);
+    if (!fenetre) return 0;
+    return Math.max(0, fenetre.debut + this.options.windowMs - maintenant);
+  }
+
   /** Oublie les fenêtres échues, pour que la table ne grossisse pas sans fin. */
   private purge(maintenant: number): void {
     if (this.fenetres.size < 1000) return;
