@@ -79,8 +79,9 @@ function discord(...reponses: Reponse[]) {
   return { fetch, requetes };
 }
 
+/** Un adaptateur neuf, avec son propre cache des serveurs. */
 const adaptateur = (fetch: typeof globalThis.fetch, delaiMs?: number) =>
-  adaptateurDiscord(DESTINATION, { fetch, delaiMs });
+  adaptateurDiscord(DESTINATION, { fetch, delaiMs, serveurs: new Map() });
 
 /** Ce que l'adaptateur poste à « Execute Webhook ». */
 interface CorpsExecution {
@@ -150,6 +151,8 @@ describe('Adaptateur Discord', () => {
     // « If a webhook returns a 404 status you should not attempt to use it again. »
     ['404 webhook supprimé', 'auth', DISCORD.webhookInconnu],
     ['400 corps refusé', 'permanent', DISCORD.corpsInvalide],
+    // Un salon forum refuse tout Envoi : c'est la Destination qui est mal configurée.
+    ['400 salon forum', 'auth', DISCORD.salonForum],
     ['429 limite de débit', 'transient', DISCORD.limiteDeDebit],
     ['502 passerelle', 'transient', DISCORD.passerelleIndisponible],
   ] as const)('classe une réponse %s : %s', async (_, classe, enregistrement) => {
@@ -190,6 +193,23 @@ describe('Adaptateur Discord', () => {
       statut: 'echec',
       classe: 'transient',
     });
+  });
+
+  it('ne relit le serveur d’un webhook qu’une fois : il ne change pas', async () => {
+    const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook, DISCORD.messageCree);
+    const serveurs = new Map<string, string>();
+    const lien = `https://discord.com/channels/${SERVEUR_ID}/${SALON_ID}/${MESSAGE_ID}`;
+
+    expect(await adaptateurDiscord(DESTINATION, { fetch, serveurs }).send(ENVOI)).toEqual({
+      statut: 'livre',
+      lienExterne: lien,
+    });
+    expect(await adaptateurDiscord(DESTINATION, { fetch, serveurs }).send(ENVOI)).toEqual({
+      statut: 'livre',
+      lienExterne: lien,
+    });
+
+    expect(requetes.map((r) => r.init.method ?? 'GET')).toEqual(['POST', 'GET', 'POST']);
   });
 
   it('marque le Retour d’essai et le Verdict incertain ; sans Gravité ni lien du dashboard', async () => {

@@ -127,6 +127,19 @@ export const DISCORD = {
     entetes: { 'retry-after': '65', 'x-ratelimit-scope': 'shared' },
     corps: { message: 'You are being rate limited.', retry_after: 64.57, global: false },
   },
+  /**
+   * 400 code JSON 220001 « Webhooks posted to forum channels must have a thread_name or
+   * thread_id » : le webhook est celui d'un salon forum.
+   */
+  salonForum: {
+    provenance: 'reconstituee',
+    source: CODES,
+    status: 400,
+    corps: {
+      message: 'Webhooks posted to forum channels must have a thread_name or thread_id',
+      code: 220001,
+    },
+  },
   /** 502 « There was not a gateway available to process your request ». */
   passerelleIndisponible: {
     provenance: 'reconstituee',

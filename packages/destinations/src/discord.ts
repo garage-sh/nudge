@@ -4,16 +4,28 @@ import type {
   DestinationConfiguree,
   EnvoiASortir,
 } from '@nudge/core';
-import { LIBELLES_GRAVITE, LIBELLES_TYPE, lireWebhookDiscord, type Gravite } from '@nudge/shared';
-import { classerStatut, messageEchec, messageErreur } from './http.js';
+import {
+  LIBELLES_GRAVITE,
+  LIBELLES_TYPE,
+  lireWebhookDiscord,
+  type Gravite,
+  type SecretsDiscord,
+} from '@nudge/shared';
+import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
 
 export interface OptionsDiscord {
   readonly fetch?: typeof globalThis.fetch;
   /** Délai de réponse de Discord, au-delà duquel l'appel est un échec transitoire. */
   readonly delaiMs?: number;
+  /** Serveur de chaque webhook déjà lu, par id de webhook (tests : un cache neuf). */
+  readonly serveurs?: Map<string, string>;
 }
 
-const DELAI_PAR_DEFAUT_MS = 10_000;
+/**
+ * Le serveur d'un webhook ne change pas : lu une fois par processus, il n'ajoute pas
+ * un appel à chaque Envoi sur la limite de débit du webhook.
+ */
+const SERVEURS_PAR_WEBHOOK = new Map<string, string>();
 
 /** « User-Agent: DiscordBot ($url, $versionNumber) » (docs.discord.com/developers/reference). */
 const USER_AGENT = 'DiscordBot (https://github.com/garage-sh/nudge, 1.0)';
@@ -26,11 +38,13 @@ export function adaptateurDiscord(
   destination: DestinationConfiguree,
   options: OptionsDiscord = {},
 ): DestinationAdapter {
-  const webhook = lireWebhookDiscord(destination.secrets.url ?? '');
+  const webhook = lireWebhookDiscord((destination.secrets as Partial<SecretsDiscord>).url ?? '');
   if (!webhook) throw new Error(`Discord ${destination.id} sans URL de webhook valide`);
   const fetch = options.fetch ?? globalThis.fetch;
-  const delaiMs = options.delaiMs ?? DELAI_PAR_DEFAUT_MS;
-  const pointDAppel = `https://discord.com/api/v10/webhooks/${webhook.id}/${webhook.jeton}`;
+  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
+  const serveurs = options.serveurs ?? SERVEURS_PAR_WEBHOOK;
+  const { id: idWebhook, jeton } = webhook;
+  const pointDAppel = `https://discord.com/api/v10/webhooks/${idWebhook}/${jeton}`;
 
   const appeler = (url: string, init: RequestInit = {}) =>
     fetch(url, {
@@ -47,6 +61,11 @@ export function adaptateurDiscord(
    */
   async function lienDuMessage({ id, channel_id }: MessageCree): Promise<string | null> {
     if (!id || !channel_id) return null;
+    const serveur = serveurs.get(idWebhook) ?? (await lireServeur());
+    return serveur ? `https://discord.com/channels/${serveur}/${channel_id}/${id}` : null;
+  }
+
+  async function lireServeur(): Promise<string | null> {
     try {
       const reponse = await appeler(pointDAppel);
       if (!reponse.ok) {
@@ -54,9 +73,9 @@ export function adaptateurDiscord(
         return null;
       }
       const { guild_id } = (await reponse.json()) as { guild_id?: unknown };
-      return typeof guild_id === 'string'
-        ? `https://discord.com/channels/${guild_id}/${channel_id}/${id}`
-        : null;
+      if (typeof guild_id !== 'string') return null;
+      serveurs.set(idWebhook, guild_id);
+      return guild_id;
     } catch {
       return null;
     }
@@ -69,12 +88,12 @@ export function adaptateurDiscord(
         reponse = await appeler(`${pointDAppel}?wait=true`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(message(envoi)),
+          body: JSON.stringify(corpsDiscord(envoi)),
         });
       } catch (erreur) {
         return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
       }
-      if (!reponse.ok) return { statut: 'echec', ...(await echec(reponse)) };
+      if (!reponse.ok) return { statut: 'echec', ...(await echecDiscord(reponse)) };
       const cree = (await reponse.json().catch(() => ({}))) as MessageCree;
       return { statut: 'livre', lienExterne: await lienDuMessage(cree) };
     },
@@ -90,7 +109,7 @@ export function adaptateurDiscord(
         await reponse.body?.cancel();
         return { joignable: true };
       }
-      return { joignable: false, ...(await echec(reponse)) };
+      return { joignable: false, ...(await echecDiscord(reponse)) };
     },
   };
 }
@@ -101,21 +120,38 @@ interface MessageCree {
 }
 
 /**
- * Classe d'un refus de Discord. Un 404 dit que le webhook n'existe plus : « If a
- * webhook returns a 404 status you should not attempt to use it again »
- * (docs.discord.com/developers/topics/rate-limits). Ce sont ses identifiants qui sont
- * refusés : la Destination est Suspendue, pas seulement cet Envoi en échec.
+ * Codes JSON d'un webhook de salon forum, qui refuse tout message sans fil
+ * (docs.discord.com/developers/topics/opcodes-and-status-codes) : 220001 « must have a
+ * thread_name or thread_id », 220004 « Webhook services cannot be used in forum
+ * channels », 40058 « Cannot send a message in a forum channel ».
  */
-async function echec(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
-  if (reponse.status >= 300 && reponse.status < 400) {
-    await reponse.body?.cancel();
-    return { classe: 'permanent', message: `HTTP ${reponse.status} : redirection refusée` };
-  }
-  const classe = reponse.status === 404 ? 'auth' : classerStatut(reponse.status);
-  return { classe, message: await messageEchec(reponse) };
+const CODES_SALON_FORUM = new Set([220001, 220004, 40058]);
+
+/**
+ * Classe d'un refus de Discord. Le webhook lui-même est refusé, et la Destination
+ * Suspendue plutôt que chaque Envoi en échec, quand :
+ * - il n'existe plus (404) : « If a webhook returns a 404 status you should not attempt
+ *   to use it again » (docs.discord.com/developers/topics/rate-limits) ;
+ * - il est celui d'un salon forum, qui refusera tous les Envois.
+ */
+async function echecDiscord(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
+  const code = reponse.status >= 400 && reponse.status < 500 ? await codeJson(reponse) : null;
+  const webhookRefuse = (status: number) =>
+    status === 404 || (code !== null && CODES_SALON_FORUM.has(code));
+  return echecHttp(reponse, (status) => (webhookRefuse(status) ? 'auth' : classerStatut(status)));
 }
 
-function message({ essai, projet, retour }: EnvoiASortir) {
+/** Le `code` d'un corps d'erreur JSON de Discord, lu sur une copie de la réponse. */
+async function codeJson(reponse: Response): Promise<number | null> {
+  try {
+    const { code } = (await reponse.clone().json()) as { code?: unknown };
+    return typeof code === 'number' ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+function corpsDiscord({ essai, projet, retour }: EnvoiASortir) {
   const type = LIBELLES_TYPE[retour.typeRetenu];
   const titre = `${essai ? 'Essai · ' : ''}${type} · ${echapperMarkdown(projet.nom)}`;
   return {

@@ -6,7 +6,7 @@ import type {
   ResultatEnvoi,
 } from '@nudge/core';
 import { definitionWebhook, type SecretsWebhook } from '@nudge/shared';
-import { classerStatut, messageEchec, messageErreur } from './http.js';
+import { DELAI_HTTP_PAR_DEFAUT_MS, echecHttp, messageErreur } from './http.js';
 
 export interface OptionsWebhook {
   readonly fetch?: typeof globalThis.fetch;
@@ -15,8 +15,6 @@ export interface OptionsWebhook {
   /** Délai de réponse du récepteur, au-delà duquel l'appel est un échec transitoire. */
   readonly delaiMs?: number;
 }
-
-const DELAI_PAR_DEFAUT_MS = 10_000;
 
 /**
  * Webhook générique (D10) : un POST JSON vers l'URL configurée, par événement :
@@ -40,7 +38,7 @@ export function adaptateurWebhook(
   if (!secretSignature) throw new Error(`Webhook ${destination.id} sans secret de signature`);
   const fetch = options.fetch ?? globalThis.fetch;
   const maintenant = options.maintenant ?? (() => new Date());
-  const delaiMs = options.delaiMs ?? DELAI_PAR_DEFAUT_MS;
+  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
 
   async function poster(
     evenement: 'retour' | 'ping',
@@ -75,19 +73,7 @@ export function adaptateurWebhook(
       await reponse.body?.cancel();
       return { statut: 'livre', lienExterne: null };
     }
-    if (reponse.status >= 300 && reponse.status < 400) {
-      await reponse.body?.cancel();
-      return {
-        statut: 'echec',
-        classe: 'permanent',
-        message: `HTTP ${reponse.status} : redirection refusée, configurez l'URL finale`,
-      };
-    }
-    return {
-      statut: 'echec',
-      classe: classerStatut(reponse.status),
-      message: await messageEchec(reponse),
-    };
+    return { statut: 'echec', ...(await echecHttp(reponse)) };
   }
 
   return {
