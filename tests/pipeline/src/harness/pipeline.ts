@@ -5,6 +5,7 @@ import {
   DISPATCH_QUEUE,
   TRIAGE_QUEUE,
   type ActionRevue,
+  type DestinationAdapterResolver,
   type Filtre,
   type ResultatRevue,
   type SeuilsTriage,
@@ -23,6 +24,7 @@ import {
   type RetourLu,
 } from '@nudge/database';
 import type { ConfigJuge } from '@nudge/judge';
+import { resolveDestinationAdapter as adaptateursReels } from '@nudge/destinations';
 import type { RetourEntrant } from '@nudge/shared';
 import { createWorker, type OptionsBalayage } from '@nudge/worker';
 import { Queue, QueueEvents } from 'bullmq';
@@ -49,6 +51,11 @@ export interface PipelineOptions {
   readonly delaiJugeMs?: number;
   /** Balayage des Retours restés Reçu ; celui du worker (5 min) sinon. */
   readonly balayage?: OptionsBalayage;
+  /**
+   * `'reelles'` : les adaptateurs de `@nudge/destinations` (webhook…), contre de vrais
+   * récepteurs. Par défaut, chaque Destination est servie par sa `FakeDestination`.
+   */
+  readonly destinations?: 'fakes' | 'reelles';
 }
 
 export interface Pipeline {
@@ -168,7 +175,10 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
 
   const cleChiffrement = randomBytes(32).toString('base64');
   const cipher = createSecretCipher(cleChiffrement);
-  const resolveDestinationAdapter = (destination: { id: string }) => fakeFor(destination.id);
+  const resolveDestinationAdapter: DestinationAdapterResolver =
+    options.destinations === 'reelles'
+      ? adaptateursReels
+      : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,

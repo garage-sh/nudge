@@ -1,6 +1,6 @@
 import type { DestinationAvecSecretsGeneres, DestinationVu } from '@nudge/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
+import { echec, startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
 
 describe('Destinations d’un Projet depuis le dashboard', () => {
   let pipeline: Pipeline;
@@ -106,6 +106,41 @@ describe('Destinations d’un Projet depuis le dashboard', () => {
     expect(regeneration.body.secretsGeneres.secretSignature).not.toBe(
       secretsGeneres.secretSignature,
     );
+  });
+
+  it('« tester » envoie un Retour d’exemple par l’adaptateur et rend le résultat, sans Envoi', async () => {
+    const { projet } = await pipeline.createProjet({ nom: 'Essai' });
+    const { destination } = await creer(projet.id);
+    const fake = pipeline.fakeDestination(destination.id);
+
+    const livre = await membre.post(`/api/destinations/${destination.id}/test`);
+
+    expect(livre).toEqual({
+      status: 200,
+      body: { statut: 'livre', lienExterne: expect.stringContaining('https://') },
+    });
+    expect(fake.envois).toHaveLength(1);
+    expect(fake.envois[0]).toMatchObject({
+      essai: true,
+      projet: { id: projet.id, nom: 'Essai' },
+      retour: { texte: expect.stringContaining('exemple') },
+    });
+    expect(await pipeline.readRetour(fake.envois[0]!.retour.id)).toBeNull();
+
+    fake.scriptSends(echec('auth', 'jeton refusé'), new Error('ECONNREFUSED'));
+    expect((await membre.post(`/api/destinations/${destination.id}/test`)).body).toEqual({
+      statut: 'echec',
+      classe: 'auth',
+      message: 'jeton refusé',
+    });
+    expect((await membre.post(`/api/destinations/${destination.id}/test`)).body).toEqual({
+      statut: 'echec',
+      classe: 'transient',
+      message: 'ECONNREFUSED',
+    });
+    expect((await membre.get(`/api/destinations/${destination.id}`)).body).toMatchObject({
+      etat: 'active',
+    });
   });
 
   it.each([
