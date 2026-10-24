@@ -100,7 +100,7 @@ describe('Boîte de réception', () => {
     await userEvent.selectOptions(await screen.findByLabelText('Projet'), 'Boutique');
     await userEvent.selectOptions(screen.getByLabelText('Type'), 'Bug');
     await userEvent.selectOptions(screen.getByLabelText('Gravité'), 'Bloquante');
-    await userEvent.selectOptions(screen.getByLabelText('État'), 'Dispatché');
+    await userEvent.click(screen.getByRole('link', { name: 'Dispatchés' }));
     await userEvent.selectOptions(screen.getByLabelText('Source'), 'API');
     await userEvent.selectOptions(screen.getByLabelText('Verdict'), 'Incertains seulement');
 

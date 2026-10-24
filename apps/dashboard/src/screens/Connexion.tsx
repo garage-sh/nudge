@@ -9,7 +9,7 @@ export function Connexion() {
   const session = useSession();
   const etat = useEtatSetup();
   const connexion = useConnexion();
-  const depuis = (useLocation().state as DepuisState | null)?.depuis ?? '/projets';
+  const depuis = (useLocation().state as DepuisState | null)?.depuis ?? '/retours';
 
   if (session.data) return <Navigate to={depuis} replace />;
   if (session.isPending || etat.isPending) return <Loading />;

@@ -24,27 +24,33 @@ export function BadgeIncertain() {
 
 /**
  * La Gravité en jauge de quatre barres : autant de barres pleines que le niveau, en
- * pointillés quand le Retour n'a pas de Gravité. Lisible sans la couleur.
+ * pointillés quand le Retour n'a pas de Gravité. Lisible sans la couleur ; le niveau
+ * est aussi écrit pour les lecteurs d'écran (`visible` l'affiche à côté).
  */
 export function JaugeGravite({
   gravite,
   grande = false,
+  visible = false,
 }: {
   gravite: Gravite | null | undefined;
   grande?: boolean;
+  visible?: boolean;
 }) {
   const niveau = gravite ? GRAVITES.indexOf(gravite) + 1 : 0;
+  const libelle = gravite ? LIBELLES_GRAVITE[gravite] : 'Sans Gravité';
   return (
-    <span
-      className={grande ? 'jauge grande' : 'jauge'}
-      data-niveau={niveau}
-      role="img"
-      aria-label={gravite ? `Gravité ${LIBELLES_GRAVITE[gravite].toLowerCase()}` : 'Sans Gravité'}
-    >
-      <span />
-      <span />
-      <span />
-      <span />
+    <span className="porte-jauge">
+      <span className={grande ? 'jauge grande' : 'jauge'} data-niveau={niveau} aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+      </span>
+      {visible ? (
+        <span>{libelle}</span>
+      ) : (
+        <span className="visuellement-cache">{gravite ? `Gravité ${libelle}` : libelle}</span>
+      )}
     </span>
   );
 }

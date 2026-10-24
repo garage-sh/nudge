@@ -47,6 +47,49 @@ const FORMAT_DATE = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeS
 
 export const formatDate = (iso: string): string => FORMAT_DATE.format(new Date(iso));
 
+const FORMAT_HEURE = new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' });
+const FORMAT_JOUR_COURT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+const FORMAT_JOUR_LONG = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
+
+const MINUTE = 60_000;
+const HEURE = 60 * MINUTE;
+
+/** Minuit du jour de `date`, pour comparer des jours calendaires. */
+const debutDuJour = (date: Date): number =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+const ecartEnJours = (date: Date, maintenant: Date): number =>
+  Math.round((debutDuJour(maintenant) - debutDuJour(date)) / (24 * HEURE));
+
+/**
+ * Une date relative, pour les listes : « à l'instant », « il y a 5 min », « il y a 3 h »
+ * le jour même, puis « hier » et la date courte. La date exacte va en `title`.
+ */
+export function formatDateRelative(iso: string, maintenant = new Date()): string {
+  const date = new Date(iso);
+  const ecart = maintenant.getTime() - date.getTime();
+  if (ecart < MINUTE) return 'à l’instant';
+  if (ecart < HEURE) return `il y a ${Math.floor(ecart / MINUTE)} min`;
+  const jours = ecartEnJours(date, maintenant);
+  if (jours === 0) return `il y a ${Math.floor(ecart / HEURE)} h`;
+  if (jours === 1) return `hier, ${FORMAT_HEURE.format(date)}`;
+  return FORMAT_JOUR_COURT.format(date);
+}
+
+/** Le jour d'une date, pour grouper une liste : « Aujourd’hui », « Hier », « mercredi 22 octobre ». */
+export function formatJour(iso: string, maintenant = new Date()): string {
+  const date = new Date(iso);
+  const jours = ecartEnJours(date, maintenant);
+  if (jours === 0) return 'Aujourd’hui';
+  if (jours === 1) return 'Hier';
+  const libelle = FORMAT_JOUR_LONG.format(date);
+  return libelle.charAt(0).toUpperCase() + libelle.slice(1);
+}
+
 export const LIBELLES_FOURNISSEUR_JUGE: Record<FournisseurJuge, string> = {
   typesafe: 'TypeSafe (Jev)',
   openrouter: 'OpenRouter (pplx-decider)',
