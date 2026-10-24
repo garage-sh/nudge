@@ -1,5 +1,7 @@
+import type { DestinationAvecSecretsGeneres } from '@nudge/shared';
+import type { StockageCaptures } from '@nudge/stockage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { echec, startPipeline, type Pipeline } from './harness/index.js';
+import { echec, RecepteurWebhook, startPipeline, type Pipeline } from './harness/index.js';
 
 /**
  * Échecs d'Envoi et Suspension d'une Destination (forme reprise de ce
@@ -256,5 +258,121 @@ describe('Échecs transient sous le seuil de Suspension', () => {
     ]);
     expect(fake.attempts).toHaveLength(8);
     expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+  });
+});
+
+/**
+ * Un échec qui vient de nudge et non de la cible (D25) est retenté, mais ne dit rien
+ * de la Destination : il ne compte pas pour sa Suspension et ne déclenche aucune alerte.
+ */
+describe('Échecs internes à nudge', () => {
+  let pipeline: Pipeline;
+
+  beforeAll(async () => {
+    pipeline = await startPipeline({
+      suspension: { seuilEchecs: 2, refroidissementMs: 300, intervalleSondeMs: 100 },
+    });
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+  });
+
+  async function poster(projetCle: string, texte: string) {
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const reponse = await pipeline.postRetour(projetCle, { texte });
+    return ((await reponse.json()) as { id: string }).id;
+  }
+
+  it('une exception inattendue de l’adaptateur est retentée sans suspendre la Destination', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Adaptateur bogué' });
+    const { destination, fake } = await pipeline.createDestination(projet.id);
+    fake.scriptSends(...Array.from({ length: 8 }, () => new Error('bogue de nudge')));
+
+    const id = await poster(cleSecrete, 'Le bogue est chez nous');
+
+    const retour = await pipeline.waitForRetour(
+      id,
+      (r) => r.envois.some((e) => e.statut === 'echec'),
+      10_000,
+    );
+    expect(retour.envois).toMatchObject([{ statut: 'echec', tentatives: 8 }]);
+    expect(fake.attempts).toHaveLength(8);
+    expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+    expect(pipeline.suspensions).toEqual([]);
+  });
+
+  it('des secrets indéchiffrables sont retentés sans suspendre la Destination ni l’appeler', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Clé d’Instance changée' });
+    const { destination, fake } = await pipeline.createDestination(projet.id);
+    await pipeline.rendreSecretsIndechiffrables(destination.id);
+
+    const id = await poster(cleSecrete, 'Les secrets sont perdus');
+
+    const retour = await pipeline.waitForRetour(
+      id,
+      (r) => r.envois.some((e) => e.statut === 'echec'),
+      10_000,
+    );
+    expect(retour.envois).toMatchObject([{ statut: 'echec', tentatives: 8 }]);
+    expect(fake.attempts).toHaveLength(0);
+    expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+    expect(pipeline.suspensions).toEqual([]);
+  });
+});
+
+describe('Échecs internes à nudge : Capture illisible au stockage', () => {
+  let pipeline: Pipeline;
+  let recepteur: RecepteurWebhook;
+
+  const stockageIllisible: StockageCaptures = {
+    enregistrer: () => Promise.resolve(),
+    lire: () => Promise.reject(new Error('disque illisible')),
+    supprimer: () => Promise.resolve(),
+  };
+
+  beforeAll(async () => {
+    [pipeline, recepteur] = await Promise.all([
+      startPipeline({
+        destinations: 'reelles',
+        stockage: stockageIllisible,
+        suspension: { seuilEchecs: 2, refroidissementMs: 300, intervalleSondeMs: 100 },
+      }),
+      RecepteurWebhook.demarrer(),
+    ]);
+  });
+
+  afterAll(async () => {
+    await Promise.all([pipeline?.stop(), recepteur?.arreter()]);
+  });
+
+  it('un webhook dont la Capture ne se lit pas est retenté sans être suspendu', async () => {
+    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Stockage illisible' });
+    const membre = await pipeline.signIn();
+    const creation = await membre.post<DestinationAvecSecretsGeneres>(
+      `/api/projets/${projet.id}/destinations`,
+      { type: 'webhook', nom: 'Récepteur local', config: { url: `${recepteur.url}/capture` } },
+    );
+    expect(creation.status).toBe(201);
+    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a, 0x2a]);
+
+    const reponse = await pipeline.postRetour(cleSecrete, {
+      texte: 'Voir la capture',
+      capture: { contentType: 'image/png', data: png.toString('base64') },
+    });
+    const { id } = (await reponse.json()) as { id: string };
+
+    const retour = await pipeline.waitForRetour(
+      id,
+      (r) => r.envois.some((e) => e.statut === 'echec'),
+      10_000,
+    );
+    expect(retour.envois).toMatchObject([
+      { statut: 'echec', tentatives: 8, derniereErreur: expect.stringContaining('Capture') },
+    ]);
+    expect((await pipeline.ligneDestination(creation.body.destination.id))?.etat).toBe('active');
+    expect(pipeline.suspensions).toEqual([]);
+    expect(recepteur.requetes.filter((r) => r.chemin === '/capture')).toEqual([]);
   });
 });

@@ -1,14 +1,21 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  envoyer,
+  echecDException,
   lienDashboard,
   type CaptureADispatcher,
   type DestinationAdapterResolver,
   type DispatchJob,
   type EnvoiASortir,
+  type ResultatEnvoi,
   type SecretCipher,
 } from '@nudge/core';
-import { envois, toDestinationConfiguree, type captures, type Db } from '@nudge/database';
+import {
+  envois,
+  toDestinationConfiguree,
+  type captures,
+  type Db,
+  type DestinationRow,
+} from '@nudge/database';
 import { eq } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
@@ -65,6 +72,7 @@ export class DispatchProcessor {
       return;
     }
 
+    let captureIllisible = false;
     const aSortir: EnvoiASortir = {
       envoiId,
       essai: false,
@@ -81,32 +89,68 @@ export class DispatchProcessor {
             ? { ...retour.auteur, confiance: retour.confianceAuteur }
             : null,
         contexte: retour.contexte,
-        capture: retour.capture ? this.captureADispatcher(retour.capture) : null,
+        capture: retour.capture
+          ? this.captureADispatcher(retour.capture, () => {
+              captureIllisible = true;
+            })
+          : null,
         recuLe: retour.createdAt,
         lienDashboard: lienDashboard(this.options.dashboardUrl, `/retours/${retour.id}`),
       },
     };
 
-    // Une exception (réseau, adaptateur, secrets indéchiffrables) est un échec transitoire.
-    const resultat = await envoyer(
-      () => this.resolveDestinationAdapter(toDestinationConfiguree(destination, this.cipher)),
-      aSortir,
-    );
+    const { resultat, exception } = await this.sortir(destination, aSortir);
 
     if (resultat.statut === 'livre') {
       await this.suspension.apresLivraison(envoi, resultat.lienExterne);
       return;
     }
-    const issue = await this.suspension.apresEchec(envoi, resultat, derniereTentative);
+    const issue = await this.suspension.apresEchec(envoi, resultat, {
+      derniereTentative,
+      interne: exception || captureIllisible,
+    });
     if (issue === 'a_retenter') throw new EchecTransitoire(resultat.message);
   }
 
-  /** La Capture d'un Retour, lue dans le stockage seulement si l'adaptateur la joint. */
-  private captureADispatcher({
-    cle,
-    contentType,
-    octets,
-  }: typeof captures.$inferSelect): CaptureADispatcher {
-    return { contentType, octets, lire: () => this.options.stockageCaptures.lire(cle) };
+  /**
+   * Envoie par l'adaptateur de la Destination. Une exception est un échec transitoire
+   * qui vient de nudge et non de la cible (D25) : secrets indéchiffrables, type
+   * d'adaptateur inconnu, défaut de l'adaptateur — chaque adaptateur rend en résultat
+   * classé les réponses et les erreurs réseau de sa cible.
+   */
+  private async sortir(
+    destination: DestinationRow,
+    aSortir: EnvoiASortir,
+  ): Promise<{ resultat: ResultatEnvoi; exception: boolean }> {
+    try {
+      const adaptateur = this.resolveDestinationAdapter(
+        toDestinationConfiguree(destination, this.cipher),
+      );
+      return { resultat: await adaptateur.send(aSortir), exception: false };
+    } catch (erreur) {
+      return { resultat: echecDException(erreur), exception: true };
+    }
+  }
+
+  /**
+   * La Capture d'un Retour, lue dans le stockage seulement si l'adaptateur la joint.
+   * `surEchec` signale un stockage qui ne la rend pas : un échec interne à nudge.
+   */
+  private captureADispatcher(
+    { cle, contentType, octets }: typeof captures.$inferSelect,
+    surEchec: () => void,
+  ): CaptureADispatcher {
+    return {
+      contentType,
+      octets,
+      lire: async () => {
+        try {
+          return await this.options.stockageCaptures.lire(cle);
+        } catch (erreur) {
+          surEchec();
+          throw erreur;
+        }
+      },
+    };
   }
 }

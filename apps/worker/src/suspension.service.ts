@@ -125,11 +125,14 @@ export class SuspensionService {
    * Enregistre l'échec d'un Envoi en attente et rend ce qu'il devient : retenu (sa
    * Destination est, ou vient d'être, Suspendue), à retenter (transient sous le seuil)
    * ou en échec (permanent, ou transient à la dernière tentative).
+   *
+   * `derniereTentative` : BullMQ ne relancera plus le job. `interne` : l'échec vient de
+   * nudge et non de la cible (D25) ; il est retenté mais ne compte pas pour la Suspension.
    */
   async apresEchec(
     envoi: { readonly id: string; readonly destinationId: string },
     resultat: Echec,
-    derniereTentative: boolean,
+    { derniereTentative, interne }: { derniereTentative: boolean; interne: boolean },
   ): Promise<IssueEchec> {
     const tentatives = sql`${envois.tentatives} + 1`;
     const derniereErreur = motif(resultat.classe, resultat.message);
@@ -152,7 +155,7 @@ export class SuspensionService {
         .where(eq(destinations.id, envoi.destinationId))
         .for('update');
       let suspension: Suspension | null = null;
-      if (destination?.etat === 'active') {
+      if (destination?.etat === 'active' && !interne) {
         const seuilAtteint =
           classe === 'transient' &&
           (await this.compterEchec(tx, envoi.destinationId)) >= this.politique.seuilEchecs;

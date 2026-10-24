@@ -121,12 +121,17 @@ async function sansException(appel: () => Promise<ResultatEnvoi>): Promise<Resul
   try {
     return await appel();
   } catch (erreur) {
-    return {
-      statut: 'echec',
-      classe: 'transient',
-      message: erreur instanceof Error ? erreur.message : String(erreur),
-    };
+    return echecDException(erreur);
   }
+}
+
+/** Une exception levée pendant un envoi, rendue en échec transitoire. */
+export function echecDException(erreur: unknown): Extract<ResultatEnvoi, { statut: 'echec' }> {
+  return {
+    statut: 'echec',
+    classe: 'transient',
+    message: erreur instanceof Error ? erreur.message : String(erreur),
+  };
 }
 
 /**
