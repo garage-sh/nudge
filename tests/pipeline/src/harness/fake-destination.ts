@@ -15,8 +15,10 @@ export class FakeDestination implements DestinationAdapter {
   readonly envois: EnvoiASortir[] = [];
   /** Tous les appels à `send`, livrés ou non. */
   readonly attempts: EnvoiASortir[] = [];
-  /** Nombre d'appels à `healthCheck`. */
-  healthChecks = 0;
+  /** Instant (`performance.now()`) de chaque appel à `send`, dans l'ordre de `attempts`. */
+  readonly attemptTimes: number[] = [];
+  /** Instant (`performance.now()`) de chaque appel à `healthCheck`, dans l'ordre. */
+  readonly healthCheckTimes: number[] = [];
   private sends: (ResultatEnvoi | Error)[] = [];
   private held: Promise<void> | null = null;
   private health: SanteDestination[] = [];
@@ -34,6 +36,16 @@ export class FakeDestination implements DestinationAdapter {
     this.health.push(...health);
   }
 
+  /** Les `healthCheck` suivants rendent joignable : le reste du script est abandonné. */
+  restoreHealth(): void {
+    this.health = [];
+  }
+
+  /** Nombre d'appels à `healthCheck`. */
+  get healthChecks(): number {
+    return this.healthCheckTimes.length;
+  }
+
   /** Bloque les `send` jusqu'à l'appel de la fonction rendue (pour des appels simultanés). */
   hold(): () => void {
     let release!: () => void;
@@ -48,6 +60,7 @@ export class FakeDestination implements DestinationAdapter {
 
   async send(envoi: EnvoiASortir): Promise<ResultatEnvoi> {
     this.attempts.push(envoi);
+    this.attemptTimes.push(performance.now());
     if (this.held) await this.held;
     const result = this.sends.shift() ?? {
       statut: 'livre',
@@ -59,7 +72,7 @@ export class FakeDestination implements DestinationAdapter {
   }
 
   async healthCheck(): Promise<SanteDestination> {
-    this.healthChecks += 1;
+    this.healthCheckTimes.push(performance.now());
     return this.health.shift() ?? { joignable: true };
   }
 }

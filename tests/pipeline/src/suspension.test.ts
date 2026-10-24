@@ -135,19 +135,34 @@ describe('Échecs d’Envoi et Suspension des Destinations', () => {
   it('après refroidissement, la sonde teste la Destination : injoignable, elle reste Suspendue ; joignable, elle redevient active et ses Envois retenus repartent', async () => {
     const { destination, fake, poster } = await projetAvecDestination('Panne puis retour');
     fake.scriptSends(echec('auth', 'HTTP 403'));
-    fake.scriptHealth({ joignable: false, classe: 'auth', message: 'HTTP 403' });
+    // Injoignable tant que le test ne la rétablit pas : le second Retour arrive pendant
+    // la Suspension, quel que soit le temps que prend son triage sous charge.
+    fake.scriptHealth(
+      ...Array.from({ length: 50 }, () => ({
+        joignable: false as const,
+        classe: 'auth' as const,
+        message: 'HTTP 403',
+      })),
+    );
 
     const premier = await poster('Retenu par la Suspension');
     await pipeline.waitForRetour(premier, (r) => r.envois.some((e) => e.statut === 'retenu'));
     const second = await poster('Arrivé pendant la Suspension');
-    await pipeline.waitForRetour(second, (r) => r.envois.some((e) => e.statut === 'retenu'));
-    expect(fake.healthChecks).toBe(0);
+    const retenu = await pipeline.waitForRetour(second, (r) =>
+      r.envois.some((e) => e.statut === 'retenu'),
+    );
+    expect(retenu.envois).toMatchObject([{ statut: 'retenu', tentatives: 0 }]);
 
-    // Première sonde après le refroidissement (300 ms) : toujours refusée.
-    await expect.poll(() => fake.healthChecks, { timeout: 2000 }).toBe(1);
+    // Première sonde : pas avant la fin du refroidissement (300 ms), compté depuis l'échec
+    // qui a suspendu la Destination (mesuré par l'horloge, pas par l'avancement du test),
+    // et toujours refusée.
+    await expect.poll(() => fake.healthChecks, { timeout: 2000 }).toBeGreaterThan(0);
+    expect(fake.healthCheckTimes[0]! - fake.attemptTimes[0]!).toBeGreaterThanOrEqual(300);
     expect(await etatDestination(destination.id)).toBe('suspendue');
 
-    // Sonde suivante, un refroidissement plus tard : la Destination répond.
+    // La Destination répond de nouveau : une seule sonde de plus la réactive.
+    fake.restoreHealth();
+    const sondesRefusees = fake.healthChecks;
     for (const id of [premier, second]) {
       const retour = await pipeline.waitForRetour(
         id,
@@ -156,7 +171,7 @@ describe('Échecs d’Envoi et Suspension des Destinations', () => {
       );
       expect(retour.envois).toMatchObject([{ statut: 'livre', derniereErreur: null }]);
     }
-    expect(fake.healthChecks).toBe(2);
+    expect(fake.healthChecks).toBe(sondesRefusees + 1);
     expect(await etatDestination(destination.id)).toBe('active');
     expect(fake.envois.map((e) => e.retour.id).sort()).toEqual([premier, second].sort());
   });
