@@ -141,6 +141,18 @@ export const destinations = pgTable('destinations', {
   type: text('type').notNull(),
   /** Configuration non secrète de l'adapter. */
   config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+  /**
+   * Secrets de l'adapter (jetons, secret de signature), en un objet JSON chiffré par
+   * la clé d'Instance (`secretsDestinationContext`) ; `null` : aucun secret.
+   */
+  secretsChiffres: text('secrets_chiffres'),
+  /** Filtre : Types retenus… */
+  filtreTypes: typeRetourEnum('filtre_types')
+    .array()
+    .notNull()
+    .default([...TYPES_RETOUR]),
+  /** … et Gravité minimale facultative (`null` : pas d'exigence). */
+  filtreGraviteMinimale: graviteEnum('filtre_gravite_minimale'),
   etat: etatDestinationEnum('etat').notNull().default('active'),
   ...timestamps,
 });

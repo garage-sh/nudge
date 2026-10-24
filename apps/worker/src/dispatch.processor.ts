@@ -4,10 +4,12 @@ import type {
   DispatchJob,
   EnvoiASortir,
   ResultatEnvoi,
+  SecretCipher,
 } from '@nudge/core';
-import { envois, toDestinationConfiguree, type Db } from '@nudge/database';
+import { envois, toDestinationConfiguree, type Db, type DestinationRow } from '@nudge/database';
 import { and, eq, sql } from 'drizzle-orm';
-import { DB, DESTINATION_ADAPTER_RESOLVER } from './tokens.js';
+import type { WorkerOptions } from './options.js';
+import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
 
 /** Échec transitoire : le job est relancé par BullMQ (backoff exponentiel). */
 export class EchecTransitoire extends Error {
@@ -22,6 +24,8 @@ export class DispatchProcessor {
     @Inject(DB) private readonly db: Db,
     @Inject(DESTINATION_ADAPTER_RESOLVER)
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
+    @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
+    @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
 
   async handle({ envoiId }: DispatchJob): Promise<void> {
@@ -41,6 +45,7 @@ export class DispatchProcessor {
 
     const aSortir: EnvoiASortir = {
       envoiId,
+      essai: false,
       projet: { id: retour.projet.id, nom: retour.projet.nom },
       retour: {
         id: retour.id,
@@ -55,10 +60,13 @@ export class DispatchProcessor {
             : null,
         contexte: retour.contexte,
         recuLe: retour.createdAt,
+        lienDashboard: this.options.dashboardUrl
+          ? `${this.options.dashboardUrl.replace(/\/+$/, '')}/retours/${retour.id}`
+          : null,
       },
     };
 
-    const resultat = await this.send(toDestinationConfiguree(destination), aSortir);
+    const resultat = await this.send(destination, aSortir);
     const enAttente = and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
     const tentatives = sql`${envois.tentatives} + 1`;
 
@@ -92,13 +100,14 @@ export class DispatchProcessor {
       .where(enAttente);
   }
 
-  /** Une exception de l'adaptateur (réseau, bug) est traitée comme un échec transitoire. */
-  private async send(
-    destination: ReturnType<typeof toDestinationConfiguree>,
-    envoi: EnvoiASortir,
-  ): Promise<ResultatEnvoi> {
+  /**
+   * Une exception (réseau, bug de l'adaptateur, secrets indéchiffrables) est traitée
+   * comme un échec transitoire.
+   */
+  private async send(destination: DestinationRow, envoi: EnvoiASortir): Promise<ResultatEnvoi> {
     try {
-      return await this.resolveDestinationAdapter(destination).send(envoi);
+      const configuree = toDestinationConfiguree(destination, this.cipher);
+      return await this.resolveDestinationAdapter(configuree).send(envoi);
     } catch (erreur) {
       return {
         statut: 'echec',

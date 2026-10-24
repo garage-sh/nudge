@@ -23,6 +23,8 @@ export interface WorkerOptions {
   /** Seuils de la politique de Verdict ; `SEUILS_TRIAGE_PAR_DEFAUT` à défaut. */
   readonly seuilsTriage?: SeuilsTriage;
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
+  /** URL publique du dashboard (`NUDGE_DASHBOARD_URL`) : lien « voir le Retour » des Envois (D12). */
+  readonly dashboardUrl?: string | null;
   /** Balayage des Retours restés Reçu (D18) ; 5 min de délai, toutes les minutes, à défaut. */
   readonly balayage?: OptionsBalayage;
   readonly logger?: false | LogLevel[];

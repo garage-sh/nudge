@@ -1,20 +1,33 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createApi, RevueService } from '@nudge/api';
-import type { ActionRevue, DestinationConfiguree, ResultatRevue, SeuilsTriage } from '@nudge/core';
+import {
+  createSecretCipher,
+  DISPATCH_QUEUE,
+  TRIAGE_QUEUE,
+  type ActionRevue,
+  type Filtre,
+  type ResultatRevue,
+  type SeuilsTriage,
+} from '@nudge/core';
 import {
   connectDb,
   createDestination,
   createProjet,
+  destinations,
   parametresInstance,
   readRetour,
   retours,
   runMigrations,
+  type DestinationRow,
   type Projet,
   type RetourLu,
 } from '@nudge/database';
 import type { ConfigJuge } from '@nudge/judge';
 import type { RetourEntrant } from '@nudge/shared';
 import { createWorker, type OptionsBalayage } from '@nudge/worker';
+import { Queue, QueueEvents } from 'bullmq';
+import { eq } from 'drizzle-orm';
+import { Redis } from 'ioredis';
 import { Client } from 'pg';
 import { inject } from 'vitest';
 import { DashboardClient } from './dashboard-client.js';
@@ -48,11 +61,18 @@ export interface Pipeline {
     nom: string;
     description?: string | null;
   }): Promise<{ projet: Projet; clePublique: string; cleSecrete: string }>;
-  /** Une Destination du Projet, servie par une `FakeDestination` qui lui est propre. */
+  /**
+   * Une Destination du Projet créée directement en base (seed), servie par une
+   * `FakeDestination` qui lui est propre. Sans Filtre, elle retient tout Retour Trié.
+   */
   createDestination(
     projetId: string,
-    donnees?: { nom?: string; config?: Record<string, unknown> },
-  ): Promise<{ destination: DestinationConfiguree; fake: FakeDestination }>;
+    donnees?: { nom?: string; config?: Record<string, unknown>; filtre?: Filtre },
+  ): Promise<{ destination: DestinationRow; fake: FakeDestination }>;
+  /** La `FakeDestination` qui sert cette Destination (créée par le dashboard, par exemple). */
+  fakeDestination(destinationId: string): FakeDestination;
+  /** La ligne d'une Destination telle qu'en base (secrets chiffrés), ou `null`. */
+  ligneDestination(destinationId: string): Promise<DestinationRow | null>;
   /** Un navigateur anonyme sur l'API du dashboard (il garde son cookie de session). */
   dashboard(): DashboardClient;
   /**
@@ -72,6 +92,13 @@ export interface Pipeline {
    * déclenchera (#9) : par le `RevueService` de l'api.
    */
   revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue>;
+  /**
+   * Remet en queue le job de Triage d'un Retour (nouvel id de job, comme un job
+   * rejoué) et attend qu'il soit traité.
+   */
+  rejouerTriage(retourId: string): Promise<void>;
+  /** Remet en queue le job de Dispatch d'un Envoi et attend qu'il soit traité. */
+  rejouerDispatch(envoiId: string): Promise<void>;
   /** La ligne des paramètres d'Instance telle qu'en base (secrets chiffrés), ou `null`. */
   parametresInstance(): Promise<typeof parametresInstance.$inferSelect | null>;
   /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
@@ -139,11 +166,14 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     return fake;
   };
 
+  const cleChiffrement = randomBytes(32).toString('base64');
+  const cipher = createSecretCipher(cleChiffrement);
+  const resolveDestinationAdapter = (destination: { id: string }) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,
     queuePrefix: `nudge-test-${suffixe}`,
-    cleChiffrement: randomBytes(32).toString('base64'),
+    cleChiffrement,
     // Retries rapides : les tests d'échecs transitoires restent courts.
     retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
@@ -154,12 +184,30 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.seuilsTriage ? { seuilsTriage: options.seuilsTriage } : {}),
     ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
     ...(options.balayage ? { balayage: options.balayage } : {}),
-    resolveDestinationAdapter: (destination) => fakeFor(destination.id),
+    resolveDestinationAdapter,
   });
-  const api = await createApi({ ...infra, sessionCookieSecure: false });
+  const api = await createApi({ ...infra, sessionCookieSecure: false, resolveDestinationAdapter });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
   const { db, close } = connectDb(databaseUrl.toString());
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  const queues = {
+    [TRIAGE_QUEUE]: new Queue(TRIAGE_QUEUE, { connection: redis, prefix: infra.queuePrefix }),
+    [DISPATCH_QUEUE]: new Queue(DISPATCH_QUEUE, { connection: redis, prefix: infra.queuePrefix }),
+  };
+  const rejouer = async (nom: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE, data: object) => {
+    const evenements = new QueueEvents(nom, {
+      connection: { host: redis.options.host, port: redis.options.port },
+      prefix: infra.queuePrefix,
+    });
+    try {
+      await evenements.waitUntilReady();
+      const job = await queues[nom].add(nom, data, { jobId: `rejeu-${randomUUID()}` });
+      await job.waitUntilFinished(evenements, 10_000);
+    } finally {
+      await evenements.close();
+    }
+  };
 
   const pipeline: Pipeline = {
     url,
@@ -169,13 +217,22 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     },
     createProjet: (donnees) => createProjet(db, donnees),
     async createDestination(projetId, donnees = {}) {
-      const destination = await createDestination(db, {
+      const destination = await createDestination(db, cipher, {
         projetId,
         nom: donnees.nom ?? 'Destination de test',
         type: 'fake',
         config: donnees.config ?? {},
+        ...(donnees.filtre ? { filtre: donnees.filtre } : {}),
       });
       return { destination, fake: fakeFor(destination.id) };
+    },
+    fakeDestination: fakeFor,
+    async ligneDestination(destinationId) {
+      const [ligne] = await db
+        .select()
+        .from(destinations)
+        .where(eq(destinations.id, destinationId));
+      return ligne ?? null;
     },
     dashboard: () => new DashboardClient(url),
     async signIn() {
@@ -203,6 +260,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         body: JSON.stringify(corps),
       }),
     revoir: (retourId, action) => api.get(RevueService).revoir(retourId, action),
+    rejouerTriage: (retourId) => rejouer(TRIAGE_QUEUE, { retourId }),
+    rejouerDispatch: (envoiId) => rejouer(DISPATCH_QUEUE, { envoiId }),
     async parametresInstance() {
       const [ligne] = await db.select().from(parametresInstance);
       return ligne ?? null;
@@ -223,6 +282,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     async stop() {
       await api.close();
       await worker.close();
+      await Promise.all(Object.values(queues).map((queue) => queue.close()));
+      await redis.quit();
       await close();
       await dropDatabase(admin, nomBase);
       await admin.end();

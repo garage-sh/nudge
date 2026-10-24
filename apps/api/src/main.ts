@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { ENCRYPTION_KEY_VARIABLE } from '@nudge/core';
+import { resolveDestinationAdapter } from '@nudge/destinations';
 import { createApi } from './api.js';
 
 function requireEnv(nom: string): string {
@@ -14,6 +15,7 @@ async function main() {
     redisUrl: requireEnv('REDIS_URL'),
     cleChiffrement: requireEnv(ENCRYPTION_KEY_VARIABLE),
     sessionCookieSecure: process.env.NUDGE_COOKIE_SECURE !== 'false',
+    resolveDestinationAdapter,
   });
   app.enableShutdownHooks();
   await app.listen(Number(process.env.NUDGE_API_PORT ?? 3000));

@@ -18,6 +18,7 @@ async function main() {
     // Repli quand l'Instance n'a pas choisi de Juge dans le dashboard.
     jugeParDefaut: configJugeFromEnv(process.env),
     resolveDestinationAdapter,
+    dashboardUrl: process.env.NUDGE_DASHBOARD_URL || null,
   });
   app.enableShutdownHooks();
 }

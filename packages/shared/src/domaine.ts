@@ -25,6 +25,15 @@ export const STATUTS_ENVOI = ['en_attente', 'livre', 'echec', 'retenu'] as const
 export type StatutEnvoi = (typeof STATUTS_ENVOI)[number];
 
 /**
+ * Classe d'un échec d'Envoi (littéraux de la spec) :
+ * - `transient` : 5xx, 429, timeout — retenté, compte pour la Suspension ;
+ * - `auth` : identifiants refusés — Suspension immédiate, sans retry ;
+ * - `permanent` : refusé pour ce Retour précis — échec sans retry ni Suspension.
+ */
+export const CLASSES_ECHEC = ['transient', 'auth', 'permanent'] as const;
+export type ClasseEchec = (typeof CLASSES_ECHEC)[number];
+
+/**
  * Fournisseurs de Juge qu'une Instance peut choisir : Jev par l'API TypeSafe,
  * pplx-decider par l'API Decisions d'OpenRouter, ou tout serveur auto-hébergé de
  * l'API Decisions (pplx-decider).

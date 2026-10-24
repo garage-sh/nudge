@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildTriageState,
   etatApresTriage,
+  filtreRetient,
   triageQuestions,
   renderVerdict,
   TRIAGE_INSTRUCTIONS,
@@ -9,7 +10,7 @@ import {
   type TriageAnswers,
   type TriageJob,
 } from '@nudge/core';
-import { destinations, envois, retours, verdicts, type Db } from '@nudge/database';
+import { destinations, envois, filtreDe, retours, verdicts, type Db } from '@nudge/database';
 import {
   ErreurJugeRefusee,
   ErreurJugeTransitoire,
@@ -128,13 +129,27 @@ export class TriageProcessor {
     }
   }
 
-  /** Un Envoi par Destination du Projet ; le Retour passe Dispatché dès qu'il en a un. */
+  /**
+   * Un Envoi par Destination du Projet dont le Filtre retient le Verdict ; le Retour
+   * passe Dispatché dès qu'il en a un, et reste Trié si aucun Filtre ne le retient.
+   * L'Envoi est unique par (Retour, Destination) : un job rejoué n'en crée pas d'autre.
+   */
   private async dispatcher(retourId: string, projetId: string): Promise<void> {
     const aEnvoyer = await this.db.transaction(async (tx) => {
-      const cibles = await tx
-        .select({ id: destinations.id })
+      const [verdict] = await tx
+        .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
+        .from(verdicts)
+        .where(eq(verdicts.retourId, retourId));
+      if (!verdict) throw new Error(`Retour ${retourId} Trié sans Verdict`);
+      const destinationsDuProjet = await tx
+        .select({
+          id: destinations.id,
+          filtreTypes: destinations.filtreTypes,
+          filtreGraviteMinimale: destinations.filtreGraviteMinimale,
+        })
         .from(destinations)
         .where(eq(destinations.projetId, projetId));
+      const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
       if (cibles.length > 0) {
         await tx
           .insert(envois)

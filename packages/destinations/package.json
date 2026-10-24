@@ -22,7 +22,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@nudge/core": "workspace:*"
+    "@nudge/core": "workspace:*",
+    "@nudge/shared": "workspace:*"
   },
   "devDependencies": {
     "@nudge/tsup-config": "workspace:*",

@@ -1,4 +1,15 @@
-import type { Auteur, ConfianceAuteur, Contexte, Gravite, Source, TypeRetour } from '@nudge/shared';
+import { randomUUID } from 'node:crypto';
+import type {
+  Auteur,
+  ClasseEchec,
+  ConfianceAuteur,
+  Contexte,
+  Gravite,
+  Source,
+  TypeRetour,
+} from '@nudge/shared';
+
+export type { ClasseEchec } from '@nudge/shared';
 
 /**
  * Port Destination : contrat de chaque adapter (webhook, Discord, Linear…).
@@ -18,20 +29,17 @@ export interface RetourADispatcher {
   readonly auteur: (Auteur & { readonly confiance: ConfianceAuteur }) | null;
   readonly contexte: Contexte;
   readonly recuLe: Date;
+  /** « Voir le Retour » dans le dashboard ; `null` sans `NUDGE_DASHBOARD_URL` (D12). */
+  readonly lienDashboard: string | null;
 }
 
 export interface EnvoiASortir {
   readonly envoiId: string;
   readonly projet: { readonly id: string; readonly nom: string };
   readonly retour: RetourADispatcher;
+  /** Retour d'exemple du bouton « tester » : aucun Envoi n'existe en base. */
+  readonly essai: boolean;
 }
-
-/**
- * - `transient` : 5xx, 429, timeout — retenté, compte pour la Suspension ;
- * - `auth` : identifiants refusés — Suspension immédiate, sans retry ;
- * - `permanent` : refusé pour ce Retour précis — échec sans retry ni Suspension.
- */
-export type ClasseEchec = 'transient' | 'auth' | 'permanent';
 
 export type ResultatEnvoi =
   | { readonly statut: 'livre'; readonly lienExterne: string | null }
@@ -53,7 +61,34 @@ export interface DestinationConfiguree {
   readonly nom: string;
   /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
   readonly type: string;
+  /** Configuration non secrète, validée à l'écriture par le schéma du type (`@nudge/shared`). */
   readonly config: Readonly<Record<string, unknown>>;
+  /** Secrets déchiffrés (jetons, secret de signature) : n'existent en clair qu'ici. */
+  readonly secrets: Readonly<Record<string, string>>;
 }
 
 export type DestinationAdapterResolver = (destination: DestinationConfiguree) => DestinationAdapter;
+
+/**
+ * Le Retour d'exemple que le bouton « tester » envoie à une Destination : il passe
+ * par l'adaptateur comme un vrai, marqué `essai`, sans Envoi enregistré.
+ */
+export function envoiDEssai(projet: EnvoiASortir['projet'], maintenant = new Date()): EnvoiASortir {
+  return {
+    envoiId: randomUUID(),
+    projet,
+    essai: true,
+    retour: {
+      id: randomUUID(),
+      texte: 'Retour d’exemple envoyé par nudge pour tester cette Destination.',
+      source: 'api',
+      typeRetenu: 'bug',
+      gravite: 'mineure',
+      incertain: false,
+      auteur: null,
+      contexte: {},
+      recuLe: maintenant,
+      lienDashboard: null,
+    },
+  };
+}

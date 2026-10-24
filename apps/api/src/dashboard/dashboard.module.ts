@@ -4,7 +4,8 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
-import { SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
+import type { DestinationAdapterResolver } from '@nudge/core';
+import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
@@ -14,6 +15,8 @@ import { SessionController } from './auth/session.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
+import { DestinationsController } from './destinations/destinations.controller.js';
+import { DestinationsService } from './destinations/destinations.service.js';
 import { InstanceController } from './instance/instance.controller.js';
 import { JugeInstanceService } from './instance/juge-instance.service.js';
 import { ProjetsController } from './projets/projets.controller.js';
@@ -25,6 +28,8 @@ import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
   readonly sessionCookie: SessionCookieOptions;
+  /** Adaptateurs de Destination, pour l'envoi d'essai du bouton « tester ». */
+  readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
 
 /** Contrôleurs de l'API du dashboard : tous passent par `ClientHeaderMiddleware`. */
@@ -35,6 +40,7 @@ const CONTROLLERS = [
   ProjetsController,
   RetoursController,
   InstanceController,
+  DestinationsController,
 ];
 
 /**
@@ -50,6 +56,7 @@ export class DashboardModule implements NestModule {
       controllers: CONTROLLERS,
       providers: [
         { provide: SESSION_COOKIE_OPTIONS, useValue: options.sessionCookie },
+        { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         MembresService,
         SessionsService,
         InvitationsService,
@@ -57,6 +64,7 @@ export class DashboardModule implements NestModule {
         RetoursService,
         RevueService,
         JugeInstanceService,
+        DestinationsService,
         SessionGuard,
         AuthThrottleGuard,
       ],

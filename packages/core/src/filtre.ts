@@ -4,7 +4,7 @@ import type { Verdict } from './triage.js';
 /**
  * Condition portée par une Destination : elle reçoit un Retour Trié dont le Type
  * retenu est parmi `types` et, si une Gravité minimale est fixée, dont la Gravité
- * l'atteint. La persistance et l'édition des Filtres relèvent de #7.
+ * l'atteint. Persisté sur la Destination (`destinations.filtre_*`), appliqué au Dispatch.
  */
 export interface Filtre {
   readonly types: readonly TypeRetour[];
