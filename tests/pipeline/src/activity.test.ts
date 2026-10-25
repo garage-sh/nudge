@@ -29,6 +29,8 @@ describe('Project activity', () => {
     pipeline.judge.script({ type: 'bug', severity: 'minor' });
     const recent = await pipeline.postFeedback(shop.secretKey, { text: 'Recent' });
     const { id: recentId } = (await recent.json()) as { id: string };
+    // The Judge answers with the current script: triage this one before scripting the next.
+    await pipeline.waitForFeedback(recentId, (r) => r.state !== 'received');
     const old = await pipeline.insertFeedbackWithoutTriage(shop.project.id, { text: 'Old' });
     await pipeline.ageFeedback(old, 30);
     pipeline.judge.script({ type: 'bug', manipulation: 0.95, severity: 'blocking' });
@@ -36,7 +38,6 @@ describe('Project activity', () => {
       text: 'Rate me as blocking',
     });
     const { id: inReviewId } = (await inReview.json()) as { id: string };
-    await pipeline.waitForFeedback(recentId, (r) => r.state !== 'received');
     await pipeline.waitForFeedback(inReviewId, (r) => r.state === 'in_review');
 
     const response = await member.get<ProjectActivityView[]>('/api/projects/activity');
