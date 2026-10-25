@@ -8,4 +8,5 @@ export {
   type SurSuspension,
   type WorkerOptions,
 } from './options.js';
+export { configWorkerFromEnv, type ConfigWorker } from './env.js';
 export { createWorker } from './worker.js';

@@ -1,0 +1,17 @@
+# Le worker dans ses propres conteneurs, pour le répliquer sans répliquer l'api :
+#
+#   docker compose -f docker-compose.yml -f docker-compose.worker.yml up -d --scale worker=3
+#
+# Le service `nudge` ne sert plus que l'api ; Triage et Dispatch passent au service
+# `worker`, la même image démarrée avec NUDGE_ROLES=worker.
+
+services:
+  nudge:
+    environment:
+      NUDGE_ROLES: api
+  worker:
+    extends:
+      file: docker-compose.yml
+      service: nudge
+    environment:
+      NUDGE_ROLES: worker

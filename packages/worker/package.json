@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Worker NestJS standalone : Triage et Dispatch des Retours via BullMQ.",
+  "description": "Worker NestJS (Triage, Dispatch, purge, Suspension via BullMQ), démarré par l'api selon NUDGE_ROLES.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -15,8 +15,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit",
-    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --env-file-if-exists=../../.env --watch-path=dist dist/main.js",
-    "start": "node dist/main.js",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
   },

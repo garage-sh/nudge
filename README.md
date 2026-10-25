@@ -1,18 +1,25 @@
 # nudge
 
+[![CI](https://github.com/garage-sh/nudge/actions/workflows/ci.yml/badge.svg)](https://github.com/garage-sh/nudge/actions/workflows/ci.yml)
+[![Images](https://github.com/garage-sh/nudge/actions/workflows/images.yml/badge.svg)](https://github.com/garage-sh/nudge/pkgs/container/nudge)
+[![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
+
 nudge collecte les retours des utilisateurs de plusieurs applications, les trie et les envoie là où l'équipe travaille. C'est un outil open-source (AGPL-3.0) et auto-hébergé.
 
-Chaque **Projet** intègre le **Widget**, ou appelle l'API publique depuis son serveur. Les **Retours** reçus passent par un **Triage** : un **Juge** System One (TypeSafe Jev, ou pplx-decider via OpenRouter ou auto-hébergé) détermine leur Type et leur Gravité, et repère les Retours Indésirables et les tentatives de Manipulation. Ils sont ensuite dispatchés vers les **Destinations** du Projet (webhook signé, Discord, Linear, Slack, GitHub Issues) dont le **Filtre** les retient. Les **Membres** suivent tout depuis un dashboard.
+Chaque **Projet** intègre le **Widget**, ou appelle l'API publique depuis son serveur. Les **Retours** reçus passent par un **Triage** : un **Juge**, un modèle de décision System One (via TypeSafe, OpenRouter ou votre propre serveur), détermine leur Type et leur Gravité, et repère les Retours Indésirables et les tentatives de Manipulation. Ils sont ensuite dispatchés vers les **Destinations** du Projet (webhook signé, Discord, Linear, Slack, GitHub Issues) dont le **Filtre** les retient. Les **Membres** suivent tout depuis un dashboard.
 
 Le vocabulaire est défini dans [`CONTEXT.md`](CONTEXT.md), et les décisions d'architecture sont dans [`docs/adr/`](docs/adr/).
 
 ## Démarrer une Instance
 
-Il faut Docker et Docker Compose v2. Une Instance est faite de cinq conteneurs : `api`, `worker`, `dashboard`, Postgres et Redis. Un sixième conteneur, `migrate`, applique les migrations puis s'arrête.
+Il faut Docker et Docker Compose v2. Une Instance est faite de quatre conteneurs : `nudge` (l'api et le worker), `dashboard`, Postgres et Redis. Un cinquième conteneur, `migrate`, applique les migrations puis s'arrête. Les images sont publiées sur `ghcr.io/garage-sh/nudge` et `ghcr.io/garage-sh/nudge-dashboard`, pour amd64 et arm64.
+
+Inutile de cloner le dépôt : le fichier compose et l'exemple de configuration suffisent.
 
 ```bash
-git clone https://github.com/garage-sh/nudge.git && cd nudge
-cp .env.example .env
+mkdir nudge && cd nudge
+curl -fsSL -o docker-compose.yml https://github.com/garage-sh/nudge/releases/latest/download/docker-compose.yml
+curl -fsSL -o .env https://github.com/garage-sh/nudge/releases/latest/download/env.example
 ```
 
 Dans `.env`, renseignez les deux variables requises :
@@ -25,10 +32,10 @@ NUDGE_POSTGRES_PASSWORD=$(openssl rand -hex 24)
 Ensuite :
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-Le premier lancement construit les trois images, ce qui prend quelques minutes. Quand `docker compose ps` montre `api` en état `healthy`, ouvrez <http://localhost:8080>. Le premier écran crée le premier Membre. Les suivants sont invités depuis le dashboard, par un lien d'invitation.
+Quand `docker compose ps` montre `nudge` en état `healthy`, ouvrez <http://localhost:8080>. Le premier écran crée le premier Membre. Les suivants sont invités depuis le dashboard, par un lien d'invitation.
 
 Vous pouvez alors :
 
@@ -41,12 +48,12 @@ Vous pouvez alors :
 
 Seul le conteneur `dashboard` publie un port (`NUDGE_PORT`, 8080 par défaut). Il sert tout sur la même origine :
 
-| Chemin                    | Contenu                                                     |
-| ------------------------- | ----------------------------------------------------------- |
-| `/`                       | le dashboard des Membres                                    |
-| `/api/…`                  | l'API du dashboard (session par cookie), relayée vers `api` |
-| `/v1/retours`             | l'ingestion publique (Widget et SDK), relayée vers `api`    |
-| `/widget/nudge-widget.js` | le Widget pour la balise script                             |
+| Chemin                    | Contenu                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| `/`                       | le dashboard des Membres                                      |
+| `/api/…`                  | l'API du dashboard (session par cookie), relayée vers `nudge` |
+| `/v1/retours`             | l'ingestion publique (Widget et SDK), relayée vers `nudge`    |
+| `/widget/nudge-widget.js` | le Widget pour la balise script                               |
 
 Comme tout est servi sur la même origine, le cookie de session reste first-party, sans CORS.
 
@@ -61,13 +68,28 @@ Le cookie de session est `Secure` : il faut donc HTTPS. Les navigateurs font une
 
 ### Mettre à jour, sauvegarder, monter en charge
 
-- **Mettre à jour** : `git pull && docker compose up -d --build`. Le service `migrate` applique les nouvelles migrations avant que l'api et le worker ne redémarrent.
+- **Mettre à jour** : `docker compose pull && docker compose up -d`. Le service `migrate` applique les nouvelles migrations avant que `nudge` ne redémarre. Lisez les [notes de version](https://github.com/garage-sh/nudge/releases) avant de changer de version mineure. Il n'y a pas de migration descendante : revenir à une version précédente veut dire restaurer la sauvegarde de Postgres faite avant la mise à jour.
+- **Épingler une version** : `NUDGE_VERSION` dans `.env`. Par défaut, `latest` suit la dernière release. `0.1` reçoit les correctifs de la 0.1, et `0.1.2` ne bouge plus. Les images de `main`, non publiées en release, portent le tag `edge`.
+- **Vérifier une image** : chaque image publiée est signée avec cosign, sans clé, depuis la CI du dépôt.
+
+  ```bash
+  cosign verify ghcr.io/garage-sh/nudge:latest \
+    --certificate-identity-regexp '^https://github.com/garage-sh/nudge/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
+
 - **Sauvegarder** : les volumes `postgres` (la source de vérité), `captures` et `redis`, ainsi que la valeur de `NUDGE_ENCRYPTION_KEY`. Sans cette clé, les secrets stockés (clé du Juge, jetons des Destinations) sont illisibles et doivent être ressaisis. Redis ne porte que les queues : un Retour resté Reçu est remis au Triage tout seul, mais un Envoi en attente perdu avec Redis reste bloqué.
-- **Monter en charge** : `docker compose up -d --scale worker=3`. Les workers se partagent les queues, et un Triage lent ne ralentit pas la collecte. L'api se réplique aussi, mais le rate limit du Widget est compté en mémoire, par réplique : avec N répliques, la limite effective est multipliée par N.
+- **Monter en charge** : par défaut, l'api et le worker tournent dans le même processus (`NUDGE_ROLES=api,worker`). Pour répliquer le worker sans répliquer l'api, téléchargez aussi [`docker-compose.worker.yml`](docker-compose.worker.yml), qui démarre la même image avec `NUDGE_ROLES=worker` :
+
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.worker.yml up -d --scale worker=3
+  ```
+
+  Les workers se partagent alors les queues, et un pic de Triage ne ralentit plus la collecte. L'api se réplique aussi, mais le rate limit du Widget est compté en mémoire, par réplique : avec N répliques, la limite effective est multipliée par N.
 
 ## Configuration
 
-Toute la configuration passe par des variables d'environnement. [`.env.example`](.env.example) les décrit une à une. Une variable vide prend sa valeur par défaut. Une valeur invalide empêche l'api ou le worker de démarrer, et l'erreur nomme la variable fautive.
+Toute la configuration passe par des variables d'environnement. [`.env.example`](.env.example) les décrit une à une. Une variable vide prend sa valeur par défaut. Une valeur invalide empêche le serveur de démarrer, et l'erreur nomme la variable fautive.
 
 | Variable                                                                                                             | Rôle                                                                                         |
 | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -202,12 +224,18 @@ NUDGE_CAPTURES_DOSSIER=$PWD/.data/captures
 EOF
 yarn dev:infra             # Postgres et Redis (docker-compose.dev.yml)
 yarn db:migrate
-yarn dev                   # api sur :3000, worker, dashboard sur :5173 (relaie /api vers :3000)
+yarn dev                   # api et worker sur :3000, dashboard sur :5173 (relaie /api vers :3000)
 ```
 
-L'api, le worker et les scripts `db:*` lisent le `.env` racine ; une variable déjà exportée dans le shell l'emporte. Les autres variables sont décrites dans `.env.example`.
+L'api et les scripts `db:*` lisent le `.env` racine ; une variable déjà exportée dans le shell l'emporte. Les autres variables sont décrites dans `.env.example`.
 
-`yarn dev` relance `dev:infra`, construit les packages dont dépendent les apps, puis démarre les trois apps en mode watch. Une seule app : `yarn workspace @nudge/api dev`.
+`yarn dev` relance `dev:infra`, construit les packages dont dépendent les apps, puis démarre l'api (avec le worker) et le dashboard en mode watch. Une seule app : `yarn workspace @nudge/api dev`. Le worker est la bibliothèque `packages/worker`, que l'api démarre selon `NUDGE_ROLES`.
+
+Pour construire et lancer les images depuis les sources plutôt que de les tirer de ghcr.io :
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 Pour vérifier une modification :
 
@@ -215,6 +243,8 @@ Pour vérifier une modification :
 - `yarn test` lance les tests (les tests du pipeline démarrent Postgres et Redis avec testcontainers) ;
 - `yarn workspace @nudge/widget test:e2e` lance les tests navigateur du Widget (Playwright) ;
 - `yarn lint` lance le lint.
+
+Pour contribuer, lisez [`CONTRIBUTING.md`](CONTRIBUTING.md). Pour signaler une faille, lisez [`SECURITY.md`](SECURITY.md).
 
 ## Licence
 

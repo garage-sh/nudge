@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "API NestJS : ingestion publique des Retours et API du dashboard.",
+  "description": "Le serveur nudge : ingestion publique, API du dashboard et, selon NUDGE_ROLES, le worker.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -29,6 +29,7 @@
     "@nudge/destinations": "workspace:*",
     "@nudge/shared": "workspace:*",
     "@nudge/stockage": "workspace:*",
+    "@nudge/worker": "workspace:*",
     "bullmq": "^5.60.0",
     "cookie": "^1",
     "drizzle-orm": "^0.45.2",

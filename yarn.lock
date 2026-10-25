@@ -1469,6 +1469,7 @@ __metadata:
     "@nudge/shared": "workspace:*"
     "@nudge/stockage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
+    "@nudge/worker": "workspace:*"
     "@types/express": "npm:^5.0.0"
     "@types/node": "npm:^24.10.0"
     bullmq: "npm:^5.60.0"
@@ -1710,9 +1711,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nudge/worker@workspace:*, @nudge/worker@workspace:apps/worker":
+"@nudge/worker@workspace:*, @nudge/worker@workspace:packages/worker":
   version: 0.0.0-use.local
-  resolution: "@nudge/worker@workspace:apps/worker"
+  resolution: "@nudge/worker@workspace:packages/worker"
   dependencies:
     "@nestjs/common": "npm:^11.1.0"
     "@nestjs/core": "npm:^11.1.0"

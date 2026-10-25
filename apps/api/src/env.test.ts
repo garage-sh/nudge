@@ -4,7 +4,7 @@ import { configApiFromEnv } from './env.js';
 const MINIMAL = {
   DATABASE_URL: 'postgres://nudge:nudge@postgres:5432/nudge',
   REDIS_URL: 'redis://redis:6379',
-  NUDGE_ENCRYPTION_KEY: 'Y2xlZi1kZS10ZXN0LWRlLTMyLW9jdGV0cy1leGFjdHM=',
+  NUDGE_ENCRYPTION_KEY: 'Y2xlZi1kZS10ZXN0LWRlLTMyLW9jdGV0cy1leGFjdHM=', // gitleaks:allow (clé factice)
 };
 
 describe('Configuration de l’api par variables d’environnement', () => {

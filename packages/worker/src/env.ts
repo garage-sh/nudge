@@ -16,7 +16,7 @@ import {
   type WorkerOptions,
 } from './options.js';
 
-/** Ce que l'environnement fixe du worker ; `main.ts` y branche les adaptateurs. */
+/** Ce que l'environnement fixe du worker ; l'api y branche les adaptateurs (`apps/api/src/main.ts`). */
 export type ConfigWorker = Required<
   Pick<
     WorkerOptions,

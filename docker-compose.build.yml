@@ -1,0 +1,20 @@
+# Construit les images depuis les sources au lieu de les tirer de ghcr.io :
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  migrate:
+    image: nudge:local
+    build:
+      context: .
+      target: server
+  nudge:
+    image: nudge:local
+    build:
+      context: .
+      target: server
+  dashboard:
+    image: nudge-dashboard:local
+    build:
+      context: .
+      target: dashboard

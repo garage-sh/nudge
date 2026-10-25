@@ -3,6 +3,10 @@
 #
 # Seul le dashboard publie un port : il sert aussi l'api (/api, /v1) et le Widget
 # (/widget/nudge-widget.js) sur la même origine. Mettre un reverse proxy TLS devant.
+#
+# Les images viennent de ghcr.io ; NUDGE_VERSION les épingle (défaut : latest).
+# Construire depuis les sources : ajouter `-f docker-compose.build.yml`. Répliquer le
+# worker à part : ajouter `-f docker-compose.worker.yml` (voir le README).
 
 x-nudge-env: &nudge-env
   DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD:?définir NUDGE_POSTGRES_PASSWORD dans .env}@postgres:5432/nudge
@@ -12,6 +16,7 @@ x-nudge-env: &nudge-env
   NUDGE_COOKIE_SECURE: ${NUDGE_COOKIE_SECURE:-true}
   # Le proxy du dashboard, plus ceux placés devant lui (voir le README).
   NUDGE_TRUST_PROXY: ${NUDGE_TRUST_PROXY:-1}
+  NUDGE_ROLES: ${NUDGE_ROLES:-}
   NUDGE_WIDGET_LIMITE_IP: ${NUDGE_WIDGET_LIMITE_IP:-}
   NUDGE_WIDGET_LIMITE_PROJET: ${NUDGE_WIDGET_LIMITE_PROJET:-}
   NUDGE_JUDGE_PROVIDER: ${NUDGE_JUDGE_PROVIDER:-}
@@ -36,10 +41,6 @@ x-nudge-env: &nudge-env
   NUDGE_S3_SECRET_ACCESS_KEY: ${NUDGE_S3_SECRET_ACCESS_KEY:-}
   NUDGE_S3_PREFIXE: ${NUDGE_S3_PREFIXE:-}
   NUDGE_S3_STYLE_CHEMIN: ${NUDGE_S3_STYLE_CHEMIN:-}
-
-x-build-api: &build-api
-  context: .
-  target: api
 
 services:
   postgres:
@@ -72,8 +73,7 @@ services:
 
   # Applique les migrations de la base, puis s'arrête ; l'api et le worker l'attendent.
   migrate:
-    image: nudge-api
-    build: *build-api
+    image: ghcr.io/garage-sh/nudge:${NUDGE_VERSION:-latest}
     command: ['node', 'apps/api/dist/migrate.js']
     environment:
       DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD}@postgres:5432/nudge
@@ -81,25 +81,9 @@ services:
       postgres:
         condition: service_healthy
 
-  api:
-    image: nudge-api
-    build: *build-api
-    restart: unless-stopped
-    environment: *nudge-env
-    volumes:
-      - captures:/var/lib/nudge/captures
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-
-  # Se met à l'échelle indépendamment de l'api : `docker compose up -d --scale worker=3`.
-  worker:
-    image: nudge-worker
-    build:
-      context: .
-      target: worker
+  # L'api et le worker dans le même processus (NUDGE_ROLES, défaut : api,worker).
+  nudge:
+    image: ghcr.io/garage-sh/nudge:${NUDGE_VERSION:-latest}
     restart: unless-stopped
     environment: *nudge-env
     volumes:
@@ -111,15 +95,12 @@ services:
         condition: service_healthy
 
   dashboard:
-    image: nudge-dashboard
-    build:
-      context: .
-      target: dashboard
+    image: ghcr.io/garage-sh/nudge-dashboard:${NUDGE_VERSION:-latest}
     restart: unless-stopped
     ports:
       - '${NUDGE_PORT:-8080}:8080'
     depends_on:
-      api:
+      nudge:
         condition: service_healthy
 
 volumes:
