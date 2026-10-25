@@ -2,3 +2,8 @@
 # Instance key, in base64. The current tree marks its dummy key inline (`gitleaks:allow`).
 acdea72e7f8bb33f072dc12fb10dcd5578dbee23:apps/api/src/env.test.ts:generic-api-key:7
 acdea72e7f8bb33f072dc12fb10dcd5578dbee23:apps/worker/src/env.test.ts:generic-api-key:7
+# The tests' dummy destination and judge credentials, flagged again by the English rewrite.
+56aa21fdbd438ecd6c70088c06ae5fb3cc7abba6:packages/destinations/src/test/discord-recordings.ts:generic-api-key:29
+56aa21fdbd438ecd6c70088c06ae5fb3cc7abba6:tests/pipeline/src/destinations.test.ts:generic-api-key:139
+56aa21fdbd438ecd6c70088c06ae5fb3cc7abba6:tests/pipeline/src/destinations.test.ts:generic-api-key:195
+56aa21fdbd438ecd6c70088c06ae5fb3cc7abba6:tests/pipeline/src/instance-judge.test.ts:generic-api-key:6
