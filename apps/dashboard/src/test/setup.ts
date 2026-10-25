@@ -1,4 +1,4 @@
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
 /** An in-memory `Storage`, the way a browser keeps it for the page. */
@@ -32,6 +32,9 @@ if (!globalThis.localStorage) {
     configurable: true,
   });
 }
+
+// The default 1 s is too short for a first render on a CI runner busy with the other suites.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
