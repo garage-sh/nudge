@@ -14,6 +14,7 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "format": "prettier --write .",
+    "dev": "yarn dev:infra && turbo run dev",
     "dev:infra": "docker compose -f docker-compose.dev.yml up -d",
     "db:migrate": "yarn workspace @nudge/database db:migrate",
     "db:seed": "yarn workspace @nudge/database db:seed"

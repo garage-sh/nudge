@@ -192,16 +192,22 @@ Il faut Node 26 (`.nvmrc`) et Docker. Yarn 4 est fourni par le dépôt (`.yarn/r
 
 ```bash
 yarn install
+cat > .env <<EOF
+DATABASE_URL=postgres://nudge:nudge@localhost:5432/nudge
+REDIS_URL=redis://localhost:6379
+NUDGE_ENCRYPTION_KEY=$(openssl rand -base64 32)
+NUDGE_COOKIE_SECURE=false
+NUDGE_DASHBOARD_URL=http://localhost:5173
+NUDGE_CAPTURES_DOSSIER=$PWD/.data/captures
+EOF
 yarn dev:infra             # Postgres et Redis (docker-compose.dev.yml)
-export DATABASE_URL=postgres://nudge:nudge@localhost:5432/nudge REDIS_URL=redis://localhost:6379 \
-  NUDGE_ENCRYPTION_KEY=$(openssl rand -base64 32) NUDGE_COOKIE_SECURE=false \
-  NUDGE_CAPTURES_DOSSIER=/tmp/nudge/captures
 yarn db:migrate
-yarn build
-yarn workspace @nudge/api dev        # api sur :3000
-yarn workspace @nudge/worker dev
-yarn workspace @nudge/dashboard dev  # dashboard sur :5173, relaie /api vers :3000
+yarn dev                   # api sur :3000, worker, dashboard sur :5173 (relaie /api vers :3000)
 ```
+
+L'api, le worker et les scripts `db:*` lisent le `.env` racine ; une variable déjà exportée dans le shell l'emporte. Les autres variables sont décrites dans `.env.example`.
+
+`yarn dev` relance `dev:infra`, construit les packages dont dépendent les apps, puis démarre les trois apps en mode watch. Une seule app : `yarn workspace @nudge/api dev`.
 
 Pour vérifier une modification :
 

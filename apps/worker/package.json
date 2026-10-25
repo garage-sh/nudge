@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit",
-    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --watch-path=dist dist/main.js",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --env-file-if-exists=../../.env --watch-path=dist dist/main.js",
     "start": "node dist/main.js",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"

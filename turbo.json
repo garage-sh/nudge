@@ -10,6 +10,12 @@
     "test": {
       "cache": false,
       "passThroughEnv": ["DOCKER_HOST", "TESTCONTAINERS_*"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["DATABASE_URL", "REDIS_URL", "NUDGE_*"]
     }
   }
 }
