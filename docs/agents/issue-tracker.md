@@ -4,11 +4,11 @@ Where this repo's issues live, by **role**. A repo may use more than one tracker
 
 ## Routing
 
-| Role        | What it covers                                                                                           | Tracker    |
-| ----------- | -------------------------------------------------------------------------------------------------------- | ---------- |
+| Role        | What it covers                                                                                                           | Tracker  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------ | -------- |
 | `spec`      | Specs from `/to-spec`, and **every ticket cut from a spec** or from a plan (`/to-tickets`, `/implement-spec-unattended`) | `github` |
-| `incoming`  | Bug reports and requests that arrive raw, worked by `/triage`                                            | `github` |
-| `wayfinder` | Wayfinder maps and their decision tickets                                                                | `github` |
+| `incoming`  | Bug reports and requests that arrive raw, worked by `/triage`                                                            | `github` |
+| `wayfinder` | Wayfinder maps and their decision tickets                                                                                | `github` |
 
 Each tracker named here has its operations in `docs/agents/issue-tracker-<tracker>.md` — how to create, read, list, label, parent, block and close an issue there, and the syntax a pull request uses to close one.
 

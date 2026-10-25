@@ -1,0 +1,52 @@
+# Vérifie chaque PR et chaque push sur main : format, lint, types, build, tests (dont
+# les tests de pipeline, sur Postgres et Redis en conteneurs), et l'absence de secrets.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verifier:
+    name: Format, lint, types, build et tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Yarn 4 vient du dépôt (`yarnPath`) : un `yarn` qui le lance suffit.
+      - name: Yarn du dépôt
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec node "%s"/.yarn/releases/yarn-*.cjs "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/yarn"
+          chmod +x "$RUNNER_TEMP/bin/yarn"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --immutable
+      - run: yarn prettier --check .
+      - run: yarn lint
+      - run: yarn check-types
+      - run: yarn build
+      - run: yarn test
+
+  secrets:
+    name: Secrets dans l'historique
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Faux positifs connus : .gitleaksignore.
+      - name: gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 git /repo --redact --verbose

@@ -1,0 +1,46 @@
+name: Bug
+description: nudge ne se comporte pas comme prévu.
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: Une faille de sécurité se signale en privé, pas ici (voir SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Le tag de l'image (`docker compose images`) ou le commit.
+      placeholder: 0.1.2
+    validations:
+      required: true
+  - type: dropdown
+    id: deploiement
+    attributes:
+      label: Déploiement
+      options:
+        - docker compose, un seul processus nudge
+        - docker compose, worker séparé (docker-compose.worker.yml)
+        - Autre (Kubernetes, sources…)
+    validations:
+      required: true
+  - type: textarea
+    id: etapes
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Créer un Projet…
+        2. Envoyer un Retour…
+    validations:
+      required: true
+  - type: textarea
+    id: attendu
+    attributes:
+      label: Ce qui était attendu, et ce qui s'est passé
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: '`docker compose logs nudge`, sans clé ni jeton.'
+      render: shell
