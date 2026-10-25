@@ -1413,9 +1413,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nestjs/core@npm:^11.1.0":
-  version: 11.2.8
-  resolution: "@nestjs/core@npm:11.2.8"
+"@nestjs/core@npm:^12.2.0":
+  version: 12.2.0
+  resolution: "@nestjs/core@npm:12.2.0"
   dependencies:
     fast-safe-stringify: "npm:2.1.1"
     iterare: "npm:1.2.1"
@@ -1423,10 +1423,10 @@ __metadata:
     tslib: "npm:2.8.1"
     uid: "npm:2.0.2"
   peerDependencies:
-    "@nestjs/common": ^11.0.0
-    "@nestjs/microservices": ^11.0.0
-    "@nestjs/platform-express": ^11.0.0
-    "@nestjs/websockets": ^11.0.0
+    "@nestjs/common": ^12.0.0
+    "@nestjs/microservices": ^12.0.0
+    "@nestjs/platform-express": ^12.0.0
+    "@nestjs/websockets": ^12.0.0
     reflect-metadata: ^0.1.12 || ^0.2.0
     rxjs: ^7.1.0
   peerDependenciesMeta:
@@ -1436,7 +1436,7 @@ __metadata:
       optional: true
     "@nestjs/websockets":
       optional: true
-  checksum: 10c0/aaa2c571df8c186cf1b48c7a3208a4290c01f284b1fd5893cb42304e93de7b21dc77ee3140799e4891bedd4016a849a34e37917eda721ad3d6f343997a7625af
+  checksum: 10c0/0f622f53b232037acfa552107ea0deb579a80d95edec9978f0d2d6d5e9029a8a57715e597343c3bda4d73958cfa6e4566c65290e12aa4f3b7471d9932dc2855b
   languageName: node
   linkType: hard
 
@@ -1461,7 +1461,7 @@ __metadata:
   resolution: "@nudge/api@workspace:apps/api"
   dependencies:
     "@nestjs/common": "npm:^11.1.0"
-    "@nestjs/core": "npm:^11.1.0"
+    "@nestjs/core": "npm:^12.2.0"
     "@nestjs/platform-express": "npm:^11.1.0"
     "@nudge/core": "workspace:*"
     "@nudge/database": "workspace:*"
@@ -1716,7 +1716,7 @@ __metadata:
   resolution: "@nudge/worker@workspace:packages/worker"
   dependencies:
     "@nestjs/common": "npm:^11.1.0"
-    "@nestjs/core": "npm:^11.1.0"
+    "@nestjs/core": "npm:^12.2.0"
     "@nudge/core": "workspace:*"
     "@nudge/database": "workspace:*"
     "@nudge/destinations": "workspace:*"
