@@ -219,7 +219,7 @@ const TEXT_MAX = BODY_MAX - FOOTER_MAX;
  */
 function codeBlock(text: string): string {
   let lines = text.replace(/\r\n?/g, '\n');
-  let fence = '';
+  let fence: string;
   // The fence depends on the text kept; truncating can only shorten it: the loop
   // stops as soon as text and fences fit together.
   for (;;) {
