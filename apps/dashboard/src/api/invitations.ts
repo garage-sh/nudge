@@ -1,16 +1,16 @@
-import type { InvitationCreee, InvitationVue } from '@nudge/shared';
+import type { CreatedInvitation, InvitationView } from '@nudge/shared';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from './client.js';
 
-export const useInvitation = (jeton: string) =>
+export const useInvitation = (token: string) =>
   useQuery({
-    queryKey: ['invitations', jeton],
-    queryFn: () => api.get<InvitationVue>(`/api/invitations/${encodeURIComponent(jeton)}`),
+    queryKey: ['invitations', token],
+    queryFn: () => api.get<InvitationView>(`/api/invitations/${encodeURIComponent(token)}`),
   });
 
-export const useCreationInvitation = () =>
-  useMutation({ mutationFn: () => api.post<InvitationCreee>('/api/invitations') });
+export const useCreateInvitation = () =>
+  useMutation({ mutationFn: () => api.post<CreatedInvitation>('/api/invitations') });
 
-/** Le lien que le Membre transmet à la personne invitée. */
-export const lienInvitation = (jeton: string): string =>
-  `${window.location.origin}/invitation/${encodeURIComponent(jeton)}`;
+/** The link the Member sends to the invited person. */
+export const invitationUrl = (token: string): string =>
+  `${window.location.origin}/invitation/${encodeURIComponent(token)}`;

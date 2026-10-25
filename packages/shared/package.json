@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Types et schémas zod partagés (API publique, SDK, dashboard).",
+  "description": "Shared types and zod schemas (public API, SDK, dashboard).",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

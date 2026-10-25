@@ -1,34 +1,34 @@
 import { Body, Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
-import { schemaNouveauMembre, type EtatSetup, type SessionVue } from '@nudge/shared';
+import { newMemberSchema, type SetupState, type SessionView } from '@nudge/shared';
 import type { Response } from 'express';
 import { AuthThrottleGuard } from './auth-throttle.guard.js';
 import { parseBody } from '../../validation.js';
-import { MembresService } from './membres.service.js';
+import { MembersService } from './members.service.js';
 import { SessionsService } from './sessions.service.js';
 
-/** Premier lancement : le premier Membre crée son compte, puis le setup se ferme. */
+/** First launch: the first Member creates their account, then the setup closes. */
 @Controller('api/setup')
 export class SetupController {
   constructor(
-    private readonly membres: MembresService,
+    private readonly members: MembersService,
     private readonly sessions: SessionsService,
   ) {}
 
   @Get()
-  async etat(): Promise<EtatSetup> {
-    return { requis: await this.membres.setupRequired() };
+  async state(): Promise<SetupState> {
+    return { required: await this.members.setupRequired() };
   }
 
-  /** 201 et session ouverte ; 409 `setup_termine` dès qu'un Membre existe. */
+  /** 201 and session opened; 409 `setup_completed` as soon as a Member exists. */
   @Post()
   @UseGuards(AuthThrottleGuard)
   async setup(
-    @Body() corps: unknown,
-    @Res({ passthrough: true }) reponse: Response,
-  ): Promise<SessionVue> {
-    const { email, motDePasse } = parseBody(schemaNouveauMembre, corps);
-    const membre = await this.membres.setup(email, motDePasse);
-    await this.sessions.start(reponse, membre);
-    return { membre };
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SessionView> {
+    const { email, password } = parseBody(newMemberSchema, body);
+    const member = await this.members.setup(email, password);
+    await this.sessions.start(response, member);
+    return { member };
   }
 }

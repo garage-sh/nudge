@@ -1,5 +1,5 @@
-# Infrastructure de développement : Postgres (source de vérité) et Redis (queues BullMQ).
-# Les apps tournent sur le poste (`yarn dev`).
+# Development infrastructure: Postgres (source of truth) and Redis (BullMQ queues).
+# The apps run on the host (`yarn dev`).
 services:
   postgres:
     image: postgres:17-alpine

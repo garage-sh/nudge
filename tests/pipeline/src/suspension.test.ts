@@ -1,22 +1,22 @@
-import type { DestinationAvecSecretsGeneres } from '@nudge/shared';
-import type { StockageCaptures } from '@nudge/stockage';
+import type { DestinationWithGeneratedSecrets } from '@nudge/shared';
+import type { CaptureStorage } from '@nudge/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { echec, RecepteurWebhook, startPipeline, type Pipeline } from './harness/index.js';
+import { failure, WebhookReceiver, startPipeline, type Pipeline } from './harness/index.js';
 
 /**
- * Échecs d'Envoi et Suspension d'une Destination (forme reprise de ce
- * qu'alliances-pa documente pour ses workers) : un échec transient est retenté et compte pour la Suspension, un
- * échec auth suspend sans retry, un échec permanent n'échoue que l'Envoi. Une
- * Destination Suspendue retient ses Envois sans appel sortant, jusqu'à ce qu'une
- * sonde la trouve joignable.
+ * Delivery failures and Suspension of a Destination (shape borrowed from what
+ * alliances-pa documents for its workers): a transient failure is retried and counts toward Suspension, an
+ * auth failure suspends without retry, a permanent failure only fails the Delivery. A
+ * Suspended Destination holds its Deliveries without any outgoing call, until a
+ * probe finds it reachable.
  */
-describe('Échecs d’Envoi et Suspension des Destinations', () => {
+describe('Delivery failures and Destination Suspension', () => {
   let pipeline: Pipeline;
 
   beforeAll(async () => {
     pipeline = await startPipeline({
-      suspension: { seuilEchecs: 3, refroidissementMs: 300, intervalleSondeMs: 100 },
-      repliquesWorker: 2,
+      suspension: { failureThreshold: 3, cooldownMs: 300, probeIntervalMs: 100 },
+      workerReplicas: 2,
     });
   });
 
@@ -24,214 +24,218 @@ describe('Échecs d’Envoi et Suspension des Destinations', () => {
     await pipeline?.stop();
   });
 
-  async function projetAvecDestination(nom: string) {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom });
-    const { destination, fake } = await pipeline.createDestination(projet.id);
-    const poster = async (texte: string) => {
-      pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
-      const reponse = await pipeline.postRetour(cleSecrete, { texte });
-      return ((await reponse.json()) as { id: string }).id;
+  async function projectWithDestination(name: string) {
+    const { project, secretKey } = await pipeline.createProject({ name });
+    const { destination, fake } = await pipeline.createDestination(project.id);
+    const post = async (text: string) => {
+      pipeline.judge.script({ type: 'bug', severity: 'major' });
+      const response = await pipeline.postFeedback(secretKey, { text });
+      return ((await response.json()) as { id: string }).id;
     };
-    return { projet, destination, fake, poster };
+    return { project, destination, fake, post };
   }
 
-  const etatDestination = async (id: string) => (await pipeline.ligneDestination(id))?.etat;
+  const destinationState = async (id: string) => (await pipeline.destinationRow(id))?.state;
 
-  it('échec auth : la Destination est Suspendue aussitôt, sans retry, et l’Envoi est retenu', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Jeton révoqué');
-    fake.scriptSends(echec('auth', 'HTTP 401 : jeton refusé'));
-    fake.scriptHealth({ joignable: false, classe: 'auth', message: 'HTTP 401' });
+  it('auth failure: the Destination is Suspended at once, without retry, and the Delivery is held', async () => {
+    const { destination, fake, post } = await projectWithDestination('Revoked token');
+    fake.scriptSends(failure('auth', 'HTTP 401: token refused'));
+    fake.scriptHealth({ reachable: false, failureClass: 'auth', message: 'HTTP 401' });
 
-    const id = await poster('Le paiement échoue');
+    const id = await post('Checkout fails');
 
-    const retour = await pipeline.waitForRetour(id, (r) =>
-      r.envois.some((e) => e.statut === 'retenu'),
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((e) => e.status === 'held'),
     );
-    expect(retour.envois).toMatchObject([
-      { statut: 'retenu', tentatives: 1, derniereErreur: 'auth: HTTP 401 : jeton refusé' },
+    expect(feedback.deliveries).toMatchObject([
+      { status: 'held', attempts: 1, lastError: 'auth: HTTP 401: token refused' },
     ]);
-    expect(await etatDestination(destination.id)).toBe('suspendue');
+    expect(await destinationState(destination.id)).toBe('suspended');
     expect(fake.attempts).toHaveLength(1);
     expect(pipeline.suspensions).toEqual([
       {
         destinationId: destination.id,
-        projetId: destination.projetId,
-        nom: destination.nom,
-        classe: 'auth',
-        message: 'HTTP 401 : jeton refusé',
-        suspendueLe: expect.any(Date),
+        projectId: destination.projectId,
+        name: destination.name,
+        failureClass: 'auth',
+        message: 'HTTP 401: token refused',
+        suspendedAt: expect.any(Date),
       },
     ]);
   });
 
-  it('échec permanent : l’Envoi est en échec, sans retry, et la Destination reste active', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Requête refusée');
-    fake.scriptSends(echec('permanent', 'HTTP 422 : titre trop long'));
+  it('permanent failure: the Delivery fails, without retry, and the Destination stays active', async () => {
+    const { destination, fake, post } = await projectWithDestination('Refused request');
+    fake.scriptSends(failure('permanent', 'HTTP 422: title too long'));
 
-    const id = await poster('Un texte que la Destination refuse');
+    const id = await post('A text the Destination refuses');
 
-    const retour = await pipeline.waitForRetour(id, (r) =>
-      r.envois.some((e) => e.statut === 'echec'),
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((e) => e.status === 'failed'),
     );
-    expect(retour.envois).toMatchObject([
-      { statut: 'echec', tentatives: 1, derniereErreur: 'permanent: HTTP 422 : titre trop long' },
+    expect(feedback.deliveries).toMatchObject([
+      { status: 'failed', attempts: 1, lastError: 'permanent: HTTP 422: title too long' },
     ]);
-    // Le job n'est pas retenté : un seul appel, même après le backoff.
+    // The job is not retried: a single call, even after the backoff.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fake.attempts).toHaveLength(1);
-    expect(await etatDestination(destination.id)).toBe('active');
+    expect(await destinationState(destination.id)).toBe('active');
     expect(pipeline.suspensions.map((s) => s.destinationId)).not.toContain(destination.id);
   });
 
-  it('échec transient : retenté avec backoff, puis livré ; une livraison remet la série à zéro', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Destination capricieuse');
-    fake.scriptSends(echec('transient', 'HTTP 503'), echec('transient', 'HTTP 429'));
+  it('transient failure: retried with backoff, then delivered; a delivery resets the streak', async () => {
+    const { destination, fake, post } = await projectWithDestination('Flaky destination');
+    fake.scriptSends(failure('transient', 'HTTP 503'), failure('transient', 'HTTP 429'));
 
-    const premier = await poster('Premier Retour');
-    const livre = await pipeline.waitForRetour(premier, (r) =>
-      r.envois.some((e) => e.statut === 'livre'),
+    const first = await post('First feedback');
+    const delivered = await pipeline.waitForFeedback(first, (r) =>
+      r.deliveries.some((e) => e.status === 'delivered'),
     );
-    expect(livre.envois).toMatchObject([{ statut: 'livre', tentatives: 3, derniereErreur: null }]);
+    expect(delivered.deliveries).toMatchObject([
+      { status: 'delivered', attempts: 3, lastError: null },
+    ]);
 
-    // Deux nouveaux échecs : sans remise à zéro, la série atteindrait le seuil (3).
-    fake.scriptSends(echec('transient', 'HTTP 502'), echec('transient', 'HTTP 504'));
-    const second = await poster('Second Retour');
-    await pipeline.waitForRetour(second, (r) => r.envois.some((e) => e.statut === 'livre'));
+    // Two new failures: without a reset, the streak would reach the threshold (3).
+    fake.scriptSends(failure('transient', 'HTTP 502'), failure('transient', 'HTTP 504'));
+    const second = await post('Second feedback');
+    await pipeline.waitForFeedback(second, (r) =>
+      r.deliveries.some((e) => e.status === 'delivered'),
+    );
     expect(fake.attempts).toHaveLength(6);
-    expect(await etatDestination(destination.id)).toBe('active');
+    expect(await destinationState(destination.id)).toBe('active');
   });
 
-  it('au seuil d’échecs transient consécutifs, la Destination est Suspendue et ses nouveaux Envois sont retenus sans appel sortant', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Destination en panne');
-    fake.scriptSends(...Array.from({ length: 3 }, () => echec('transient', 'HTTP 503')));
+  it('at the consecutive transient failure threshold, the Destination is Suspended and its new Deliveries are held without any outgoing call', async () => {
+    const { destination, fake, post } = await projectWithDestination('Destination down');
+    fake.scriptSends(...Array.from({ length: 3 }, () => failure('transient', 'HTTP 503')));
     fake.scriptHealth(
       ...Array.from({ length: 50 }, () => ({
-        joignable: false as const,
-        classe: 'transient' as const,
+        reachable: false as const,
+        failureClass: 'transient' as const,
         message: 'HTTP 503',
       })),
     );
 
-    const premier = await poster('Avant la panne');
-    const retenu = await pipeline.waitForRetour(premier, (r) =>
-      r.envois.some((e) => e.statut === 'retenu'),
+    const first = await post('Before the outage');
+    const held = await pipeline.waitForFeedback(first, (r) =>
+      r.deliveries.some((e) => e.status === 'held'),
     );
-    expect(retenu.envois).toMatchObject([
-      { statut: 'retenu', tentatives: 3, derniereErreur: 'transient: HTTP 503' },
+    expect(held.deliveries).toMatchObject([
+      { status: 'held', attempts: 3, lastError: 'transient: HTTP 503' },
     ]);
-    expect(await etatDestination(destination.id)).toBe('suspendue');
+    expect(await destinationState(destination.id)).toBe('suspended');
     expect(pipeline.suspensions).toContainEqual(
-      expect.objectContaining({ destinationId: destination.id, classe: 'transient' }),
+      expect.objectContaining({ destinationId: destination.id, failureClass: 'transient' }),
     );
 
-    const second = await poster('Pendant la panne');
-    const nouveau = await pipeline.waitForRetour(second, (r) => r.envois.length > 0);
-    expect(nouveau).toMatchObject({
-      etat: 'dispatche',
-      envois: [{ statut: 'retenu', tentatives: 0 }],
+    const second = await post('During the outage');
+    const fresh = await pipeline.waitForFeedback(second, (r) => r.deliveries.length > 0);
+    expect(fresh).toMatchObject({
+      state: 'dispatched',
+      deliveries: [{ status: 'held', attempts: 0 }],
     });
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fake.attempts).toHaveLength(3);
   });
 
-  it('après refroidissement, la sonde teste la Destination : injoignable, elle reste Suspendue ; joignable, elle redevient active et ses Envois retenus repartent', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Panne puis retour');
-    fake.scriptSends(echec('auth', 'HTTP 403'));
-    // Injoignable tant que le test ne la rétablit pas : le second Retour arrive pendant
-    // la Suspension, quel que soit le temps que prend son triage sous charge.
+  it('after the cooldown, the probe tests the Destination: unreachable, it stays Suspended; reachable, it becomes active again and its held Deliveries resume', async () => {
+    const { destination, fake, post } = await projectWithDestination('Outage then recovery');
+    fake.scriptSends(failure('auth', 'HTTP 403'));
+    // Unreachable until the test restores it: the second Feedback arrives during the
+    // Suspension, however long its triage takes under load.
     fake.scriptHealth(
       ...Array.from({ length: 50 }, () => ({
-        joignable: false as const,
-        classe: 'auth' as const,
+        reachable: false as const,
+        failureClass: 'auth' as const,
         message: 'HTTP 403',
       })),
     );
 
-    const premier = await poster('Retenu par la Suspension');
-    await pipeline.waitForRetour(premier, (r) => r.envois.some((e) => e.statut === 'retenu'));
-    const second = await poster('Arrivé pendant la Suspension');
-    const retenu = await pipeline.waitForRetour(second, (r) =>
-      r.envois.some((e) => e.statut === 'retenu'),
+    const first = await post('Held by the Suspension');
+    await pipeline.waitForFeedback(first, (r) => r.deliveries.some((e) => e.status === 'held'));
+    const second = await post('Arrived during the Suspension');
+    const held = await pipeline.waitForFeedback(second, (r) =>
+      r.deliveries.some((e) => e.status === 'held'),
     );
-    expect(retenu.envois).toMatchObject([{ statut: 'retenu', tentatives: 0 }]);
+    expect(held.deliveries).toMatchObject([{ status: 'held', attempts: 0 }]);
 
-    // Première sonde : pas avant la fin du refroidissement (300 ms), compté depuis l'échec
-    // qui a suspendu la Destination (mesuré par l'horloge, pas par l'avancement du test),
-    // et toujours refusée.
+    // First probe: not before the end of the cooldown (300 ms), counted from the failure
+    // that suspended the Destination (measured by the clock, not by the test's progress),
+    // and still refused.
     await expect.poll(() => fake.healthChecks, { timeout: 2000 }).toBeGreaterThan(0);
     expect(fake.healthCheckTimes[0]! - fake.attemptTimes[0]!).toBeGreaterThanOrEqual(300);
-    expect(await etatDestination(destination.id)).toBe('suspendue');
+    expect(await destinationState(destination.id)).toBe('suspended');
 
-    // La Destination répond de nouveau : une seule sonde de plus la réactive.
+    // The Destination answers again: a single extra probe reactivates it.
     fake.restoreHealth();
-    const sondesRefusees = fake.healthChecks;
-    for (const id of [premier, second]) {
-      const retour = await pipeline.waitForRetour(
+    const refusedProbes = fake.healthChecks;
+    for (const id of [first, second]) {
+      const feedback = await pipeline.waitForFeedback(
         id,
-        (r) => r.envois.some((e) => e.statut === 'livre'),
+        (r) => r.deliveries.some((e) => e.status === 'delivered'),
         5000,
       );
-      expect(retour.envois).toMatchObject([{ statut: 'livre', derniereErreur: null }]);
+      expect(feedback.deliveries).toMatchObject([{ status: 'delivered', lastError: null }]);
     }
-    expect(fake.healthChecks).toBe(sondesRefusees + 1);
-    expect(await etatDestination(destination.id)).toBe('active');
-    expect(fake.envois.map((e) => e.retour.id).sort()).toEqual([premier, second].sort());
+    expect(fake.healthChecks).toBe(refusedProbes + 1);
+    expect(await destinationState(destination.id)).toBe('active');
+    expect(fake.deliveries.map((e) => e.feedback.id).sort()).toEqual([first, second].sort());
   });
 
-  it('des échecs auth simultanés sur deux répliques du worker ne suspendent la Destination qu’une fois', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Échecs simultanés');
-    fake.scriptSends(echec('auth', 'HTTP 401'), echec('auth', 'HTTP 401'));
+  it('concurrent auth failures on two worker replicas suspend the Destination only once', async () => {
+    const { destination, fake, post } = await projectWithDestination('Concurrent failures');
+    fake.scriptSends(failure('auth', 'HTTP 401'), failure('auth', 'HTTP 401'));
     fake.scriptHealth(
       ...Array.from({ length: 50 }, () => ({
-        joignable: false as const,
-        classe: 'auth' as const,
+        reachable: false as const,
+        failureClass: 'auth' as const,
         message: 'HTTP 401',
       })),
     );
     const release = fake.hold();
 
-    const ids = await Promise.all([poster('Retour simultané 1'), poster('Retour simultané 2')]);
-    // Les deux Envois sont en vol en même temps, un par réplique.
+    const ids = await Promise.all([post('Concurrent feedback 1'), post('Concurrent feedback 2')]);
+    // Both Deliveries are in flight at the same time, one per replica.
     await expect.poll(() => fake.attempts.length, { timeout: 5000 }).toBe(2);
     release();
 
     for (const id of ids) {
-      await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'retenu'));
+      await pipeline.waitForFeedback(id, (r) => r.deliveries.some((e) => e.status === 'held'));
     }
     expect(pipeline.suspensions.filter((s) => s.destinationId === destination.id)).toHaveLength(1);
   });
 
-  it('une libération interrompue (Destination réactivée, Envois jamais remis en queue) est rattrapée par la sonde', async () => {
-    const { destination, fake, poster } = await projetAvecDestination('Libération interrompue');
-    fake.scriptSends(echec('auth', 'HTTP 401'));
+  it('an interrupted release (Destination reactivated, Deliveries never re-enqueued) is caught up by the probe', async () => {
+    const { destination, fake, post } = await projectWithDestination('Interrupted release');
+    fake.scriptSends(failure('auth', 'HTTP 401'));
     fake.scriptHealth(
       ...Array.from({ length: 50 }, () => ({
-        joignable: false as const,
-        classe: 'auth' as const,
+        reachable: false as const,
+        failureClass: 'auth' as const,
         message: 'HTTP 401',
       })),
     );
-    const id = await poster('Retenu puis oublié');
-    await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'retenu'));
+    const id = await post('Held then forgotten');
+    await pipeline.waitForFeedback(id, (r) => r.deliveries.some((e) => e.status === 'held'));
 
-    // Comme un worker arrêté juste après avoir réactivé la Destination.
-    await pipeline.reactiverSansLiberer(destination.id);
+    // Like a worker stopped right after reactivating the Destination.
+    await pipeline.reactivateWithoutReleasing(destination.id);
 
-    const retour = await pipeline.waitForRetour(id, (r) =>
-      r.envois.some((e) => e.statut === 'livre'),
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((e) => e.status === 'delivered'),
     );
-    expect(retour.envois).toMatchObject([{ statut: 'livre', tentatives: 2 }]);
-    expect(fake.envois).toHaveLength(1);
+    expect(feedback.deliveries).toMatchObject([{ status: 'delivered', attempts: 2 }]);
+    expect(fake.deliveries).toHaveLength(1);
   });
 });
 
-describe('Échecs transient sous le seuil de Suspension', () => {
+describe('Transient failures below the Suspension threshold', () => {
   let pipeline: Pipeline;
 
   beforeAll(async () => {
-    // Seuil hors d'atteinte : les 8 tentatives du job s'épuisent avant la Suspension.
+    // Threshold out of reach: the job's 8 attempts run out before the Suspension.
     pipeline = await startPipeline({
-      suspension: { seuilEchecs: 100, refroidissementMs: 300, intervalleSondeMs: 100 },
+      suspension: { failureThreshold: 100, cooldownMs: 300, probeIntervalMs: 100 },
     });
   });
 
@@ -239,38 +243,40 @@ describe('Échecs transient sous le seuil de Suspension', () => {
     await pipeline?.stop();
   });
 
-  it('un Envoi dont les tentatives s’épuisent passe en échec au lieu de rester en attente', async () => {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Tentatives épuisées' });
-    const { destination, fake } = await pipeline.createDestination(projet.id);
-    fake.scriptSends(...Array.from({ length: 8 }, () => echec('transient', 'HTTP 503')));
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+  it('a Delivery whose attempts run out becomes failed instead of staying pending', async () => {
+    const { project, secretKey } = await pipeline.createProject({
+      name: 'Attempts exhausted',
+    });
+    const { destination, fake } = await pipeline.createDestination(project.id);
+    fake.scriptSends(...Array.from({ length: 8 }, () => failure('transient', 'HTTP 503')));
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
 
-    const reponse = await pipeline.postRetour(cleSecrete, { texte: 'Jamais livré' });
-    const { id } = (await reponse.json()) as { id: string };
+    const response = await pipeline.postFeedback(secretKey, { text: 'Never delivered' });
+    const { id } = (await response.json()) as { id: string };
 
-    const retour = await pipeline.waitForRetour(
+    const feedback = await pipeline.waitForFeedback(
       id,
-      (r) => r.envois.some((e) => e.statut === 'echec'),
+      (r) => r.deliveries.some((e) => e.status === 'failed'),
       10_000,
     );
-    expect(retour.envois).toMatchObject([
-      { statut: 'echec', tentatives: 8, derniereErreur: 'transient: HTTP 503' },
+    expect(feedback.deliveries).toMatchObject([
+      { status: 'failed', attempts: 8, lastError: 'transient: HTTP 503' },
     ]);
     expect(fake.attempts).toHaveLength(8);
-    expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+    expect((await pipeline.destinationRow(destination.id))?.state).toBe('active');
   });
 });
 
 /**
- * Un échec qui vient de nudge et non de la cible (D25) est retenté, mais ne dit rien
- * de la Destination : il ne compte pas pour sa Suspension et ne déclenche aucune alerte.
+ * A failure that comes from nudge and not from the target (D25) is retried, but says
+ * nothing about the Destination: it does not count toward its Suspension and triggers no alert.
  */
-describe('Échecs internes à nudge', () => {
+describe('Failures internal to nudge', () => {
   let pipeline: Pipeline;
 
   beforeAll(async () => {
     pipeline = await startPipeline({
-      suspension: { seuilEchecs: 2, refroidissementMs: 300, intervalleSondeMs: 100 },
+      suspension: { failureThreshold: 2, cooldownMs: 300, probeIntervalMs: 100 },
     });
   });
 
@@ -278,101 +284,107 @@ describe('Échecs internes à nudge', () => {
     await pipeline?.stop();
   });
 
-  async function poster(projetCle: string, texte: string) {
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
-    const reponse = await pipeline.postRetour(projetCle, { texte });
-    return ((await reponse.json()) as { id: string }).id;
+  async function post(secretKey: string, text: string) {
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
+    const response = await pipeline.postFeedback(secretKey, { text });
+    return ((await response.json()) as { id: string }).id;
   }
 
-  it('une exception inattendue de l’adaptateur est retentée sans suspendre la Destination', async () => {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Adaptateur bogué' });
-    const { destination, fake } = await pipeline.createDestination(projet.id);
-    fake.scriptSends(...Array.from({ length: 8 }, () => new Error('bogue de nudge')));
+  it('an unexpected exception from the adapter is retried without suspending the Destination', async () => {
+    const { project, secretKey } = await pipeline.createProject({
+      name: 'Buggy adapter',
+    });
+    const { destination, fake } = await pipeline.createDestination(project.id);
+    fake.scriptSends(...Array.from({ length: 8 }, () => new Error('nudge bug')));
 
-    const id = await poster(cleSecrete, 'Le bogue est chez nous');
+    const id = await post(secretKey, 'The bug is on our side');
 
-    const retour = await pipeline.waitForRetour(
+    const feedback = await pipeline.waitForFeedback(
       id,
-      (r) => r.envois.some((e) => e.statut === 'echec'),
+      (r) => r.deliveries.some((e) => e.status === 'failed'),
       10_000,
     );
-    expect(retour.envois).toMatchObject([{ statut: 'echec', tentatives: 8 }]);
+    expect(feedback.deliveries).toMatchObject([{ status: 'failed', attempts: 8 }]);
     expect(fake.attempts).toHaveLength(8);
-    expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+    expect((await pipeline.destinationRow(destination.id))?.state).toBe('active');
     expect(pipeline.suspensions).toEqual([]);
   });
 
-  it('des secrets indéchiffrables sont retentés sans suspendre la Destination ni l’appeler', async () => {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Clé d’Instance changée' });
-    const { destination, fake } = await pipeline.createDestination(projet.id);
-    await pipeline.rendreSecretsIndechiffrables(destination.id);
+  it('undecryptable secrets are retried without suspending the Destination nor calling it', async () => {
+    const { project, secretKey } = await pipeline.createProject({
+      name: 'Changed Instance key',
+    });
+    const { destination, fake } = await pipeline.createDestination(project.id);
+    await pipeline.makeSecretsUndecryptable(destination.id);
 
-    const id = await poster(cleSecrete, 'Les secrets sont perdus');
+    const id = await post(secretKey, 'The secrets are lost');
 
-    const retour = await pipeline.waitForRetour(
+    const feedback = await pipeline.waitForFeedback(
       id,
-      (r) => r.envois.some((e) => e.statut === 'echec'),
+      (r) => r.deliveries.some((e) => e.status === 'failed'),
       10_000,
     );
-    expect(retour.envois).toMatchObject([{ statut: 'echec', tentatives: 8 }]);
+    expect(feedback.deliveries).toMatchObject([{ status: 'failed', attempts: 8 }]);
     expect(fake.attempts).toHaveLength(0);
-    expect((await pipeline.ligneDestination(destination.id))?.etat).toBe('active');
+    expect((await pipeline.destinationRow(destination.id))?.state).toBe('active');
     expect(pipeline.suspensions).toEqual([]);
   });
 });
 
-describe('Échecs internes à nudge : Capture illisible au stockage', () => {
+describe('Failures internal to nudge: Capture unreadable in storage', () => {
   let pipeline: Pipeline;
-  let recepteur: RecepteurWebhook;
+  let receiver: WebhookReceiver;
 
-  const stockageIllisible: StockageCaptures = {
-    enregistrer: () => Promise.resolve(),
-    lire: () => Promise.reject(new Error('disque illisible')),
-    supprimer: () => Promise.resolve(),
+  const unreadableStorage: CaptureStorage = {
+    save: () => Promise.resolve(),
+    read: () => Promise.reject(new Error('unreadable disk')),
+    delete: () => Promise.resolve(),
   };
 
   beforeAll(async () => {
-    [pipeline, recepteur] = await Promise.all([
+    [pipeline, receiver] = await Promise.all([
       startPipeline({
-        destinations: 'reelles',
-        stockage: stockageIllisible,
-        suspension: { seuilEchecs: 2, refroidissementMs: 300, intervalleSondeMs: 100 },
+        destinations: 'real',
+        storage: unreadableStorage,
+        suspension: { failureThreshold: 2, cooldownMs: 300, probeIntervalMs: 100 },
       }),
-      RecepteurWebhook.demarrer(),
+      WebhookReceiver.start(),
     ]);
   });
 
   afterAll(async () => {
-    await Promise.all([pipeline?.stop(), recepteur?.arreter()]);
+    await Promise.all([pipeline?.stop(), receiver?.stop()]);
   });
 
-  it('un webhook dont la Capture ne se lit pas est retenté sans être suspendu', async () => {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Stockage illisible' });
-    const membre = await pipeline.signIn();
-    const creation = await membre.post<DestinationAvecSecretsGeneres>(
-      `/api/projets/${projet.id}/destinations`,
-      { type: 'webhook', nom: 'Récepteur local', config: { url: `${recepteur.url}/capture` } },
+  it('a webhook whose Capture cannot be read is retried without being suspended', async () => {
+    const { project, secretKey } = await pipeline.createProject({
+      name: 'Unreadable storage',
+    });
+    const member = await pipeline.signIn();
+    const creation = await member.post<DestinationWithGeneratedSecrets>(
+      `/api/projects/${project.id}/destinations`,
+      { type: 'webhook', name: 'Local receiver', config: { url: `${receiver.url}/capture` } },
     );
     expect(creation.status).toBe(201);
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a, 0x2a]);
 
-    const reponse = await pipeline.postRetour(cleSecrete, {
-      texte: 'Voir la capture',
+    const response = await pipeline.postFeedback(secretKey, {
+      text: 'See the capture',
       capture: { contentType: 'image/png', data: png.toString('base64') },
     });
-    const { id } = (await reponse.json()) as { id: string };
+    const { id } = (await response.json()) as { id: string };
 
-    const retour = await pipeline.waitForRetour(
+    const feedback = await pipeline.waitForFeedback(
       id,
-      (r) => r.envois.some((e) => e.statut === 'echec'),
+      (r) => r.deliveries.some((e) => e.status === 'failed'),
       10_000,
     );
-    expect(retour.envois).toMatchObject([
-      { statut: 'echec', tentatives: 8, derniereErreur: expect.stringContaining('Capture') },
+    expect(feedback.deliveries).toMatchObject([
+      { status: 'failed', attempts: 8, lastError: expect.stringContaining('Capture') },
     ]);
-    expect((await pipeline.ligneDestination(creation.body.destination.id))?.etat).toBe('active');
+    expect((await pipeline.destinationRow(creation.body.destination.id))?.state).toBe('active');
     expect(pipeline.suspensions).toEqual([]);
-    expect(recepteur.requetes.filter((r) => r.chemin === '/capture')).toEqual([]);
+    expect(receiver.requests.filter((r) => r.path === '/capture')).toEqual([]);
   });
 });

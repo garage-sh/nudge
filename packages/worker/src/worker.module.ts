@@ -9,43 +9,43 @@ import {
 import {
   createSecretCipher,
   jobOptions,
-  ALERTES_QUEUE,
-  BALAYAGE_ENVOIS_JOB,
-  BALAYAGE_RECUS_JOB,
+  ALERTS_QUEUE,
+  SWEEP_DELIVERIES_JOB,
+  SWEEP_RECEIVED_JOB,
   PURGE_RETENTION_JOB,
-  SONDE_SUSPENDUES_JOB,
+  PROBE_SUSPENDED_JOB,
   DISPATCH_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
   DEFAULT_QUEUE_PREFIX,
-  idJobAlerte,
-  type AlerteJob,
+  alertJobId,
+  type AlertJob,
   type DispatchJob,
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
 import { Queue, Worker, type DefaultJobOptions, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
-import { AlertesService } from './alertes.service.js';
-import { BalayageProcessor } from './balayage.processor.js';
+import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import { PurgeProcessor } from './purge.processor.js';
+import { SweepProcessor } from './sweep.processor.js';
 import {
-  ALERTES_QUEUE_TOKEN,
+  ALERTS_QUEUE_TOKEN,
   DB,
   OPTIONS,
   SECRET_CIPHER,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
   TRIAGE_QUEUE_TOKEN,
-  SUR_SUSPENSION,
+  ON_SUSPENSION,
 } from './tokens.js';
-import { JugeResolver } from './juge-resolver.js';
+import { JudgeResolver } from './judge-resolver.js';
 import {
-  BALAYAGE_PAR_DEFAUT,
-  PURGE_PAR_DEFAUT,
-  SUSPENSION_PAR_DEFAUT,
-  type SurSuspension,
+  DEFAULT_SWEEP,
+  DEFAULT_PURGE,
+  DEFAULT_SUSPENSION,
+  type OnSuspension,
   type WorkerOptions,
 } from './options.js';
 import { SuspensionService } from './suspension.service.js';
@@ -55,7 +55,7 @@ const DB_CONNECTION = Symbol('DB_CONNECTION');
 const REDIS = Symbol('REDIS');
 const MAINTENANCE_QUEUE_TOKEN = Symbol('MAINTENANCE_QUEUE');
 
-/** Une queue BullMQ sur la connexion Redis du worker, avec ses options de job par défaut. */
+/** A BullMQ queue on the worker's Redis connection, with its default job options. */
 const queueProvider = (
   provide: symbol,
   name: string,
@@ -67,8 +67,8 @@ const queueProvider = (
   inject: [REDIS],
 });
 
-/** BullMQ ne relancera plus ce job s'il échoue. */
-const derniereTentative = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+/** BullMQ will not run this job again if it fails. */
+const isLastAttempt = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
 @Module({})
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -76,18 +76,18 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
 
   constructor(
     @Inject(OPTIONS) private readonly options: WorkerOptions,
-    @Inject(DB_CONNECTION) private readonly connexion: DbConnection,
+    @Inject(DB_CONNECTION) private readonly connection: DbConnection,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
     @Inject(MAINTENANCE_QUEUE_TOKEN) private readonly maintenanceQueue: Queue,
-    @Inject(ALERTES_QUEUE_TOKEN) private readonly alertesQueue: Queue,
+    @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
-    private readonly balayage: BalayageProcessor,
+    private readonly sweep: SweepProcessor,
     private readonly purge: PurgeProcessor,
     private readonly suspension: SuspensionService,
-    private readonly alertes: AlertesService,
+    private readonly alerts: AlertsService,
   ) {}
 
   static forRoot(options: WorkerOptions): DynamicModule {
@@ -98,28 +98,28 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         { provide: OPTIONS, useValue: options },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         {
-          provide: SUR_SUSPENSION,
-          // Chaque Suspension alerte les Membres, puis l'observateur des options (tests).
+          provide: ON_SUSPENSION,
+          // Every Suspension alerts the Members, then the observer from the options (tests).
           useFactory:
-            (alertes: AlertesService): SurSuspension =>
+            (alerts: AlertsService): OnSuspension =>
             async (suspension) => {
               try {
-                await alertes.signaler({
-                  evenement: 'destination_suspendue',
+                await alerts.raise({
+                  event: 'destination_suspended',
                   destinationId: suspension.destinationId,
-                  classe: suspension.classe,
+                  failureClass: suspension.failureClass,
                   message: suspension.message,
-                  suspendueLe: suspension.suspendueLe.toISOString(),
+                  suspendedAt: suspension.suspendedAt.toISOString(),
                 });
               } finally {
-                await options.surSuspension?.(suspension);
+                await options.onSuspension?.(suspension);
               }
             },
-          inject: [AlertesService],
+          inject: [AlertsService],
         },
         { provide: DB_CONNECTION, useFactory: () => connectDb(options.databaseUrl) },
         { provide: DB, useFactory: (c: DbConnection) => c.db, inject: [DB_CONNECTION] },
-        { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.cleChiffrement) },
+        { provide: SECRET_CIPHER, useFactory: () => createSecretCipher(options.encryptionKey) },
         {
           provide: REDIS,
           useFactory: () => new Redis(options.redisUrl, { maxRetriesPerRequest: null }),
@@ -131,46 +131,46 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           jobOptions(options.retryPolicy),
         ),
         queueProvider(TRIAGE_QUEUE_TOKEN, TRIAGE_QUEUE, prefix, jobOptions(options.retryPolicy)),
-        queueProvider(ALERTES_QUEUE_TOKEN, ALERTES_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(ALERTS_QUEUE_TOKEN, ALERTS_QUEUE, prefix, jobOptions(options.retryPolicy)),
         queueProvider(MAINTENANCE_QUEUE_TOKEN, MAINTENANCE_QUEUE, prefix, {
           removeOnComplete: 100,
           removeOnFail: 1000,
         }),
-        JugeResolver,
+        JudgeResolver,
         TriageProcessor,
         DispatchProcessor,
-        BalayageProcessor,
+        SweepProcessor,
         PurgeProcessor,
         SuspensionService,
-        AlertesService,
+        AlertsService,
       ],
     };
   }
 
   async onApplicationBootstrap(): Promise<void> {
     const prefix = this.options.queuePrefix ?? DEFAULT_QUEUE_PREFIX;
-    // Idempotent : plusieurs répliques du worker partagent un seul planificateur.
-    const { intervalleMs } = this.options.balayage ?? BALAYAGE_PAR_DEFAUT;
+    // Idempotent: several worker replicas share a single scheduler.
+    const { intervalMs } = this.options.sweep ?? DEFAULT_SWEEP;
     await this.maintenanceQueue.upsertJobScheduler(
-      BALAYAGE_RECUS_JOB,
-      { every: intervalleMs },
-      { name: BALAYAGE_RECUS_JOB },
+      SWEEP_RECEIVED_JOB,
+      { every: intervalMs },
+      { name: SWEEP_RECEIVED_JOB },
     );
     await this.maintenanceQueue.upsertJobScheduler(
-      BALAYAGE_ENVOIS_JOB,
-      { every: intervalleMs },
-      { name: BALAYAGE_ENVOIS_JOB },
+      SWEEP_DELIVERIES_JOB,
+      { every: intervalMs },
+      { name: SWEEP_DELIVERIES_JOB },
     );
-    const { intervalleSondeMs } = this.options.suspension ?? SUSPENSION_PAR_DEFAUT;
+    const { probeIntervalMs } = this.options.suspension ?? DEFAULT_SUSPENSION;
     await this.maintenanceQueue.upsertJobScheduler(
-      SONDE_SUSPENDUES_JOB,
-      { every: intervalleSondeMs },
-      { name: SONDE_SUSPENDUES_JOB },
+      PROBE_SUSPENDED_JOB,
+      { every: probeIntervalMs },
+      { name: PROBE_SUSPENDED_JOB },
     );
-    const purge = this.options.purge ?? PURGE_PAR_DEFAUT;
+    const purge = this.options.purge ?? DEFAULT_PURGE;
     await this.maintenanceQueue.upsertJobScheduler(
       PURGE_RETENTION_JOB,
-      { every: purge.intervalleMs },
+      { every: purge.intervalMs },
       { name: PURGE_RETENTION_JOB },
     );
     this.workers = [
@@ -182,26 +182,26 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         DISPATCH_QUEUE,
         (job) =>
           this.dispatch.handle(job.data, {
-            derniereTentative: derniereTentative(job),
+            lastAttempt: isLastAttempt(job),
           }),
         { connection: this.redis, prefix },
       ),
-      new Worker<AlerteJob>(
-        ALERTES_QUEUE,
+      new Worker<AlertJob>(
+        ALERTS_QUEUE,
         (job) =>
-          this.alertes.envoyer(job.data, {
-            id: job.id ?? idJobAlerte(job.data),
-            signaleLe: new Date(job.timestamp),
-            derniereTentative: derniereTentative(job),
+          this.alerts.send(job.data, {
+            id: job.id ?? alertJobId(job.data),
+            raisedAt: new Date(job.timestamp),
+            lastAttempt: isLastAttempt(job),
           }),
         { connection: this.redis, prefix },
       ),
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
-          if (job.name === BALAYAGE_RECUS_JOB) await this.balayage.balayerRecus();
-          if (job.name === BALAYAGE_ENVOIS_JOB) await this.balayage.balayerEnvois();
-          if (job.name === SONDE_SUSPENDUES_JOB) await this.suspension.sonder();
+          if (job.name === SWEEP_RECEIVED_JOB) await this.sweep.sweepReceived();
+          if (job.name === SWEEP_DELIVERIES_JOB) await this.sweep.sweepDeliveries();
+          if (job.name === PROBE_SUSPENDED_JOB) await this.suspension.probe();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
         },
         { connection: this.redis, prefix },
@@ -215,9 +215,9 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       this.dispatchQueue.close(),
       this.triageQueue.close(),
       this.maintenanceQueue.close(),
-      this.alertesQueue.close(),
+      this.alertsQueue.close(),
     ]);
     await this.redis.quit();
-    await this.connexion.close();
+    await this.connection.close();
   }
 }

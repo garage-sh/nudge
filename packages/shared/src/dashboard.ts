@@ -1,146 +1,146 @@
 import { z } from 'zod';
 import {
-  ACTIONS_REVUE,
-  ETATS_RETOUR,
-  exigeUrlBase,
-  FOURNISSEURS_JUGE,
-  GRAVITES,
+  REVIEW_ACTIONS,
+  FEEDBACK_STATES,
+  requiresBaseUrl,
+  JUDGE_PROVIDERS,
+  SEVERITIES,
   SOURCES,
-  TYPES_RETOUR,
-  type ConfianceAuteur,
-  type EtatDestination,
-  type EtatRetour,
-  type FournisseurJuge,
-  type Gravite,
+  FEEDBACK_TYPES,
+  type AuthorTrust,
+  type DestinationState,
+  type FeedbackState,
+  type JudgeProvider,
+  type Severity,
   type Source,
-  type StatutEnvoi,
-  type TypeRetour,
-} from './domaine.js';
-import type { Contexte, TypeCapture } from './retour-entrant.js';
+  type DeliveryStatus,
+  type FeedbackType,
+} from './domain.js';
+import type { Context, CaptureType } from './feedback-input.js';
 
 /**
- * Contrat de l'API du dashboard (`/api/…`) : corps acceptés (schémas zod, validés
- * par l'api) et réponses (types, lus par le dashboard).
+ * Contract of the dashboard API (`/api/…`): accepted bodies (zod schemas, validated
+ * by the api) and responses (types, read by the dashboard).
  */
 
-export const LIMITES_DASHBOARD = {
+export const DASHBOARD_LIMITS = {
   email: 320,
-  motDePasseMin: 12,
-  /** Borne haute : le hachage argon2id d'un mot de passe démesuré coûterait pour rien. */
-  motDePasseMax: 256,
-  nomProjet: 100,
-  descriptionProjet: 2000,
-  origines: 50,
-  origine: 2048,
-  retoursParPage: 50,
-  retoursParPageMax: 100,
-  /** Caractères du texte d'un Retour repris dans la boîte de réception. */
-  apercuRetour: 280,
-  modeleJuge: 200,
-  urlJuge: 2048,
-  cleJuge: 1000,
-  /** Durée de rétention la plus longue qui ne soit pas illimitée : 100 ans. */
-  retentionJoursMax: 36_500,
+  passwordMin: 12,
+  /** Upper bound: hashing an oversized password with argon2id would cost for nothing. */
+  passwordMax: 256,
+  projectName: 100,
+  projectDescription: 2000,
+  origins: 50,
+  origin: 2048,
+  feedbacksPerPage: 50,
+  feedbacksPerPageMax: 100,
+  /** Characters of a Feedback's text shown in the inbox. */
+  feedbackPreview: 280,
+  judgeModel: 200,
+  judgeUrl: 2048,
+  judgeKey: 1000,
+  /** Longest retention period short of unlimited: 100 years. */
+  retentionDaysMax: 36_500,
 } as const;
 
-const email = z.string().trim().toLowerCase().pipe(z.email().max(LIMITES_DASHBOARD.email));
+const email = z.string().trim().toLowerCase().pipe(z.email().max(DASHBOARD_LIMITS.email));
 
-/** Création d'un compte de Membre (setup, invitation). */
-export const schemaNouveauMembre = z.strictObject({
+/** Creation of a Member account (setup, invitation). */
+export const newMemberSchema = z.strictObject({
   email,
-  motDePasse: z
+  password: z
     .string()
-    .min(LIMITES_DASHBOARD.motDePasseMin, {
-      message: `${LIMITES_DASHBOARD.motDePasseMin} caractères au moins`,
+    .min(DASHBOARD_LIMITS.passwordMin, {
+      message: `At least ${DASHBOARD_LIMITS.passwordMin} characters`,
     })
-    .max(LIMITES_DASHBOARD.motDePasseMax),
+    .max(DASHBOARD_LIMITS.passwordMax),
 });
-export type NouveauMembre = z.input<typeof schemaNouveauMembre>;
+export type NewMember = z.input<typeof newMemberSchema>;
 
-/** Connexion : on ne rappelle pas la politique de mot de passe à qui se trompe. */
-export const schemaConnexion = z.strictObject({
-  email: z.string().trim().toLowerCase().max(LIMITES_DASHBOARD.email),
-  motDePasse: z.string().min(1).max(LIMITES_DASHBOARD.motDePasseMax),
+/** Sign-in: the password policy is not restated to someone who gets it wrong. */
+export const signInSchema = z.strictObject({
+  email: z.string().trim().toLowerCase().max(DASHBOARD_LIMITS.email),
+  password: z.string().min(1).max(DASHBOARD_LIMITS.passwordMax),
 });
-export type Connexion = z.input<typeof schemaConnexion>;
+export type SignInCredentials = z.input<typeof signInSchema>;
 
 /**
- * Une origine autorisée, normalisée (`https://Exemple.com/` → `https://exemple.com`).
- * Un chemin, une requête ou des identifiants trahissent une URL collée par erreur : refusés.
+ * An allowed origin, normalized (`https://Example.com/` → `https://example.com`).
+ * A path, a query or credentials betray a URL pasted by mistake: refused.
  */
-export const schemaOrigine = z
+export const originSchema = z
   .string()
   .trim()
-  .max(LIMITES_DASHBOARD.origine)
-  .transform((valeur, ctx) => {
+  .max(DASHBOARD_LIMITS.origin)
+  .transform((value, ctx) => {
     let url: URL;
     try {
-      url = new URL(valeur);
+      url = new URL(value);
     } catch {
-      ctx.addIssue({ code: 'custom', message: `Origine invalide : ${valeur}` });
+      ctx.addIssue({ code: 'custom', message: `Invalid origin: ${value}` });
       return z.NEVER;
     }
-    const nue =
+    const bare =
       (url.protocol === 'http:' || url.protocol === 'https:') &&
       url.pathname === '/' &&
       !url.search &&
       !url.hash &&
       !url.username &&
       !url.password;
-    if (!nue) {
+    if (!bare) {
       ctx.addIssue({
         code: 'custom',
-        message: `Une origine s'écrit schéma://hôte[:port], sans chemin : ${valeur}`,
+        message: `An origin is written scheme://host[:port], with no path: ${value}`,
       });
       return z.NEVER;
     }
     return url.origin;
   });
 
-const originesAutorisees = z
-  .array(schemaOrigine)
-  .max(LIMITES_DASHBOARD.origines)
-  .transform((origines) => [...new Set(origines)]);
+const allowedOrigins = z
+  .array(originSchema)
+  .max(DASHBOARD_LIMITS.origins)
+  .transform((origins) => [...new Set(origins)]);
 
-const nomProjet = z.string().trim().min(1).max(LIMITES_DASHBOARD.nomProjet);
+const projectName = z.string().trim().min(1).max(DASHBOARD_LIMITS.projectName);
 
-/** Description du Projet : facultative ; une chaîne vide l'efface. */
-const descriptionProjet = z
+/** Project description: optional; an empty string clears it. */
+const projectDescription = z
   .string()
   .trim()
-  .max(LIMITES_DASHBOARD.descriptionProjet)
+  .max(DASHBOARD_LIMITS.projectDescription)
   .nullable()
-  .transform((valeur) => (valeur ? valeur : null));
+  .transform((value) => (value ? value : null));
 
-export const schemaNouveauProjet = z.strictObject({
-  nom: nomProjet,
-  description: descriptionProjet.optional(),
-  originesAutorisees: originesAutorisees.optional(),
+export const newProjectSchema = z.strictObject({
+  name: projectName,
+  description: projectDescription.optional(),
+  allowedOrigins: allowedOrigins.optional(),
 });
-export type NouveauProjet = z.input<typeof schemaNouveauProjet>;
+export type NewProject = z.input<typeof newProjectSchema>;
 
-export const schemaModificationProjet = z.strictObject({
-  nom: nomProjet.optional(),
-  description: descriptionProjet.optional(),
-  originesAutorisees: originesAutorisees.optional(),
+export const projectUpdateSchema = z.strictObject({
+  name: projectName.optional(),
+  description: projectDescription.optional(),
+  allowedOrigins: allowedOrigins.optional(),
 });
-export type ModificationProjet = z.input<typeof schemaModificationProjet>;
+export type ProjectUpdate = z.input<typeof projectUpdateSchema>;
 
-/** Texte facultatif : une chaîne vide vaut « pas de valeur ». */
-const facultatif = (max: number) =>
+/** Optional text: an empty string means "no value". */
+const optionalText = (max: number) =>
   z
     .string()
     .trim()
     .max(max)
     .nullable()
-    .transform((valeur) => (valeur ? valeur : null));
+    .transform((value) => (value ? value : null));
 
-/** URL de base d'un Juge : http(s), sans requête ni identifiants. */
-const urlJuge = facultatif(LIMITES_DASHBOARD.urlJuge).refine(
-  (valeur) => {
-    if (valeur === null) return true;
+/** Base URL of a Judge: http(s), with no query and no credentials. */
+const judgeUrl = optionalText(DASHBOARD_LIMITS.judgeUrl).refine(
+  (value) => {
+    if (value === null) return true;
     try {
-      const url = new URL(valeur);
+      const url = new URL(value);
       return (
         (url.protocol === 'http:' || url.protocol === 'https:') &&
         !url.search &&
@@ -152,269 +152,272 @@ const urlJuge = facultatif(LIMITES_DASHBOARD.urlJuge).refine(
       return false;
     }
   },
-  { message: 'URL http(s) attendue, sans paramètres ni identifiants' },
+  { message: 'Expected an http(s) URL, with no parameters and no credentials' },
 );
 
 /**
- * Choix du Juge de l'Instance. `fournisseur: null` : aucun Juge choisi (repli sur
- * les variables `NUDGE_JUDGE_*`, sinon mode dégradé). `cleApi` absente : la clé
- * enregistrée est gardée si le fournisseur ne change pas ; `null` l'efface.
+ * The Instance's choice of Judge. `provider: null`: no Judge chosen (falls back on the
+ * `NUDGE_JUDGE_*` variables, otherwise degraded mode). `apiKey` absent: the stored key
+ * is kept if the provider does not change; `null` clears it.
  */
-export const schemaChoixJuge = z
+export const judgeChoiceSchema = z
   .strictObject({
-    fournisseur: z.enum(FOURNISSEURS_JUGE).nullable(),
-    modele: facultatif(LIMITES_DASHBOARD.modeleJuge).optional(),
-    urlBase: urlJuge.optional(),
-    cleApi: facultatif(LIMITES_DASHBOARD.cleJuge).optional(),
+    provider: z.enum(JUDGE_PROVIDERS).nullable(),
+    model: optionalText(DASHBOARD_LIMITS.judgeModel).optional(),
+    baseUrl: judgeUrl.optional(),
+    apiKey: optionalText(DASHBOARD_LIMITS.judgeKey).optional(),
   })
-  .superRefine((juge, ctx) => {
-    if (juge.fournisseur && exigeUrlBase(juge.fournisseur) && !juge.urlBase) {
+  .superRefine((judge, ctx) => {
+    if (judge.provider && requiresBaseUrl(judge.provider) && !judge.baseUrl) {
       ctx.addIssue({
         code: 'custom',
         path: ['urlBase'],
-        message: 'URL du serveur requise pour un Juge auto-hébergé',
+        message: 'Server URL required for a self-hosted Judge',
       });
     }
   });
-export type ChoixJuge = z.input<typeof schemaChoixJuge>;
+export type JudgeChoice = z.input<typeof judgeChoiceSchema>;
 
-/** Le Juge de l'Instance tel que le dashboard le lit : la clé n'est jamais rendue. */
-export interface JugeInstanceVu {
-  readonly fournisseur: FournisseurJuge | null;
-  readonly modele: string | null;
-  readonly urlBase: string | null;
-  readonly cleConfiguree: boolean;
+/** The Instance's Judge as the dashboard reads it: the key is never returned. */
+export interface InstanceJudgeView {
+  readonly provider: JudgeProvider | null;
+  readonly model: string | null;
+  readonly baseUrl: string | null;
+  readonly keyConfigured: boolean;
 }
 
 /**
- * Durée de rétention des Retours de l'Instance, en jours entiers ; `null` : illimitée.
- * La purge planifiée efface les Retours plus anciens, et leurs Captures.
+ * Retention period of the Instance's Feedback, in whole days; `null`: unlimited.
+ * The scheduled purge erases older Feedback, and its Captures.
  */
-export const schemaRetention = z.strictObject({
-  jours: z.number().int().min(1).max(LIMITES_DASHBOARD.retentionJoursMax).nullable(),
+export const retentionSchema = z.strictObject({
+  days: z.number().int().min(1).max(DASHBOARD_LIMITS.retentionDaysMax).nullable(),
 });
-export type RetentionVu = z.output<typeof schemaRetention>;
+export type RetentionView = z.output<typeof retentionSchema>;
 
-/** Ce qui attend un Membre, pour les badges du dashboard. */
-export interface AlertesVu {
-  /** Retours En revue (suspicion de Manipulation), tous Projets confondus. */
-  readonly retoursEnRevue: number;
-  /** Destinations Suspendues, des plus anciennes aux plus récentes. */
-  readonly destinationsSuspendues: readonly {
+/** What awaits a Member, for the dashboard's badges. */
+export interface AlertsView {
+  /** Feedback In review (suspected Manipulation), across all Projects. */
+  readonly feedbacksInReview: number;
+  /** Suspended Destinations, oldest first. */
+  readonly suspendedDestinations: readonly {
     readonly id: string;
-    readonly nom: string;
-    readonly projet: { readonly id: string; readonly nom: string };
+    readonly name: string;
+    readonly project: { readonly id: string; readonly name: string };
   }[];
 }
 
-/** Corps d'erreur de l'api : un code stable, et le détail des champs refusés le cas échéant. */
+/** Error body of the api: a stable code, and the details of refused fields where relevant. */
 export interface ApiErrorBody {
-  readonly erreur: string;
-  readonly details?: readonly { readonly chemin: string; readonly message: string }[];
+  readonly error: string;
+  readonly details?: readonly { readonly path: string; readonly message: string }[];
 }
 
-export interface MembreVu {
+export interface MemberView {
   readonly id: string;
   readonly email: string;
 }
 
-/** Un Membre dans la liste des Membres : depuis quand il a un compte. */
-export interface MembreListeVu extends MembreVu {
-  /** Création du compte (ISO 8601). */
-  readonly depuis: string;
+/** A Member in the list of Members: since when they have had an account. */
+export interface MemberListItemView extends MemberView {
+  /** Account creation (ISO 8601). */
+  readonly since: string;
 }
 
-export interface SessionVue {
-  readonly membre: MembreVu;
+export interface SessionView {
+  readonly member: MemberView;
 }
 
-export interface EtatSetup {
-  /** `true` tant qu'aucun Membre n'existe : le setup est ouvert. */
-  readonly requis: boolean;
+export interface SetupState {
+  /** `true` as long as no Member exists: setup is open. */
+  readonly required: boolean;
 }
 
-export interface InvitationCreee {
-  /** À placer dans le lien d'invitation ; il n'est lisible qu'ici. */
-  readonly jeton: string;
-  readonly expireLe: string;
+export interface CreatedInvitation {
+  /** Goes into the invitation link; it is readable only here. */
+  readonly token: string;
+  readonly expiresAt: string;
 }
 
-export interface InvitationVue {
-  readonly expireLe: string;
+export interface InvitationView {
+  readonly expiresAt: string;
 }
 
-export interface ProjetVu {
+export interface ProjectView {
   readonly id: string;
-  readonly nom: string;
+  readonly name: string;
   readonly description: string | null;
-  readonly clePublique: string;
-  readonly originesAutorisees: readonly string[];
+  readonly publicKey: string;
+  readonly allowedOrigins: readonly string[];
   readonly createdAt: string;
 }
 
 /**
- * L'activité d'un Projet, pour la liste des Projets et la barre latérale : de quoi
- * repérer le Projet qui reçoit des Retours ou qui demande l'attention d'un Membre.
+ * A Project's activity, for the list of Projects and the sidebar: enough to spot the
+ * Project that receives Feedback or that needs a Member's attention.
  */
-export interface ActiviteProjetVu {
-  readonly projetId: string;
-  /** Retours reçus ces sept derniers jours. */
-  readonly retoursSemaine: number;
-  readonly retoursEnRevue: number;
+export interface ProjectActivityView {
+  readonly projectId: string;
+  /** Feedback received over the last seven days. */
+  readonly feedbacksThisWeek: number;
+  readonly feedbacksInReview: number;
   readonly destinations: number;
-  readonly destinationsSuspendues: number;
+  readonly suspendedDestinations: number;
 }
 
-/** Réponse d'une création de Projet ou d'une régénération de la clé secrète. */
-export interface ProjetAvecCleSecrete {
-  readonly projet: ProjetVu;
-  /** Lisible une seule fois : l'Instance n'en garde que l'empreinte. */
-  readonly cleSecrete: string;
+/** Response to a Project creation or a secret key regeneration. */
+export interface ProjectWithSecretKey {
+  readonly project: ProjectView;
+  /** Readable only once: the Instance keeps only its hash. */
+  readonly secretKey: string;
 }
 
 /**
- * Filtres et pagination de la boîte de réception (`GET /api/retours?…`).
- * Type, Gravité et Incertain portent sur le Verdict : un Retour pas encore trié n'y répond pas.
+ * Filters and pagination of the inbox (`GET /api/feedbacks?…`).
+ * Type, Severity and Uncertain apply to the Verdict: a Feedback not yet triaged never matches them.
  */
-export const schemaFiltresRetours = z.strictObject({
-  projet: z.uuid().optional(),
-  type: z.enum(TYPES_RETOUR).optional(),
-  gravite: z.enum(GRAVITES).optional(),
-  etat: z.enum(ETATS_RETOUR).optional(),
+export const feedbackFiltersSchema = z.strictObject({
+  project: z.uuid().optional(),
+  type: z.enum(FEEDBACK_TYPES).optional(),
+  severity: z.enum(SEVERITIES).optional(),
+  state: z.enum(FEEDBACK_STATES).optional(),
   source: z.enum(SOURCES).optional(),
-  /** `true` : seulement les Verdicts Incertains, à vérifier en priorité. */
-  incertain: z
+  /** `true`: only Uncertain Verdicts, to check first. */
+  uncertain: z
     .enum(['true', 'false'])
-    .transform((valeur) => valeur === 'true')
+    .transform((value) => value === 'true')
     .optional(),
-  /** Le `suivant` de la page précédente. */
-  curseur: z.string().max(200).optional(),
-  limite: z.coerce
+  /** The `next` of the previous page. */
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce
     .number()
     .int()
     .min(1)
-    .max(LIMITES_DASHBOARD.retoursParPageMax)
-    .default(LIMITES_DASHBOARD.retoursParPage),
+    .max(DASHBOARD_LIMITS.feedbacksPerPageMax)
+    .default(DASHBOARD_LIMITS.feedbacksPerPage),
 });
-export interface ProjetRefVu {
+export interface ProjectRefView {
   readonly id: string;
-  readonly nom: string;
+  readonly name: string;
 }
 
-export interface VerdictVu {
-  readonly typeRetenu: TypeRetour;
-  /** `null` en mode dégradé, sans Juge. */
-  readonly gravite: Gravite | null;
-  readonly indesirable: boolean;
+export interface VerdictView {
+  readonly resolvedType: FeedbackType;
+  /** `null` in degraded mode, without a Judge. */
+  readonly severity: Severity | null;
+  readonly junk: boolean;
   readonly manipulation: boolean;
-  readonly incertain: boolean;
+  readonly uncertain: boolean;
 }
 
-/** Une ligne de la boîte de réception. */
-export interface RetourResumeVu {
+/** A row of the inbox. */
+export interface FeedbackSummaryView {
   readonly id: string;
-  readonly projet: ProjetRefVu;
-  readonly etat: EtatRetour;
+  readonly project: ProjectRefView;
+  readonly state: FeedbackState;
   readonly source: Source;
-  /** Début du texte, brut : à afficher comme du texte, jamais comme du HTML. */
-  readonly apercu: string;
-  readonly typeDeclare: TypeRetour | null;
-  /** `null` tant que le Retour n'est pas trié. */
-  readonly verdict: VerdictVu | null;
+  /** Start of the text, raw: to display as text, never as HTML. */
+  readonly preview: string;
+  readonly declaredType: FeedbackType | null;
+  /** `null` until the Feedback is triaged. */
+  readonly verdict: VerdictView | null;
   readonly createdAt: string;
 }
 
-/** Une page de la boîte de réception, du plus récent au plus ancien. */
-export interface PageRetours {
-  readonly retours: readonly RetourResumeVu[];
-  /** Curseur de la page suivante, `null` sur la dernière. */
-  readonly suivant: string | null;
+/** A page of the inbox, newest first. */
+export interface FeedbackPage {
+  readonly feedbacks: readonly FeedbackSummaryView[];
+  /** Cursor of the next page, `null` on the last one. */
+  readonly next: string | null;
 }
 
-export interface AuteurVu {
+export interface AuthorView {
   readonly id: string | null;
   readonly email: string | null;
-  readonly nom: string | null;
-  /** Déclarée par le navigateur, ou attestée par la clé secrète. */
-  readonly confiance: ConfianceAuteur;
+  readonly name: string | null;
+  /** Declared by the browser, or attested by the secret key. */
+  readonly trust: AuthorTrust;
 }
 
-export interface DestinationRefVu {
+export interface DestinationRefView {
   readonly id: string;
-  readonly nom: string;
-  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
+  readonly name: string;
+  /** Adapter key: `webhook`, `discord`, `linear`… */
   readonly type: string;
-  readonly etat: EtatDestination;
+  readonly state: DestinationState;
 }
 
-export interface EnvoiVu {
+export interface DeliveryView {
   readonly id: string;
-  readonly destination: DestinationRefVu;
-  readonly statut: StatutEnvoi;
-  /** Lien vers l'objet créé chez la Destination (issue, message), une fois livré. */
-  readonly lienExterne: string | null;
-  readonly tentatives: number;
-  readonly derniereErreur: string | null;
+  readonly destination: DestinationRefView;
+  readonly status: DeliveryStatus;
+  /** Link to the object created at the Destination (issue, message), once delivered. */
+  readonly externalUrl: string | null;
+  readonly attempts: number;
+  readonly lastError: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 
 /**
- * La Capture jointe à un Retour : l'image elle-même se lit sur
- * `GET /api/retours/:id/capture` (`urlCapture`).
+ * The Capture attached to a Feedback: the image itself is read from
+ * `GET /api/feedbacks/:id/capture` (`captureUrl`).
  */
-export interface CaptureVue {
-  readonly contentType: TypeCapture;
-  readonly octets: number;
+export interface CaptureView {
+  readonly contentType: CaptureType;
+  readonly bytes: number;
 }
 
-/** Chemin de l'image d'une Capture dans l'API du dashboard. */
-export const urlCapture = (retourId: string): string =>
-  `/api/retours/${encodeURIComponent(retourId)}/capture`;
+/** Path of a Capture's image in the dashboard API. */
+export const captureUrl = (feedbackId: string): string =>
+  `/api/feedbacks/${encodeURIComponent(feedbackId)}/capture`;
 
-/** Le détail d'un Retour (`GET /api/retours/:id`). */
-export interface RetourDetailVu {
+/** The details of a Feedback (`GET /api/feedbacks/:id`). */
+export interface FeedbackDetailView {
   readonly id: string;
-  readonly projet: ProjetRefVu;
-  readonly etat: EtatRetour;
+  readonly project: ProjectRefView;
+  readonly state: FeedbackState;
   readonly source: Source;
-  /** Texte brut de l'Auteur : à afficher comme du texte, jamais comme du HTML. */
-  readonly texte: string;
-  readonly typeDeclare: TypeRetour | null;
-  /** `null` : Auteur anonyme. */
-  readonly auteur: AuteurVu | null;
-  readonly contexte: Contexte;
-  /** `null` : l'Auteur n'a pas joint de Capture. */
-  readonly capture: CaptureVue | null;
-  readonly verdict: VerdictVu | null;
-  readonly envois: readonly EnvoiVu[];
+  /** The Author's raw text: to display as text, never as HTML. */
+  readonly text: string;
+  readonly declaredType: FeedbackType | null;
+  /** `null`: anonymous Author. */
+  readonly author: AuthorView | null;
+  readonly context: Context;
+  /** `null`: the Author attached no Capture. */
+  readonly capture: CaptureView | null;
+  readonly verdict: VerdictView | null;
+  readonly deliveries: readonly DeliveryView[];
   readonly createdAt: string;
 }
 
 /**
- * Redispatch d'un Retour par un Membre (`POST /api/retours/:id/redispatch`) : les Envois
- * créés vers les Destinations dont le Filtre retient désormais le Retour, et le Retour
- * à jour. `envoisCrees` vaut 0 quand aucune Destination de plus ne le retient.
+ * Redispatch of a Feedback by a Member (`POST /api/feedbacks/:id/redispatch`): the
+ * Deliveries created to the Destinations whose Filter now accepts the Feedback, and the
+ * updated Feedback. `deliveriesCreated` is 0 when no further Destination accepts it.
  */
-export interface RedispatchVu {
-  readonly envoisCrees: number;
-  readonly retour: RetourDetailVu;
+export interface RedispatchView {
+  readonly deliveriesCreated: number;
+  readonly feedback: FeedbackDetailView;
 }
 
-/** Revue d'un Retour par un Membre (`POST /api/retours/:id/revue`). */
-export const schemaRevue = z.strictObject({ action: z.enum(ACTIONS_REVUE) });
-export type Revue = z.input<typeof schemaRevue>;
+/** Review of a Feedback by a Member (`POST /api/feedbacks/:id/review`). */
+export const reviewSchema = z.strictObject({ action: z.enum(REVIEW_ACTIONS) });
+export type Review = z.input<typeof reviewSchema>;
 
 /**
- * Correction du Verdict par un Membre (`PATCH /api/retours/:id/verdict`) : le Type
- * retenu, la Gravité, ou les deux. Sans effet chez les Destinations déjà servies.
+ * Correction of the Verdict by a Member (`PATCH /api/feedbacks/:id/verdict`): the
+ * resolved type, the Severity, or both. No effect on the Destinations already served.
  */
-export const schemaCorrectionVerdict = z
+export const verdictCorrectionSchema = z
   .strictObject({
-    typeRetenu: z.enum(TYPES_RETOUR).optional(),
-    gravite: z.enum(GRAVITES).optional(),
+    resolvedType: z.enum(FEEDBACK_TYPES).optional(),
+    severity: z.enum(SEVERITIES).optional(),
   })
-  .refine((correction) => correction.typeRetenu !== undefined || correction.gravite !== undefined, {
-    message: 'Type retenu ou Gravité attendu',
-  });
-export type CorrectionVerdict = z.input<typeof schemaCorrectionVerdict>;
+  .refine(
+    (correction) => correction.resolvedType !== undefined || correction.severity !== undefined,
+    {
+      message: 'Expected a resolved type or a Severity',
+    },
+  );
+export type VerdictCorrection = z.input<typeof verdictCorrectionSchema>;

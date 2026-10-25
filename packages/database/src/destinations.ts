@@ -1,91 +1,91 @@
 import { randomUUID } from 'node:crypto';
-import type { DestinationConfiguree, Filtre, SecretCipher } from '@nudge/core';
-import { FILTRE_TOUT } from '@nudge/shared';
+import type { ConfiguredDestination, Filter, SecretCipher } from '@nudge/core';
+import { FILTER_ALL } from '@nudge/shared';
 import type { Db } from './client.js';
 import { destinations } from './schema.js';
 
 export type DestinationRow = typeof destinations.$inferSelect;
-export type SecretsDestination = Readonly<Record<string, string>>;
+export type DestinationSecrets = Readonly<Record<string, string>>;
 
 /**
- * Contexte de chiffrement des secrets d'une Destination : ils ne se déchiffrent que
- * pour cette Destination, jamais recopiés sur une autre ligne.
+ * Encryption context of a Destination's secrets: they decrypt only for this
+ * Destination, never when copied onto another row.
  */
-export const secretsDestinationContext = (destinationId: string): string =>
+export const destinationSecretsContext = (destinationId: string): string =>
   `destinations.${destinationId}.secrets`;
 
-/** `null` quand il n'y a aucun secret à garder. */
-export function chiffrerSecretsDestination(
+/** `null` when there is no secret to keep. */
+export function encryptDestinationSecrets(
   cipher: SecretCipher,
   destinationId: string,
-  secrets: SecretsDestination,
+  secrets: DestinationSecrets,
 ): string | null {
   if (Object.keys(secrets).length === 0) return null;
-  return cipher.encrypt(JSON.stringify(secrets), secretsDestinationContext(destinationId));
+  return cipher.encrypt(JSON.stringify(secrets), destinationSecretsContext(destinationId));
 }
 
-/** Lève `SecretDecryptionError` si les secrets ne se déchiffrent plus (clé d'Instance changée). */
-export function dechiffrerSecretsDestination(
+/** Throws `SecretDecryptionError` if the secrets no longer decrypt (Instance key changed). */
+export function decryptDestinationSecrets(
   cipher: SecretCipher,
-  destination: Pick<DestinationRow, 'id' | 'secretsChiffres'>,
-): SecretsDestination {
-  if (!destination.secretsChiffres) return {};
+  destination: Pick<DestinationRow, 'id' | 'encryptedSecrets'>,
+): DestinationSecrets {
+  if (!destination.encryptedSecrets) return {};
   return JSON.parse(
-    cipher.decrypt(destination.secretsChiffres, secretsDestinationContext(destination.id)),
-  ) as SecretsDestination;
+    cipher.decrypt(destination.encryptedSecrets, destinationSecretsContext(destination.id)),
+  ) as DestinationSecrets;
 }
 
-export const filtreDe = (
-  destination: Pick<DestinationRow, 'filtreTypes' | 'filtreGraviteMinimale'>,
-): Filtre => ({
-  types: destination.filtreTypes,
-  graviteMinimale: destination.filtreGraviteMinimale,
+export const filterOf = (
+  destination: Pick<DestinationRow, 'filterTypes' | 'filterMinimumSeverity'>,
+): Filter => ({
+  types: destination.filterTypes,
+  minimumSeverity: destination.filterMinimumSeverity,
 });
 
-/** Une Destination lue en base, secrets déchiffrés, telle que la reçoit un `DestinationAdapterResolver`. */
-export function toDestinationConfiguree(
+/** A Destination read from the database, secrets decrypted, as a `DestinationAdapterResolver` receives it. */
+export function toConfiguredDestination(
   destination: DestinationRow,
   cipher: SecretCipher,
-): DestinationConfiguree {
+): ConfiguredDestination {
   return {
     id: destination.id,
-    projetId: destination.projetId,
-    nom: destination.nom,
+    projectId: destination.projectId,
+    name: destination.name,
     type: destination.type,
     config: destination.config,
-    secrets: dechiffrerSecretsDestination(cipher, destination),
+    secrets: decryptDestinationSecrets(cipher, destination),
   };
 }
 
-/** Crée une Destination ; ses secrets sont chiffrés avant d'entrer en base. */
+/** Creates a Destination; its secrets are encrypted before entering the database. */
 export async function createDestination(
   db: Db,
   cipher: SecretCipher,
-  donnees: {
-    projetId: string;
-    nom: string;
+  data: {
+    projectId: string;
+    name: string;
     type: string;
     config?: Record<string, unknown>;
-    secrets?: SecretsDestination;
-    filtre?: Filtre;
+    secrets?: DestinationSecrets;
+    filter?: Filter;
   },
 ): Promise<DestinationRow> {
-  // L'id est tiré avant l'insertion : il entre dans le contexte de chiffrement.
+  // The id is drawn before the insert: it is part of the encryption context.
   const id = randomUUID();
-  const filtre = donnees.filtre ?? FILTRE_TOUT;
+  const filter = data.filter ?? FILTER_ALL;
   const [destination] = await db
     .insert(destinations)
     .values({
       id,
-      projetId: donnees.projetId,
-      nom: donnees.nom,
-      type: donnees.type,
-      config: donnees.config ?? {},
-      secretsChiffres: chiffrerSecretsDestination(cipher, id, donnees.secrets ?? {}),
-      filtreTypes: [...filtre.types],
-      filtreGraviteMinimale: filtre.graviteMinimale,
+      projectId: data.projectId,
+      name: data.name,
+      type: data.type,
+      config: data.config ?? {},
+      encryptedSecrets: encryptDestinationSecrets(cipher, id, data.secrets ?? {}),
+      filterTypes: [...filter.types],
+      filterMinimumSeverity: filter.minimumSeverity,
     })
     .returning();
-  if (!destination) throw new Error('Destination non créée');
+  if (!destination) throw new Error('Destination not created');
   return destination;
 }

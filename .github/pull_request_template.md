@@ -1,11 +1,11 @@
-## Le problème
+## The problem
 
-<!-- Ce qui ne va pas, ou ce qui manque. Liez l'issue : Closes #… -->
+<!-- What is wrong, or what is missing. Link the issue: Closes #… -->
 
-## La solution
+## The solution
 
-<!-- Ce qui change, et pourquoi de cette façon. Un ADR si une décision d'architecture bouge. -->
+<!-- What changes, and why this way. An ADR if an architecture decision moves. -->
 
-## Vérifier
+## Verifying
 
-<!-- Les tests ajoutés, et comment constater le changement à la main. -->
+<!-- The tests added, and how to observe the change by hand. -->

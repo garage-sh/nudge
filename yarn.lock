@@ -1467,7 +1467,7 @@ __metadata:
     "@nudge/database": "workspace:*"
     "@nudge/destinations": "workspace:*"
     "@nudge/shared": "workspace:*"
-    "@nudge/stockage": "workspace:*"
+    "@nudge/storage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
     "@nudge/worker": "workspace:*"
     "@types/express": "npm:^5.0.0"
@@ -1607,7 +1607,7 @@ __metadata:
     "@nudge/judge": "workspace:*"
     "@nudge/sdk": "workspace:*"
     "@nudge/shared": "workspace:*"
-    "@nudge/stockage": "workspace:*"
+    "@nudge/storage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
     "@nudge/worker": "workspace:*"
     "@testcontainers/postgresql": "npm:^11.14.0"
@@ -1655,9 +1655,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@nudge/stockage@workspace:*, @nudge/stockage@workspace:packages/stockage":
+"@nudge/storage@workspace:*, @nudge/storage@workspace:packages/storage":
   version: 0.0.0-use.local
-  resolution: "@nudge/stockage@workspace:packages/stockage"
+  resolution: "@nudge/storage@workspace:packages/storage"
   dependencies:
     "@nudge/tsup-config": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
@@ -1722,7 +1722,7 @@ __metadata:
     "@nudge/destinations": "workspace:*"
     "@nudge/judge": "workspace:*"
     "@nudge/shared": "workspace:*"
-    "@nudge/stockage": "workspace:*"
+    "@nudge/storage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
     "@types/node": "npm:^24.10.0"
     bullmq: "npm:^5.60.0"

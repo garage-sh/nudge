@@ -1,68 +1,73 @@
-import { exigeCleApi, exigeUrlBase, FOURNISSEURS_JUGE, type FournisseurJuge } from '@nudge/shared';
-import { jugeAutoHeberge } from './auto-heberge.js';
-import { jugeOpenRouter } from './openrouter.js';
-import type { Juge } from './port.js';
-import { jugeTypeSafe } from './typesafe.js';
+import {
+  requiresApiKey,
+  requiresBaseUrl,
+  JUDGE_PROVIDERS,
+  type JudgeProvider,
+} from '@nudge/shared';
+import { openRouterJudge } from './openrouter.js';
+import type { Judge } from './port.js';
+import { selfHostedJudge } from './self-hosted.js';
+import { typeSafeJudge } from './typesafe.js';
 
-/** Le Juge choisi pour l'Instance, clé déchiffrée. Un champ `null` prend la valeur par défaut. */
-export interface ConfigJuge {
-  readonly fournisseur: FournisseurJuge;
-  /** Requise pour TypeSafe et OpenRouter ; facultative pour un serveur auto-hébergé. */
-  readonly cleApi: string | null;
-  readonly modele: string | null;
-  /** Requise pour un serveur auto-hébergé ; remplace l'hôte du fournisseur sinon (proxy). */
-  readonly urlBase: string | null;
+/** The Judge chosen for the Instance, key decrypted. A `null` field takes the default value. */
+export interface JudgeConfig {
+  readonly provider: JudgeProvider;
+  /** Required for TypeSafe and OpenRouter; optional for a self-hosted server. */
+  readonly apiKey: string | null;
+  readonly model: string | null;
+  /** Required for a self-hosted server; replaces the provider's host otherwise (proxy). */
+  readonly baseUrl: string | null;
 }
 
-/** L'adaptateur du fournisseur choisi. Lève si la configuration est incomplète. */
-export function createJuge(
-  config: ConfigJuge,
-  dependances: { readonly fetch?: typeof globalThis.fetch } = {},
-): Juge {
-  const commun = { modele: config.modele, ...dependances };
-  switch (config.fournisseur) {
+/** The chosen provider's adapter. Throws if the configuration is incomplete. */
+export function createJudge(
+  config: JudgeConfig,
+  dependencies: { readonly fetch?: typeof globalThis.fetch } = {},
+): Judge {
+  const common = { model: config.model, ...dependencies };
+  switch (config.provider) {
     case 'typesafe':
     case 'openrouter': {
-      if (!config.cleApi) throw new Error(`Juge ${config.fournisseur} : clé API manquante`);
-      const options = { ...commun, cleApi: config.cleApi, urlBase: config.urlBase };
-      return config.fournisseur === 'typesafe' ? jugeTypeSafe(options) : jugeOpenRouter(options);
+      if (!config.apiKey) throw new Error(`Judge ${config.provider}: missing API key`);
+      const options = { ...common, apiKey: config.apiKey, baseUrl: config.baseUrl };
+      return config.provider === 'typesafe' ? typeSafeJudge(options) : openRouterJudge(options);
     }
-    case 'auto_heberge':
-      if (!config.urlBase) throw new Error('Juge auto-hébergé : URL du serveur manquante');
-      return jugeAutoHeberge({ ...commun, urlBase: config.urlBase, cleApi: config.cleApi });
+    case 'self_hosted':
+      if (!config.baseUrl) throw new Error('Self-hosted Judge: missing server URL');
+      return selfHostedJudge({ ...common, baseUrl: config.baseUrl, apiKey: config.apiKey });
   }
 }
 
-const estFournisseur = (valeur: string): valeur is FournisseurJuge =>
-  (FOURNISSEURS_JUGE as readonly string[]).includes(valeur);
+const isProvider = (value: string): value is JudgeProvider =>
+  (JUDGE_PROVIDERS as readonly string[]).includes(value);
 
 /**
- * Repli quand l'Instance n'a pas choisi de Juge en base : `NUDGE_JUDGE_PROVIDER`
- * (typesafe | openrouter | auto_heberge), `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`,
- * `NUDGE_JUDGE_BASE_URL`. Sans fournisseur : `null` (mode dégradé). Une
- * configuration invalide lève, pour échouer au démarrage plutôt qu'au premier Triage.
+ * Fallback when the Instance has not chosen a Judge in the database: `NUDGE_JUDGE_PROVIDER`
+ * (typesafe | openrouter | self_hosted), `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`,
+ * `NUDGE_JUDGE_BASE_URL`. Without a provider: `null` (degraded mode). An invalid
+ * configuration throws, to fail at startup rather than on the first Triage.
  */
-export function configJugeFromEnv(
+export function judgeConfigFromEnv(
   env: Readonly<Record<string, string | undefined>>,
-): ConfigJuge | null {
-  const fournisseur = env.NUDGE_JUDGE_PROVIDER?.trim();
-  if (!fournisseur) return null;
-  if (!estFournisseur(fournisseur)) {
+): JudgeConfig | null {
+  const provider = env.NUDGE_JUDGE_PROVIDER?.trim();
+  if (!provider) return null;
+  if (!isProvider(provider)) {
     throw new Error(
-      `NUDGE_JUDGE_PROVIDER invalide : « ${fournisseur} » (attendu : ${FOURNISSEURS_JUGE.join(', ')})`,
+      `Invalid NUDGE_JUDGE_PROVIDER: "${provider}" (expected: ${JUDGE_PROVIDERS.join(', ')})`,
     );
   }
-  const config: ConfigJuge = {
-    fournisseur,
-    cleApi: env.NUDGE_JUDGE_API_KEY || null,
-    modele: env.NUDGE_JUDGE_MODEL || null,
-    urlBase: env.NUDGE_JUDGE_BASE_URL || null,
+  const config: JudgeConfig = {
+    provider,
+    apiKey: env.NUDGE_JUDGE_API_KEY || null,
+    model: env.NUDGE_JUDGE_MODEL || null,
+    baseUrl: env.NUDGE_JUDGE_BASE_URL || null,
   };
-  if (exigeCleApi(fournisseur) && !config.cleApi) {
-    throw new Error(`NUDGE_JUDGE_API_KEY requise pour le Juge ${fournisseur}`);
+  if (requiresApiKey(provider) && !config.apiKey) {
+    throw new Error(`NUDGE_JUDGE_API_KEY is required for the ${provider} Judge`);
   }
-  if (exigeUrlBase(fournisseur) && !config.urlBase) {
-    throw new Error(`NUDGE_JUDGE_BASE_URL requise pour le Juge ${fournisseur}`);
+  if (requiresBaseUrl(provider) && !config.baseUrl) {
+    throw new Error(`NUDGE_JUDGE_BASE_URL is required for the ${provider} Judge`);
   }
   return config;
 }

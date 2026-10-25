@@ -1,68 +1,68 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 /**
- * Clé d'Instance (D7) : 32 octets en base64, fournie par l'environnement et jamais
- * stockée en base. Générer : `openssl rand -base64 32`.
+ * Instance key (D7): 32 bytes in base64, provided by the environment and never stored
+ * in the database. Generate: `openssl rand -base64 32`.
  */
 export const ENCRYPTION_KEY_VARIABLE = 'NUDGE_ENCRYPTION_KEY';
 
-const ALGORITHME = 'aes-256-gcm';
+const ALGORITHM = 'aes-256-gcm';
 const VERSION = 'v1';
-const OCTETS_CLE = 32;
-const OCTETS_IV = 12;
+const KEY_BYTES = 32;
+const IV_BYTES = 12;
 
-/** Un secret chiffré illisible : mauvaise clé, autre usage, valeur altérée ou mal formée. */
+/** An unreadable encrypted secret: wrong key, other use, tampered or malformed value. */
 export class SecretDecryptionError extends Error {
   override readonly name = 'SecretDecryptionError';
 }
 
 /**
- * Chiffre les secrets stockés en base (clé du Juge, jetons des Destinations, secrets
- * HMAC). Le `context` nomme l'usage du secret (`parametres_instance.juge_cle`,
- * `destination.<id>.jeton`…) : il est authentifié avec lui, si bien qu'un secret
- * recopié dans une autre colonne ou une autre ligne ne se déchiffre pas.
+ * Encrypts the secrets stored in the database (the Judge's key, Destination tokens, HMAC
+ * secrets). The `context` names the secret's use (`instance_settings.judge_key`,
+ * `destinations.<id>.secrets`…): it is authenticated along with it, so a secret copied
+ * into another column or another row does not decrypt.
  */
 export interface SecretCipher {
-  /** `v1:<iv>:<tag>:<données>`, en base64. */
+  /** `v1:<iv>:<tag>:<data>`, in base64. */
   encrypt(plaintext: string, context: string): string;
-  /** Lève `SecretDecryptionError` si le secret ne se déchiffre pas pour ce contexte. */
+  /** Throws `SecretDecryptionError` if the secret does not decrypt for this context. */
   decrypt(encrypted: string, context: string): string;
 }
 
-/** Lève si la clé n'est pas 32 octets en base64. */
+/** Throws if the key is not 32 bytes in base64. */
 export function createSecretCipher(keyBase64: string): SecretCipher {
-  const cle = Buffer.from(keyBase64, 'base64');
-  if (cle.length !== OCTETS_CLE) {
+  const key = Buffer.from(keyBase64, 'base64');
+  if (key.length !== KEY_BYTES) {
     throw new Error(
-      `${ENCRYPTION_KEY_VARIABLE} doit contenir 32 octets en base64 (${cle.length} lus) : openssl rand -base64 32`,
+      `${ENCRYPTION_KEY_VARIABLE} must contain 32 bytes in base64 (${key.length} read): openssl rand -base64 32`,
     );
   }
   return {
     encrypt(plaintext, context) {
-      const iv = randomBytes(OCTETS_IV);
-      const chiffreur = createCipheriv(ALGORITHME, cle, iv);
-      chiffreur.setAAD(Buffer.from(context, 'utf8'));
-      const donnees = Buffer.concat([chiffreur.update(plaintext, 'utf8'), chiffreur.final()]);
-      return [VERSION, iv, chiffreur.getAuthTag(), donnees]
-        .map((partie) => (typeof partie === 'string' ? partie : partie.toString('base64')))
+      const iv = randomBytes(IV_BYTES);
+      const cipher = createCipheriv(ALGORITHM, key, iv);
+      cipher.setAAD(Buffer.from(context, 'utf8'));
+      const data = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+      return [VERSION, iv, cipher.getAuthTag(), data]
+        .map((part) => (typeof part === 'string' ? part : part.toString('base64')))
         .join(':');
     },
     decrypt(encrypted, context) {
-      const [version, iv, tag, donnees, ...reste] = encrypted.split(':');
-      if (version !== VERSION || !iv || !tag || donnees === undefined || reste.length > 0) {
-        throw new SecretDecryptionError('Secret chiffré mal formé');
+      const [version, iv, tag, data, ...rest] = encrypted.split(':');
+      if (version !== VERSION || !iv || !tag || data === undefined || rest.length > 0) {
+        throw new SecretDecryptionError('Malformed encrypted secret');
       }
       try {
-        const dechiffreur = createDecipheriv(ALGORITHME, cle, Buffer.from(iv, 'base64'));
-        dechiffreur.setAAD(Buffer.from(context, 'utf8'));
-        dechiffreur.setAuthTag(Buffer.from(tag, 'base64'));
+        const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'base64'));
+        decipher.setAAD(Buffer.from(context, 'utf8'));
+        decipher.setAuthTag(Buffer.from(tag, 'base64'));
         return Buffer.concat([
-          dechiffreur.update(Buffer.from(donnees, 'base64')),
-          dechiffreur.final(),
+          decipher.update(Buffer.from(data, 'base64')),
+          decipher.final(),
         ]).toString('utf8');
       } catch (cause) {
         throw new SecretDecryptionError(
-          `Secret indéchiffrable (« ${context} ») : autre clé d'Instance, autre usage ou valeur altérée`,
+          `Undecryptable secret ("${context}"): other Instance key, other use or tampered value`,
           { cause },
         );
       }

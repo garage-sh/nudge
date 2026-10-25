@@ -2,47 +2,47 @@ import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createSecretCipher, SecretDecryptionError } from './secrets.js';
 
-const cle = () => randomBytes(32).toString('base64');
+const key = () => randomBytes(32).toString('base64');
 
-describe('Chiffrement des secrets (clé d’Instance, AES-256-GCM)', () => {
-  it('rend le secret chiffré illisible, et le rend tel quel au déchiffrement', () => {
-    const chiffreur = createSecretCipher(cle());
-    const chiffre = chiffreur.encrypt('sk-or-v1-secret', 'juge.cle');
+describe('Secret encryption (Instance key, AES-256-GCM)', () => {
+  it('makes the encrypted secret unreadable, and returns it unchanged on decryption', () => {
+    const cipher = createSecretCipher(key());
+    const encrypted = cipher.encrypt('sk-or-v1-secret', 'judge.key');
 
-    expect(chiffre).not.toContain('sk-or-v1-secret');
-    expect(chiffreur.decrypt(chiffre, 'juge.cle')).toBe('sk-or-v1-secret');
+    expect(encrypted).not.toContain('sk-or-v1-secret');
+    expect(cipher.decrypt(encrypted, 'judge.key')).toBe('sk-or-v1-secret');
   });
 
-  it('chiffre deux fois le même secret en deux valeurs différentes', () => {
-    const chiffreur = createSecretCipher(cle());
-    expect(chiffreur.encrypt('même secret', 'x')).not.toBe(chiffreur.encrypt('même secret', 'x'));
+  it('encrypts the same secret twice into two different values', () => {
+    const cipher = createSecretCipher(key());
+    expect(cipher.encrypt('same secret', 'x')).not.toBe(cipher.encrypt('same secret', 'x'));
   });
 
-  it('refuse un secret chiffré pour un autre usage, ou avec une autre clé', () => {
-    const chiffreur = createSecretCipher(cle());
-    const chiffre = chiffreur.encrypt('jeton', 'destination.1.jeton');
+  it('refuses a secret encrypted for another use, or with another key', () => {
+    const cipher = createSecretCipher(key());
+    const encrypted = cipher.encrypt('token', 'destination.1.token');
 
-    expect(() => chiffreur.decrypt(chiffre, 'destination.2.jeton')).toThrow(SecretDecryptionError);
-    expect(() => createSecretCipher(cle()).decrypt(chiffre, 'destination.1.jeton')).toThrow(
+    expect(() => cipher.decrypt(encrypted, 'destination.2.token')).toThrow(SecretDecryptionError);
+    expect(() => createSecretCipher(key()).decrypt(encrypted, 'destination.1.token')).toThrow(
       SecretDecryptionError,
     );
   });
 
-  it('refuse un secret altéré ou mal formé', () => {
-    const chiffreur = createSecretCipher(cle());
-    const chiffre = chiffreur.encrypt('jeton', 'x');
-    const [version, iv, tag, donnees] = chiffre.split(':');
-    const altere = Buffer.from(donnees!, 'base64');
-    altere[0] = altere[0]! ^ 1;
+  it('refuses a tampered or malformed secret', () => {
+    const cipher = createSecretCipher(key());
+    const encrypted = cipher.encrypt('token', 'x');
+    const [version, iv, tag, data] = encrypted.split(':');
+    const tampered = Buffer.from(data!, 'base64');
+    tampered[0] = tampered[0]! ^ 1;
 
     expect(() =>
-      chiffreur.decrypt([version, iv, tag, altere.toString('base64')].join(':'), 'x'),
+      cipher.decrypt([version, iv, tag, tampered.toString('base64')].join(':'), 'x'),
     ).toThrow(SecretDecryptionError);
-    expect(() => chiffreur.decrypt('pas-un-secret-chiffre', 'x')).toThrow(SecretDecryptionError);
+    expect(() => cipher.decrypt('not-an-encrypted-secret', 'x')).toThrow(SecretDecryptionError);
   });
 
-  it('exige une clé de 32 octets en base64, et dit laquelle', () => {
+  it('requires a 32-byte base64 key, and says which one', () => {
     expect(() => createSecretCipher('')).toThrow(/NUDGE_ENCRYPTION_KEY/);
-    expect(() => createSecretCipher(randomBytes(16).toString('base64'))).toThrow(/32 octets/);
+    expect(() => createSecretCipher(randomBytes(16).toString('base64'))).toThrow(/32 bytes/);
   });
 });

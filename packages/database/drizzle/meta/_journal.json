@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1792796161055,
+      "when": 1792949134227,
       "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1792796475103,
-      "tag": "0001_membres_et_origines",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1792797640308,
-      "tag": "0002_boite_de_reception",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1792799742412,
-      "tag": "0003_parametres_instance",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1792800563191,
-      "tag": "0004_destinations_filtre_secrets",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792802248697,
-      "tag": "0005_suspension_destinations",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1792808211177,
-      "tag": "0006_captures",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1792810041541,
-      "tag": "0007_alertes",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1792811280248,
-      "tag": "0008_retention",
       "breakpoints": true
     }
   ]

@@ -1,32 +1,32 @@
-import type { CaptureADispatcher, ClasseEchec } from '@nudge/core';
-import type { TypeCapture } from '@nudge/shared';
-import { messageErreur } from './http.js';
+import type { CaptureToDispatch, FailureClass } from '@nudge/core';
+import type { CaptureType } from '@nudge/shared';
+import { errorMessage } from './http.js';
 
-/** L'image d'une Capture, lue dans le stockage, prête à joindre. */
-export interface ImageCapture {
-  readonly contentType: TypeCapture;
-  readonly octets: Uint8Array;
+/** A Capture's image, read from storage, ready to attach. */
+export interface CaptureImage {
+  readonly contentType: CaptureType;
+  readonly bytes: Uint8Array;
 }
 
-export type CaptureLue =
-  | { readonly ok: true; readonly image: ImageCapture | null }
-  | { readonly ok: false; readonly classe: ClasseEchec; readonly message: string };
+export type LoadedCapture =
+  | { readonly ok: true; readonly image: CaptureImage | null }
+  | { readonly ok: false; readonly failureClass: FailureClass; readonly message: string };
 
 /**
- * L'image de la Capture d'un Retour, pour un adaptateur qui la joint. Sans Capture,
- * ou si le stockage ne l'a plus, `image` est `null` : le Retour part sans elle. Un
- * stockage injoignable est un échec transitoire : l'Envoi sera retenté.
+ * The image of a Feedback's Capture, for an adapter that attaches it. Without a
+ * Capture, or if storage no longer has it, `image` is `null`: the Feedback goes out
+ * without it. Unreachable storage is a transient failure: the Delivery will be retried.
  */
-export async function lireCapture(capture: CaptureADispatcher | null): Promise<CaptureLue> {
+export async function readCapture(capture: CaptureToDispatch | null): Promise<LoadedCapture> {
   if (!capture) return { ok: true, image: null };
   try {
-    const octets = await capture.lire();
-    return { ok: true, image: octets ? { contentType: capture.contentType, octets } : null };
-  } catch (erreur) {
+    const bytes = await capture.read();
+    return { ok: true, image: bytes ? { contentType: capture.contentType, bytes } : null };
+  } catch (error) {
     return {
       ok: false,
-      classe: 'transient',
-      message: `Capture illisible : ${messageErreur(erreur)}`,
+      failureClass: 'transient',
+      message: `Unreadable Capture: ${errorMessage(error)}`,
     };
   }
 }

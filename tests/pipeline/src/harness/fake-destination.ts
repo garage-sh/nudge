@@ -1,63 +1,63 @@
 import type {
-  Alerte,
-  ClasseEchec,
+  Alert,
+  FailureClass,
   DestinationAdapter,
-  EnvoiASortir,
-  ResultatEnvoi,
-  SanteDestination,
+  OutgoingDelivery,
+  DeliveryResult,
+  DestinationHealth,
 } from '@nudge/core';
 
 /**
- * Destination de test branchée sur le port : elle enregistre les Envois et
- * peut simuler des échecs transient, auth et permanent.
+ * Test Destination plugged into the port: it records Deliveries and can
+ * simulate transient, auth and permanent failures.
  */
 export class FakeDestination implements DestinationAdapter {
-  /** Les Envois livrés, dans l'ordre. */
-  readonly envois: EnvoiASortir[] = [];
-  /** Tous les appels à `send`, livrés ou non. */
-  readonly attempts: EnvoiASortir[] = [];
-  /** Instant (`performance.now()`) de chaque appel à `send`, dans l'ordre de `attempts`. */
+  /** The delivered Deliveries, in order. */
+  readonly deliveries: OutgoingDelivery[] = [];
+  /** Every call to `send`, delivered or not. */
+  readonly attempts: OutgoingDelivery[] = [];
+  /** Time (`performance.now()`) of each call to `send`, in the order of `attempts`. */
   readonly attemptTimes: number[] = [];
-  /** Instant (`performance.now()`) de chaque appel à `healthCheck`, dans l'ordre. */
+  /** Time (`performance.now()`) of each call to `healthCheck`, in order. */
   readonly healthCheckTimes: number[] = [];
-  /** Les alertes livrées, dans l'ordre (Destination d'alerte de l'Instance). */
-  readonly alertes: Alerte[] = [];
-  /** Tous les appels à `alerter`, livrés ou non. */
-  readonly alertAttempts: Alerte[] = [];
-  private sends: (ResultatEnvoi | Error)[] = [];
-  private alerts: (ResultatEnvoi | Error)[] = [];
+  /** The delivered alerts, in order (the Instance's Alert destination). */
+  readonly alerts: Alert[] = [];
+  /** Every call to `alert`, delivered or not. */
+  readonly alertAttempts: Alert[] = [];
+  private scriptedSends: (DeliveryResult | Error)[] = [];
+  private scriptedAlerts: (DeliveryResult | Error)[] = [];
   private held: Promise<void> | null = null;
-  private health: SanteDestination[] = [];
+  private health: DestinationHealth[] = [];
 
   /**
-   * Les prochains `send` rendent ces résultats, dans l'ordre (une `Error` est
-   * levée telle quelle) ; ensuite, livraison.
+   * The next `send` calls return these results, in order (an `Error` is thrown
+   * as is); then, delivery.
    */
-  scriptSends(...results: (ResultatEnvoi | Error)[]): void {
-    this.sends.push(...results);
+  scriptSends(...results: (DeliveryResult | Error)[]): void {
+    this.scriptedSends.push(...results);
   }
 
-  /** Les prochains `alerter` rendent ces résultats, dans l'ordre ; ensuite, livraison. */
-  scriptAlerts(...results: (ResultatEnvoi | Error)[]): void {
-    this.alerts.push(...results);
+  /** The next `alert` calls return these results, in order; then, delivery. */
+  scriptAlerts(...results: (DeliveryResult | Error)[]): void {
+    this.scriptedAlerts.push(...results);
   }
 
-  /** Les prochains `healthCheck` rendent ces résultats ; ensuite, joignable. */
-  scriptHealth(...health: SanteDestination[]): void {
+  /** The next `healthCheck` calls return these results; then, reachable. */
+  scriptHealth(...health: DestinationHealth[]): void {
     this.health.push(...health);
   }
 
-  /** Les `healthCheck` suivants rendent joignable : le reste du script est abandonné. */
+  /** The following `healthCheck` calls return reachable: the rest of the script is dropped. */
   restoreHealth(): void {
     this.health = [];
   }
 
-  /** Nombre d'appels à `healthCheck`. */
+  /** Number of calls to `healthCheck`. */
   get healthChecks(): number {
     return this.healthCheckTimes.length;
   }
 
-  /** Bloque les `send` jusqu'à l'appel de la fonction rendue (pour des appels simultanés). */
+  /** Blocks `send` calls until the returned function is called (for concurrent calls). */
   hold(): () => void {
     let release!: () => void;
     this.held = new Promise<void>((resolve) => {
@@ -69,36 +69,39 @@ export class FakeDestination implements DestinationAdapter {
     };
   }
 
-  async send(envoi: EnvoiASortir): Promise<ResultatEnvoi> {
-    this.attempts.push(envoi);
+  async send(delivery: OutgoingDelivery): Promise<DeliveryResult> {
+    this.attempts.push(delivery);
     this.attemptTimes.push(performance.now());
     if (this.held) await this.held;
-    const result = this.sends.shift() ?? {
-      statut: 'livre',
-      lienExterne: `https://destination.test/envois/${envoi.envoiId}`,
+    const result = this.scriptedSends.shift() ?? {
+      status: 'delivered',
+      externalUrl: `https://destination.test/deliveries/${delivery.deliveryId}`,
     };
     if (result instanceof Error) throw result;
-    if (result.statut === 'livre') this.envois.push(envoi);
+    if (result.status === 'delivered') this.deliveries.push(delivery);
     return result;
   }
 
-  async alerter(alerte: Alerte): Promise<ResultatEnvoi> {
-    this.alertAttempts.push(alerte);
-    const result = this.alerts.shift() ?? { statut: 'livre', lienExterne: null };
+  async alert(alert: Alert): Promise<DeliveryResult> {
+    this.alertAttempts.push(alert);
+    const result = this.scriptedAlerts.shift() ?? { status: 'delivered', externalUrl: null };
     if (result instanceof Error) throw result;
-    if (result.statut === 'livre') this.alertes.push(alerte);
+    if (result.status === 'delivered') this.alerts.push(alert);
     return result;
   }
 
-  async healthCheck(): Promise<SanteDestination> {
+  async healthCheck(): Promise<DestinationHealth> {
     this.healthCheckTimes.push(performance.now());
-    return this.health.shift() ?? { joignable: true };
+    return this.health.shift() ?? { reachable: true };
   }
 }
 
-/** Raccourci : `fake.scriptSends(echec('transient'))`. */
-export const echec = (classe: ClasseEchec, message = `échec ${classe} simulé`): ResultatEnvoi => ({
-  statut: 'echec',
-  classe,
+/** Shorthand: `fake.scriptSends(failure('transient'))`. */
+export const failure = (
+  failureClass: FailureClass,
+  message = `simulated ${failureClass} failure`,
+): DeliveryResult => ({
+  status: 'failed',
+  failureClass,
   message,
 });

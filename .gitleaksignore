@@ -1,3 +1,4 @@
-# Faux positifs : la clé d'Instance factice des tests (« clef-de-test-de-32-octets-exacts » en base64).
+# False positives in history (`<commit>:<file>:<rule>:<line>`): the tests' former dummy
+# Instance key, in base64. The current tree marks its dummy key inline (`gitleaks:allow`).
 acdea72e7f8bb33f072dc12fb10dcd5578dbee23:apps/api/src/env.test.ts:generic-api-key:7
 acdea72e7f8bb33f072dc12fb10dcd5578dbee23:apps/worker/src/env.test.ts:generic-api-key:7

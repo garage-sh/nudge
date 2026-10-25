@@ -1,95 +1,95 @@
-import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
+import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
-import { adaptateurDiscord } from './discord.js';
+import { discordAdapter } from './discord.js';
 import { resolveDestinationAdapter } from './index.js';
-import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
+import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import {
   DISCORD,
   MESSAGE_ID,
-  SALON_ID,
-  SERVEUR_ID,
+  CHANNEL_ID,
+  GUILD_ID,
   WEBHOOK_ID,
-  WEBHOOK_JETON,
-  type Enregistrement,
-} from './test/discord-enregistrements.js';
+  WEBHOOK_TOKEN,
+  type Recording,
+} from './test/discord-recordings.js';
 
-const URL_WEBHOOK = `https://discord.com/api/webhooks/${WEBHOOK_ID}/${WEBHOOK_JETON}`;
-const POINT_D_APPEL = `https://discord.com/api/v10/webhooks/${WEBHOOK_ID}/${WEBHOOK_JETON}`;
+const WEBHOOK_URL = `https://discord.com/api/webhooks/${WEBHOOK_ID}/${WEBHOOK_TOKEN}`;
+const ENDPOINT = `https://discord.com/api/v10/webhooks/${WEBHOOK_ID}/${WEBHOOK_TOKEN}`;
 
-const DESTINATION: DestinationConfiguree = {
+const DESTINATION: ConfiguredDestination = {
   id: '6f1c2a40-0000-4000-8000-000000000011',
-  projetId: '6f1c2a40-0000-4000-8000-000000000012',
-  nom: 'Salon #bugs',
+  projectId: '6f1c2a40-0000-4000-8000-000000000012',
+  name: 'Channel #bugs',
   type: 'discord',
   config: {},
-  secrets: { url: URL_WEBHOOK },
+  secrets: { url: WEBHOOK_URL },
 };
 
-const ENVOI: EnvoiASortir = {
-  envoiId: '6f1c2a40-0000-4000-8000-000000000013',
-  essai: false,
-  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
-  retour: {
+const DELIVERY: OutgoingDelivery = {
+  deliveryId: '6f1c2a40-0000-4000-8000-000000000013',
+  isTest: false,
+  project: { id: DESTINATION.projectId!, name: 'Shop' },
+  feedback: {
     id: '6f1c2a40-0000-4000-8000-000000000014',
-    texte: 'Le panier se vide quand je change de page.',
+    text: 'The cart empties when I change pages.',
     source: 'widget',
-    typeRetenu: 'bug',
-    gravite: 'majeure',
-    incertain: false,
-    auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'declaree' },
-    contexte: { url: 'https://boutique.test/panier' },
+    resolvedType: 'bug',
+    severity: 'major',
+    uncertain: false,
+    author: { id: 'u-42', email: 'ada@client.test', trust: 'declared' },
+    context: { url: 'https://shop.test/cart' },
     capture: null,
-    recuLe: new Date('2026-10-24T09:29:58.000Z'),
-    lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000014',
+    receivedAt: new Date('2026-10-24T09:29:58.000Z'),
+    dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000014',
   },
 };
 
-interface RequeteRecue {
+interface ReceivedRequest {
   readonly url: string;
   readonly init: RequestInit;
-  readonly entetes: Headers;
-  readonly corps: string | null;
+  readonly headers: Headers;
+  readonly body: string | null;
 }
 
-type Reponse = Enregistrement | Error | 'bloque';
+type Reply = Recording | Error | 'hang';
 
-/** Discord enregistré : rend les réponses données, dans l'ordre, et garde les requêtes. */
-function discord(...reponses: Reponse[]) {
-  const requetes: RequeteRecue[] = [];
-  let suivante = 0;
+/** Recorded Discord: returns the given responses, in order, and keeps the requests. */
+function discord(...replies: Reply[]) {
+  const requests: ReceivedRequest[] = [];
+  let next = 0;
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
-    requetes.push({
+    requests.push({
       url: String(url),
       init,
-      entetes: new Headers(init.headers),
-      corps: init.body === undefined ? null : String(init.body),
+      headers: new Headers(init.headers),
+      body: init.body === undefined ? null : String(init.body),
     });
-    const reponse = reponses[Math.min(suivante++, reponses.length - 1)];
-    if (!reponse) throw new Error('Aucune réponse enregistrée');
-    if (reponse instanceof Error) throw reponse;
-    if (reponse === 'bloque') {
-      // Ne répond jamais : seul le délai de l'adaptateur (signal) l'interrompt.
+    const reply = replies[Math.min(next++, replies.length - 1)];
+    if (!reply) throw new Error('No recorded response');
+    if (reply instanceof Error) throw reply;
+    if (reply === 'hang') {
+      // Never answers: only the adapter's timeout (signal) interrupts it.
       return new Promise<Response>((_, reject) =>
         init.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
       );
     }
-    return new Response(reponse.corps === undefined ? null : JSON.stringify(reponse.corps), {
-      status: reponse.status,
-      headers: { 'content-type': 'application/json', ...reponse.entetes },
+    return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
+      status: reply.status,
+      headers: { 'content-type': 'application/json', ...reply.headers },
     });
   }) as typeof globalThis.fetch;
-  return { fetch, requetes };
+  return { fetch, requests };
 }
 
-/** Un adaptateur neuf, avec son propre cache des serveurs. */
-const adaptateur = (fetch: typeof globalThis.fetch, delaiMs?: number) =>
-  adaptateurDiscord(DESTINATION, { fetch, delaiMs, serveurs: new Map() });
+/** A fresh adapter, with its own guild cache. */
+const adapter = (fetch: typeof globalThis.fetch, timeoutMs?: number) =>
+  discordAdapter(DESTINATION, { fetch, timeoutMs, guilds: new Map() });
 
-/** Ce que l'adaptateur poste à « Execute Webhook ». */
-interface CorpsExecution {
+/** What the adapter posts to "Execute Webhook". */
+interface ExecutionBody {
   readonly content?: string;
   readonly allowed_mentions?: unknown;
-  /** Un seul embed : le premier test le vérifie. */
+  /** A single embed: the first test checks it. */
   readonly embeds: readonly [
     {
       readonly title: string;
@@ -102,287 +102,295 @@ interface CorpsExecution {
   ];
 }
 
-const corpsJson = (requete: RequeteRecue | undefined) =>
-  JSON.parse(requete!.corps!) as CorpsExecution;
+const jsonBody = (request: ReceivedRequest | undefined) =>
+  JSON.parse(request!.body!) as ExecutionBody;
 
-describe('Adaptateur Discord', () => {
-  it('exécute le webhook de salon avec un embed du Retour, et rend le lien du message', async () => {
-    const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook);
+describe('Discord adapter', () => {
+  it('executes the channel webhook with an embed of the Feedback, and returns the message link', async () => {
+    const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
 
-    const resultat = await adaptateur(fetch).send(ENVOI);
+    const result = await adapter(fetch).send(DELIVERY);
 
-    expect(resultat).toEqual({
-      statut: 'livre',
-      lienExterne: `https://discord.com/channels/${SERVEUR_ID}/${SALON_ID}/${MESSAGE_ID}`,
+    expect(result).toEqual({
+      status: 'delivered',
+      externalUrl: `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID}/${MESSAGE_ID}`,
     });
-    const [execution] = requetes;
-    expect(execution?.url).toBe(`${POINT_D_APPEL}?wait=true`);
+    const [execution] = requests;
+    expect(execution?.url).toBe(`${ENDPOINT}?wait=true`);
     expect(execution?.init.method).toBe('POST');
-    expect(execution?.entetes.get('content-type')).toBe('application/json');
-    expect(execution?.entetes.get('user-agent')).toMatch(/^DiscordBot \(https?:\/\/\S+, [\w.]+\)/);
-    const corps = corpsJson(execution);
-    expect(corps.allowed_mentions).toEqual({ parse: [] });
-    expect(corps.content).toBeUndefined();
-    expect(corps.embeds).toHaveLength(1);
-    expect(corps.embeds[0]).toMatchObject({
-      title: 'Bug · Boutique',
-      url: ENVOI.retour.lienDashboard,
+    expect(execution?.headers.get('content-type')).toBe('application/json');
+    expect(execution?.headers.get('user-agent')).toMatch(/^DiscordBot \(https?:\/\/\S+, [\w.]+\)/);
+    const body = jsonBody(execution);
+    expect(body.allowed_mentions).toEqual({ parse: [] });
+    expect(body.content).toBeUndefined();
+    expect(body.embeds).toHaveLength(1);
+    expect(body.embeds[0]).toMatchObject({
+      title: 'Bug · Shop',
+      url: DELIVERY.feedback.dashboardUrl,
       timestamp: '2026-10-24T09:29:58.000Z',
       fields: [
         { name: 'Type', value: 'Bug', inline: true },
-        { name: 'Gravité', value: 'Majeure', inline: true },
-        { name: 'Projet', value: 'Boutique', inline: true },
+        { name: 'Severity', value: 'Major', inline: true },
+        { name: 'Project', value: 'Shop', inline: true },
       ],
     });
-    expect(corps.embeds[0].description).toContain('Le panier se vide quand je change de page.');
+    expect(body.embeds[0].description).toContain('The cart empties when I change pages.');
   });
 
-  it('lit le serveur du salon sur le webhook pour composer le lien ; sans lui, livré sans lien', async () => {
-    const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.passerelleIndisponible);
+  it("reads the channel's guild from the webhook to build the link; without it, delivered without a link", async () => {
+    const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.gatewayUnavailable);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({ statut: 'livre', lienExterne: null });
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({ status: 'delivered', externalUrl: null });
 
-    const lecture = requetes[1];
-    expect(lecture?.url).toBe(POINT_D_APPEL);
-    expect(lecture?.init.method ?? 'GET').toBe('GET');
-    expect(lecture?.corps).toBeNull();
+    const read = requests[1];
+    expect(read?.url).toBe(ENDPOINT);
+    expect(read?.init.method ?? 'GET').toBe('GET');
+    expect(read?.body).toBeNull();
   });
 
   it.each([
-    ['401 jeton invalide', 'auth', DISCORD.jetonInvalide],
-    // « If a webhook returns a 404 status you should not attempt to use it again. »
-    ['404 webhook supprimé', 'auth', DISCORD.webhookInconnu],
-    ['400 corps refusé', 'permanent', DISCORD.corpsInvalide],
-    // Un salon forum refuse tout Envoi : c'est la Destination qui est mal configurée.
-    ['400 salon forum', 'auth', DISCORD.salonForum],
-    ['429 limite de débit', 'transient', DISCORD.limiteDeDebit],
-    ['502 passerelle', 'transient', DISCORD.passerelleIndisponible],
-  ] as const)('classe une réponse %s : %s', async (_, classe, enregistrement) => {
-    const { fetch, requetes } = discord(enregistrement);
+    ['401 invalid token', 'auth', DISCORD.invalidToken],
+    // "If a webhook returns a 404 status you should not attempt to use it again."
+    ['404 deleted webhook', 'auth', DISCORD.unknownWebhook],
+    ['400 rejected body', 'permanent', DISCORD.invalidBody],
+    // A forum channel rejects every Delivery: the Destination is misconfigured.
+    ['400 forum channel', 'auth', DISCORD.forumChannel],
+    ['429 rate limit', 'transient', DISCORD.rateLimited],
+    ['502 gateway', 'transient', DISCORD.gatewayUnavailable],
+  ] as const)('classifies a %s response: %s', async (_, failureClass, recording) => {
+    const { fetch, requests } = discord(recording);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-      statut: 'echec',
-      classe,
-      message: expect.stringContaining(String(enregistrement.status)),
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass,
+      message: expect.stringContaining(String(recording.status)),
     });
-    expect(requetes).toHaveLength(1);
+    expect(requests).toHaveLength(1);
   });
 
-  it('reprend le message d’erreur de Discord, sans jamais le jeton du webhook', async () => {
-    const { fetch } = discord(DISCORD.jetonInvalide);
+  it("carries over Discord's error message, never the webhook token", async () => {
+    const { fetch } = discord(DISCORD.invalidToken);
 
-    const resultat = await adaptateur(fetch).send(ENVOI);
+    const result = await adapter(fetch).send(DELIVERY);
 
-    expect(resultat).toMatchObject({ message: expect.stringContaining('Invalid Webhook Token') });
-    expect(JSON.stringify(resultat)).not.toContain(WEBHOOK_JETON);
+    expect(result).toMatchObject({ message: expect.stringContaining('Invalid Webhook Token') });
+    expect(JSON.stringify(result)).not.toContain(WEBHOOK_TOKEN);
   });
 
-  it('ne suit pas les redirections : un 3xx est un échec permanent', async () => {
-    const { fetch, requetes } = discord({ provenance: 'reconstituee', source: '', status: 301 });
+  it('does not follow redirects: a 3xx is a permanent failure', async () => {
+    const { fetch, requests } = discord({ provenance: 'reconstructed', source: '', status: 301 });
 
-    expect(await adaptateur(fetch).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'permanent',
+    expect(await adapter(fetch).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'permanent',
     });
-    expect(requetes[0]?.init.redirect).toBe('manual');
+    expect(requests[0]?.init.redirect).toBe('manual');
   });
 
-  it('une erreur réseau ou un délai dépassé est transitoire', async () => {
+  it('a network error or a timeout is transient', async () => {
     expect(
-      await adaptateur(discord(new TypeError('fetch failed')).fetch).send(ENVOI),
-    ).toMatchObject({ statut: 'echec', classe: 'transient', message: 'fetch failed' });
-    expect(await adaptateur(discord('bloque').fetch, 50).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'transient',
+      await adapter(discord(new TypeError('fetch failed')).fetch).send(DELIVERY),
+    ).toMatchObject({ status: 'failed', failureClass: 'transient', message: 'fetch failed' });
+    expect(await adapter(discord('hang').fetch, 50).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'transient',
     });
   });
 
-  it('ne relit le serveur d’un webhook qu’une fois : il ne change pas', async () => {
-    const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook, DISCORD.messageCree);
-    const serveurs = new Map<string, string>();
-    const lien = `https://discord.com/channels/${SERVEUR_ID}/${SALON_ID}/${MESSAGE_ID}`;
+  it("reads a webhook's guild only once: it does not change", async () => {
+    const { fetch, requests } = discord(
+      DISCORD.createdMessage,
+      DISCORD.webhook,
+      DISCORD.createdMessage,
+    );
+    const guilds = new Map<string, string>();
+    const link = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID}/${MESSAGE_ID}`;
 
-    expect(await adaptateurDiscord(DESTINATION, { fetch, serveurs }).send(ENVOI)).toEqual({
-      statut: 'livre',
-      lienExterne: lien,
+    expect(await discordAdapter(DESTINATION, { fetch, guilds }).send(DELIVERY)).toEqual({
+      status: 'delivered',
+      externalUrl: link,
     });
-    expect(await adaptateurDiscord(DESTINATION, { fetch, serveurs }).send(ENVOI)).toEqual({
-      statut: 'livre',
-      lienExterne: lien,
+    expect(await discordAdapter(DESTINATION, { fetch, guilds }).send(DELIVERY)).toEqual({
+      status: 'delivered',
+      externalUrl: link,
     });
 
-    expect(requetes.map((r) => r.init.method ?? 'GET')).toEqual(['POST', 'GET', 'POST']);
+    expect(requests.map((r) => r.init.method ?? 'GET')).toEqual(['POST', 'GET', 'POST']);
   });
 
-  it('marque le Retour d’essai et le Verdict incertain ; sans Gravité ni lien du dashboard', async () => {
-    const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook);
-    const retour = { ...ENVOI.retour, gravite: null, incertain: true, lienDashboard: null };
+  it('marks the test Feedback and the uncertain Verdict; without Severity or dashboard link', async () => {
+    const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+    const feedback = { ...DELIVERY.feedback, severity: null, uncertain: true, dashboardUrl: null };
 
-    await adaptateur(fetch).send({ ...ENVOI, essai: true, retour });
+    await adapter(fetch).send({ ...DELIVERY, isTest: true, feedback });
 
-    const [embed] = corpsJson(requetes[0]).embeds;
-    expect(embed.title).toBe('Essai · Bug · Boutique');
+    const [embed] = jsonBody(requests[0]).embeds;
+    expect(embed.title).toBe('Test · Bug · Shop');
     expect(embed.url).toBeUndefined();
-    expect(embed.fields).toContainEqual({ name: 'Gravité', value: 'Non évaluée', inline: true });
-    expect(embed.footer).toEqual({ text: 'nudge · Verdict incertain' });
+    expect(embed.fields).toContainEqual({ name: 'Severity', value: 'Not assessed', inline: true });
+    expect(embed.footer).toEqual({ text: 'nudge · Uncertain verdict' });
   });
 
-  describe('alerte (Destination d’alerte)', () => {
-    it('poste un embed de l’alerte, lien vers le dashboard, sans mention ni lire le serveur', async () => {
-      const { fetch, requetes } = discord(DISCORD.messageCree);
+  describe('alert (Alert destination)', () => {
+    it('posts an embed of the alert, linking to the dashboard, without mentions or reading the guild', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
-        statut: 'livre',
-        lienExterne: null,
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
       });
 
-      expect(requetes).toHaveLength(1);
-      expect(requetes[0]?.url).toBe(`${POINT_D_APPEL}?wait=true`);
-      const corps = corpsJson(requetes[0]);
-      expect(corps.allowed_mentions).toEqual({ parse: [] });
-      expect(corps.embeds[0]).toMatchObject({
-        title: 'Retour en revue · @\u200beveryone \\*Boutique\\*',
-        url: ALERTE_EN_REVUE.lienDashboard,
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(`${ENDPOINT}?wait=true`);
+      const body = jsonBody(requests[0]);
+      expect(body.allowed_mentions).toEqual({ parse: [] });
+      expect(body.embeds[0]).toMatchObject({
+        title: 'Feedback in review · @​everyone \\*Shop\\*',
+        url: IN_REVIEW_ALERT.dashboardUrl,
         timestamp: '2026-10-24T09:30:00.000Z',
         fields: [
-          { name: 'Projet', value: '@\u200beveryone \\*Boutique\\*', inline: true },
-          // Le tiret est échappé comme dans tout texte : Discord l'affiche tel quel.
-          { name: 'Retour', value: ALERTE_EN_REVUE.retour.id.replaceAll('-', '\\-'), inline: true },
+          { name: 'Project', value: '@​everyone \\*Shop\\*', inline: true },
+          // The hyphen is escaped as in any text: Discord shows it as is.
+          {
+            name: 'Feedback',
+            value: IN_REVIEW_ALERT.feedback.id.replaceAll('-', '\\-'),
+            inline: true,
+          },
         ],
       });
-      expect(corps.embeds[0].description).toContain('influencer le Triage');
+      expect(body.embeds[0].description).toContain('influence Triage');
     });
 
-    it('échappe le nom de la Destination et le refus de la cible, sans lien masqué ni mention', async () => {
-      const { fetch, requetes } = discord(DISCORD.messageCree);
+    it("escapes the Destination's name and the target's refusal, with no masked link or mention", async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage);
 
-      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+      await adapter(fetch).alert(SUSPENSION_ALERT);
 
-      const embed = corpsJson(requetes[0]).embeds[0];
+      const embed = jsonBody(requests[0]).embeds[0];
       expect(embed.url).toBeUndefined();
-      expect(embed.title).toBe('Destination suspendue · Linear \\[prod\\]\\(https://piege.test\\)');
+      expect(embed.title).toBe('Destination suspended · Linear \\[prod\\]\\(https://trap.test\\)');
       expect(embed.fields).toEqual([
-        { name: 'Projet', value: 'Boutique', inline: true },
-        { name: 'Destination', value: 'Linear \\[prod\\]\\(https://piege.test\\)', inline: true },
+        { name: 'Project', value: 'Shop', inline: true },
+        { name: 'Destination', value: 'Linear \\[prod\\]\\(https://trap.test\\)', inline: true },
         {
-          name: 'Dernier refus',
-          value: 'HTTP 401 : \\<!channel\\> @\u200bhere \\`jeton\\` refusé',
+          name: 'Last refusal',
+          value: 'HTTP 401: \\<!channel\\> @​here \\`token\\` rejected',
           inline: false,
         },
       ]);
     });
 
-    it('classe un refus comme un Envoi : webhook inconnu = auth', async () => {
-      const { fetch } = discord(DISCORD.webhookInconnu);
+    it('classifies a refusal like a Delivery: unknown webhook = auth', async () => {
+      const { fetch } = discord(DISCORD.unknownWebhook);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
-        statut: 'echec',
-        classe: 'auth',
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
       });
     });
   });
 
   describe('healthCheck', () => {
-    it('lit le webhook avec son jeton, sans rien poster ; une réponse 200 le rend joignable', async () => {
-      const { fetch, requetes } = discord(DISCORD.webhook);
+    it('reads the webhook with its token, posting nothing; a 200 response makes it reachable', async () => {
+      const { fetch, requests } = discord(DISCORD.webhook);
 
-      expect(await adaptateur(fetch).healthCheck()).toEqual({ joignable: true });
+      expect(await adapter(fetch).healthCheck()).toEqual({ reachable: true });
 
-      expect(requetes).toHaveLength(1);
-      expect(requetes[0]?.url).toBe(POINT_D_APPEL);
-      expect(requetes[0]?.init.method ?? 'GET').toBe('GET');
-      expect(requetes[0]?.corps).toBeNull();
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(ENDPOINT);
+      expect(requests[0]?.init.method ?? 'GET').toBe('GET');
+      expect(requests[0]?.body).toBeNull();
     });
 
     it.each([
-      ['401 jeton invalide', 'auth', DISCORD.jetonInvalide],
-      ['404 webhook supprimé', 'auth', DISCORD.webhookInconnu],
-      ['429 limite de débit', 'transient', DISCORD.limiteDeDebit],
-      ['502 passerelle', 'transient', DISCORD.passerelleIndisponible],
-    ] as const)('une réponse %s le rend injoignable (%s)', async (_, classe, enregistrement) => {
-      const { fetch } = discord(enregistrement);
+      ['401 invalid token', 'auth', DISCORD.invalidToken],
+      ['404 deleted webhook', 'auth', DISCORD.unknownWebhook],
+      ['429 rate limit', 'transient', DISCORD.rateLimited],
+      ['502 gateway', 'transient', DISCORD.gatewayUnavailable],
+    ] as const)('a %s response makes it unreachable (%s)', async (_, failureClass, recording) => {
+      const { fetch } = discord(recording);
 
-      expect(await adaptateur(fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe,
-        message: expect.stringContaining(String(enregistrement.status)),
+      expect(await adapter(fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass,
+        message: expect.stringContaining(String(recording.status)),
       });
     });
 
-    it('une erreur réseau le rend injoignable (transient)', async () => {
+    it('a network error makes it unreachable (transient)', async () => {
       const { fetch } = discord(new TypeError('fetch failed'));
 
-      expect(await adaptateur(fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe: 'transient',
+      expect(await adapter(fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass: 'transient',
         message: 'fetch failed',
       });
     });
   });
 
-  describe('encodage du texte de l’Auteur', () => {
-    const MALVEILLANT = [
+  describe("encoding of the Author's text", () => {
+    const MALICIOUS = [
       '@everyone @here URGENT <@80351110224678912> <@&165511591545143296> <#103735883630395392>',
-      '[cliquez ici](https://piege.test/connexion) ou https://piege.test/direct',
-      '**gras** _penché_ </airhorn:816437322781949972> <t:1618953630>',
+      '[click here](https://trap.test/login) or https://trap.test/direct',
+      '**bold** _italic_ </airhorn:816437322781949972> <t:1618953630>',
       '```',
-      'fin du bloc ? @everyone',
+      'end of the block? @everyone',
       '````js',
     ].join('\n');
 
-    async function description(texte: string) {
-      const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook);
-      await adaptateur(fetch).send({ ...ENVOI, retour: { ...ENVOI.retour, texte } });
-      const corps = corpsJson(requetes[0]);
-      return { corps, description: corps.embeds[0].description };
+    async function description(text: string) {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+      await adapter(fetch).send({ ...DELIVERY, feedback: { ...DELIVERY.feedback, text } });
+      const body = jsonBody(requests[0]);
+      return { body, description: body.embeds[0].description };
     }
 
-    it('ne laisse aucune mention se déclencher', async () => {
-      const { corps, description: texte } = await description(MALVEILLANT);
+    it('lets no mention fire', async () => {
+      const { body, description: text } = await description(MALICIOUS);
 
-      // « parse: [] » : aucune mention n'est interprétée (docs.discord.com, Allowed Mentions).
-      expect(corps.allowed_mentions).toEqual({ parse: [] });
-      expect(corps.content).toBeUndefined();
-      expect(texte).not.toMatch(/@(everyone|here)/);
+      // "parse: []": no mention is interpreted (docs.discord.com, Allowed Mentions).
+      expect(body.allowed_mentions).toEqual({ parse: [] });
+      expect(body.content).toBeUndefined();
+      expect(text).not.toMatch(/@(everyone|here)/);
     });
 
-    it('enferme le texte dans un bloc de code qu’il ne peut pas refermer : ni markdown, ni lien cliquable', async () => {
-      const { description: texte } = await description(MALVEILLANT);
+    it('wraps the text in a code block it cannot close: no markdown, no clickable link', async () => {
+      const { description: text } = await description(MALICIOUS);
 
-      expect(texte.startsWith('```\n')).toBe(true);
-      expect(texte.endsWith('\n```')).toBe(true);
-      const interieur = texte.slice(4, -4);
-      // Aucune suite de deux accents graves : le bloc ne se referme qu'à la fin.
-      expect(interieur).not.toContain('``');
-      // À l'œil, c'est le texte de l'Auteur, à des espaces sans chasse près.
-      expect(interieur.replaceAll('\u200b', '')).toBe(MALVEILLANT);
+      expect(text.startsWith('```\n')).toBe(true);
+      expect(text.endsWith('\n```')).toBe(true);
+      const inside = text.slice(4, -4);
+      // No run of two backticks: the block only closes at the end.
+      expect(inside).not.toContain('``');
+      // To the eye, it is the Author's text, up to zero-width spaces.
+      expect(inside.replaceAll('​', '')).toBe(MALICIOUS);
     });
 
-    it('tronque un texte trop long pour un embed', async () => {
-      const { description: texte } = await description('a'.repeat(5000));
+    it('truncates a text too long for an embed', async () => {
+      const { description: text } = await description('a'.repeat(5000));
 
-      expect(texte.length).toBeLessThanOrEqual(4096);
-      expect(texte.endsWith('…\n```')).toBe(true);
+      expect(text.length).toBeLessThanOrEqual(4096);
+      expect(text.endsWith('…\n```')).toBe(true);
     });
 
-    it('échappe le nom du Projet, qui s’affiche en markdown', async () => {
-      const { fetch, requetes } = discord(DISCORD.messageCree, DISCORD.webhook);
-      const projet = { ...ENVOI.projet, nom: '[Boutique](https://piege.test) @everyone' };
+    it('escapes the Project name, which is shown as markdown', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+      const project = { ...DELIVERY.project, name: '[Shop](https://trap.test) @everyone' };
 
-      await adaptateur(fetch).send({ ...ENVOI, projet });
+      await adapter(fetch).send({ ...DELIVERY, project });
 
-      const [embed] = corpsJson(requetes[0]).embeds;
-      const champProjet = embed.fields.find((f) => f.name === 'Projet');
-      expect(champProjet?.value).not.toContain('](');
-      expect(champProjet?.value).not.toMatch(/@(everyone|here)/);
+      const [embed] = jsonBody(requests[0]).embeds;
+      const projectField = embed.fields.find((f) => f.name === 'Project');
+      expect(projectField?.value).not.toContain('](');
+      expect(projectField?.value).not.toMatch(/@(everyone|here)/);
       expect(embed.title).not.toContain('](');
     });
   });
 
-  it('est enregistré pour le type « discord » dans le registre des adaptateurs', async () => {
-    const adaptateur = resolveDestinationAdapter(DESTINATION);
+  it('is registered for the "discord" type in the adapter registry', async () => {
+    const adapter = resolveDestinationAdapter(DESTINATION);
 
-    expect(typeof adaptateur.send).toBe('function');
-    expect(typeof adaptateur.healthCheck).toBe('function');
+    expect(typeof adapter.send).toBe('function');
+    expect(typeof adapter.healthCheck).toBe('function');
   });
 });

@@ -1,45 +1,46 @@
 import { z } from 'zod';
-import type { DefinitionDestination } from './definition.js';
+import type { DestinationDefinition } from './definition.js';
 
 /**
- * `propriétaire/dépôt` : un compte GitHub (lettres, chiffres, tirets, 39 caractères au
- * plus, sans tiret en tête) et un nom de dépôt (lettres, chiffres, `.`, `-`, `_`).
+ * `owner/repository`: a GitHub account (letters, digits, hyphens, at most 39
+ * characters, no leading hyphen) and a repository name (letters, digits, `.`, `-`, `_`).
  */
-const DEPOT = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
+const REPOSITORY = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
 
-export interface DepotGitHub {
-  readonly proprietaire: string;
-  readonly nom: string;
+export interface GitHubRepository {
+  readonly owner: string;
+  readonly name: string;
 }
 
-/** Le propriétaire et le nom d'un dépôt `propriétaire/dépôt`, ou `null`. */
-export function lireDepotGitHub(valeur: string): DepotGitHub | null {
-  const morceaux = DEPOT.exec(valeur.trim());
-  if (!morceaux) return null;
-  const nom = morceaux[2]!;
-  if (nom === '.' || nom === '..' || nom.endsWith('.git')) return null;
-  return { proprietaire: morceaux[1]!, nom };
+/** The owner and name of an `owner/repository` repository, or `null`. */
+export function parseGitHubRepository(value: string): GitHubRepository | null {
+  const parts = REPOSITORY.exec(value.trim());
+  if (!parts) return null;
+  const name = parts[2]!;
+  if (name === '.' || name === '..' || name.endsWith('.git')) return null;
+  return { owner: parts[1]!, name };
 }
 
 /**
- * GitHub Issues : une issue créée dans le dépôt configuré, par l'API REST avec un jeton
- * d'accès personnel (secret, chiffré en base, jamais rendu). Un jeton « fine-grained »
- * limité au dépôt suffit, avec la permission « Issues : lecture et écriture ».
+ * GitHub Issues: an issue created in the configured repository, through the REST API
+ * with a personal access token (secret, encrypted in the database, never returned). A
+ * "fine-grained" token limited to the repository is enough, with the "Issues: read and
+ * write" permission.
  */
-export const definitionGitHub = {
+export const gitHubDefinition = {
   config: z.strictObject({
-    depot: z
+    repository: z
       .string()
       .trim()
-      .refine((valeur) => lireDepotGitHub(valeur) !== null, {
-        message: 'Dépôt GitHub attendu sous la forme propriétaire/dépôt',
+      .refine((value) => parseGitHubRepository(value) !== null, {
+        message: 'Expected a GitHub repository in the form owner/repository',
       }),
   }),
   secrets: z.strictObject({
-    jeton: z.string().trim().min(1, { message: 'Jeton d’accès GitHub attendu' }),
+    token: z.string().trim().min(1, { message: 'Expected a GitHub access token' }),
   }),
-  secretsGeneres: [],
-} as const satisfies DefinitionDestination;
+  generatedSecrets: [],
+} as const satisfies DestinationDefinition;
 
-export type ConfigGitHub = z.output<typeof definitionGitHub.config>;
-export type SecretsGitHub = z.output<typeof definitionGitHub.secrets>;
+export type GitHubConfig = z.output<typeof gitHubDefinition.config>;
+export type GitHubSecrets = z.output<typeof gitHubDefinition.secrets>;

@@ -1,137 +1,137 @@
 # nudge
 
-Outil open-source et auto-hébergé qui collecte les retours des utilisateurs de plusieurs applications, les trie, puis les dispatche vers les outils de l'équipe.
+Open-source, self-hosted tool that collects feedback from the users of several applications, triages it, then dispatches it to the team's tools.
 
 ## Language
 
-### Collecte
+### Collection
 
-**Projet**:
-Une application dont nudge collecte les retours. Unité de configuration : chaque Projet a ses propres règles de triage et de dispatch.
+**Project**:
+An application whose feedback nudge collects. The unit of configuration: each Project has its own triage and dispatch rules.
 _Avoid_: App, client, tenant
 
-**Description du Projet**:
-Un court texte facultatif qui dit au Juge ce qu'est le Projet et ce qui y est critique, pour qu'il évalue mieux la Gravité.
-_Avoid_: Prompt, contexte
+**Project description**:
+A short, optional text that tells the Judge what the Project is and what is critical in it, so it can assess Severity better.
+_Avoid_: Prompt, context
 
-**Retour**:
-Un message laissé par un utilisateur d'un Projet (bug, suggestion, avis, question). C'est l'objet central de nudge, conservé tant qu'aucune Suppression ni la Rétention ne l'efface.
-_Avoid_: Feedback, ticket, message, report
+**Feedback**:
+A message left by a user of a Project (bug, suggestion, opinion, question). The central object of nudge, kept until a Deletion or the Retention removes it. In code, one item is a `feedback` and the collection is `feedbacks`.
+_Avoid_: Ticket, message, report, submission
 
 **Source**:
-Le point d'entrée par lequel un Retour est arrivé : Widget ou API (plus tard, l'extension de QA).
-_Avoid_: Canal, origine, provenance
+The entry point through which a Feedback arrived: Widget or API (later, the QA extension).
+_Avoid_: Channel, origin, provenance
 
-**Type de retour**:
-La nature d'un Retour : Bug, Suggestion, Avis ou Question. L'utilisateur peut la déclarer (facultatif), mais c'est le Triage qui fixe le type retenu.
-_Avoid_: Catégorie, kind
+**Feedback type**:
+The nature of a Feedback: Bug, Suggestion, Opinion or Question. The user may declare it (optional), but Triage sets the resolved type.
+_Avoid_: Category, kind
 
-**Avis**:
-Un Type de retour : une opinion de l'utilisateur sur le Projet (compliment, critique), sans demande d'action précise.
-_Avoid_: Feedback, commentaire
+**Opinion**:
+A Feedback type: the user's opinion of the Project (praise, criticism), with no precise request for action.
+_Avoid_: Review, comment
 
 **Question**:
-Un Type de retour : l'utilisateur demande de l'aide ou une explication.
-_Avoid_: Support, demande
+A Feedback type: the user asks for help or an explanation.
+_Avoid_: Support, request
 
-**Auteur**:
-La personne qui a laissé un Retour. Anonyme par défaut ; identifiée seulement si l'application hôte ou l'utilisateur le fournit.
+**Author**:
+The person who left a Feedback. Anonymous by default; identified only if the host application or the user provides it.
 _Avoid_: User, reporter, client
 
-**Origine autorisée**:
-Une origine web (`https://app.exemple.com`) depuis laquelle la clé publique d'un Projet est acceptée. Une propriété du Projet, pas la Source d'un Retour.
-_Avoid_: Domaine autorisé, whitelist
+**Allowed origin**:
+A web origin (`https://app.example.com`) from which a Project's public key is accepted. A property of the Project, not the Source of a Feedback.
+_Avoid_: Allowed domain, whitelist
 
 **Widget**:
-Le formulaire embarquable que nudge fournit aux Projets web pour recueillir des Retours.
+The embeddable form nudge provides to web Projects to collect Feedback.
 _Avoid_: SDK, snippet, plugin
 
-### Traitement
+### Processing
 
 **Triage**:
-L'étape qui évalue un Retour reçu et rend un verdict sur la manière de le traiter.
-_Avoid_: Classification, analyse
+The step that assesses a received Feedback and returns a Verdict on how to handle it.
+_Avoid_: Classification, analysis
 
 **Verdict**:
-Le résultat du Triage pour un Retour : son Type retenu, s'il est indésirable, et sa Gravité.
-_Avoid_: Résultat, label, tag
+The result of Triage for a Feedback: its resolved type, whether it is Junk, and its Severity.
+_Avoid_: Result, label, tag
 
-**Gravité**:
-Le degré d'urgence d'un Retour, du cosmétique au bloquant.
-_Avoid_: Priorité, sévérité, criticité
+**Severity**:
+How urgent a Feedback is, from cosmetic to blocking.
+_Avoid_: Priority, criticality
 
-**Juge**:
-Le modèle de décision System One qui répond aux questions du Triage (Jev, pplx-decider…), choisi par l'instance.
-_Avoid_: IA, LLM, modèle, provider
+**Judge**:
+The System One decision model that answers Triage's questions (Jev, pplx-decider…), chosen by the Instance.
+_Avoid_: AI, LLM, model, provider
 
-**Indésirable**:
-Un Verdict : le Retour est du spam, vide ou abusif. Il est conservé mais jamais dispatché, sauf réhabilitation par un Membre.
-_Avoid_: Spam, rejeté, poubelle
+**Junk**:
+A Verdict: the Feedback is spam, empty or abusive. It is kept but never dispatched, unless a Member reinstates it.
+_Avoid_: Spam, rejected, trash
 
 **Manipulation**:
-Un Verdict : le Retour tente d'influencer le Triage. Il est mis En revue au lieu d'être dispatché.
-_Avoid_: Injection, attaque
+A Verdict: the Feedback tries to influence Triage. It is put In review instead of being dispatched.
+_Avoid_: Injection, attack
 
-**Incertain**:
-Marqueur d'un Verdict sur lequel le Juge a hésité. Il ne bloque rien ; il signale qu'un Membre devrait vérifier.
-_Avoid_: À revoir, douteux
+**Uncertain**:
+A flag on a Verdict the Judge hesitated on. It blocks nothing; it signals that a Member should check.
+_Avoid_: To review, dubious
 
-**En revue**:
-État d'un Retour suspect de Manipulation, retenu jusqu'à ce qu'un Membre le valide (il est alors dispatché) ou le rejette (il devient Écarté).
-_Avoid_: Quarantaine, en attente
+**In review**:
+State of a Feedback suspected of Manipulation, held until a Member approves it (it is then dispatched) or rejects it (it becomes Discarded).
+_Avoid_: Quarantine, pending
 
-**Écarté**:
-État d'un Retour qui ne sera pas dispatché (Indésirable, ou rejeté après revue).
-_Avoid_: Supprimé, archivé
+**Discarded**:
+State of a Feedback that will not be dispatched (Junk, or rejected after review).
+_Avoid_: Deleted, archived
 
 ### Dispatch
 
 **Dispatch**:
-L'envoi d'un Retour trié vers les Destinations de son Projet dont le Filtre le retient.
+Sending a triaged Feedback to the Destinations of its Project whose Filter accepts it.
 _Avoid_: Notification, forward, export
 
 **Destination**:
-Un endroit externe configuré sur un Projet, vers lequel des Retours sont envoyés (un salon Discord, une équipe Linear, un webhook…).
-_Avoid_: Canal, intégration, connecteur, sink
+An external place configured on a Project, to which Feedback is sent (a Discord channel, a Linear team, a webhook…).
+_Avoid_: Channel, integration, connector, sink
 
-**Filtre**:
-La condition portée par une Destination (Types retenus, Gravité minimale) qui décide si un Retour lui est envoyé.
-_Avoid_: Règle, route, abonnement
+**Filter**:
+The condition carried by a Destination (accepted types, minimum Severity) that decides whether a Feedback is sent to it.
+_Avoid_: Rule, route, subscription
 
-**Envoi**:
-Une tentative de livraison d'un Retour à une Destination, avec son statut et le lien vers l'objet créé chez elle. Un Retour a un Envoi par Destination retenue.
-_Avoid_: Delivery, job, dispatch
+**Delivery**:
+One attempt to deliver a Feedback to a Destination, with its status and the link to the object created there. A Feedback has one Delivery per accepting Destination. Replaying a Delivery sends it again.
+_Avoid_: Job, send, dispatch
 
 **Redispatch**:
-L'action manuelle d'un Membre qui reprend le Dispatch d'un Retour Trié ou Dispatché selon son Verdict courant : elle crée les Envois manquants vers les Destinations dont le Filtre le retient désormais, sans toucher aux Envois existants. À distinguer du rejeu, qui renvoie un Envoi existant.
-_Avoid_: Re-triage, propagation automatique
+A Member's manual action that resumes the Dispatch of a Triaged or Dispatched Feedback according to its current Verdict: it creates the missing Deliveries to the Destinations whose Filter now accepts it, without touching existing Deliveries. Not to be confused with a replay, which resends an existing Delivery.
+_Avoid_: Re-triage, automatic propagation
 
-**Suspendue**:
-État d'une Destination dont les Envois échouent de façon répétée ; ses Envois sont retenus jusqu'à ce qu'elle redevienne joignable.
-_Avoid_: Désactivée, en panne, circuit ouvert
+**Suspended**:
+State of a Destination whose Deliveries fail repeatedly; its Deliveries are held until it is reachable again.
+_Avoid_: Disabled, down, open circuit
 
 ### Instance
 
 **Instance**:
-Un déploiement auto-hébergé de nudge, avec ses Projets, ses Membres et son Juge.
-_Avoid_: Workspace, organisation, tenant
+A self-hosted deployment of nudge, with its Projects, its Members and its Judge.
+_Avoid_: Workspace, organization, tenant
 
-**Destination d'alerte**:
-Une Destination désignée au niveau de l'Instance qui reçoit les alertes destinées aux Membres (Retour En revue, Destination Suspendue), et non des Retours.
-_Avoid_: Canal ops, notifications
+**Alert destination**:
+A Destination set at the Instance level that receives the alerts meant for Members (a Feedback In review, a Suspended Destination), not Feedback.
+_Avoid_: Ops channel, notifications
 
-**Membre**:
-Une personne qui se connecte au dashboard d'une Instance. Tous les Membres voient tous les Projets.
-_Avoid_: Admin, user, utilisateur
+**Member**:
+A person who signs in to the dashboard of an Instance. Every Member sees every Project.
+_Avoid_: Admin, user
 
 **Capture**:
-Une capture d'écran jointe à un Retour à l'initiative de l'Auteur, après masquage éventuel. Elle n'est jamais transmise au Juge.
-_Avoid_: Screenshot, pièce jointe
+A screenshot attached to a Feedback at the Author's initiative, after optional masking. It is never sent to the Judge.
+_Avoid_: Screenshot, attachment
 
-**Suppression**:
-L'effacement définitif d'un Retour et de sa Capture par un Membre, par exemple pour une demande d'effacement de l'Auteur. Les objets déjà créés chez les Destinations restent. À distinguer d'Écarté, où le Retour est conservé.
-_Avoid_: Archivage, rejet
+**Deletion**:
+The permanent removal of a Feedback and its Capture by a Member, for example on an erasure request from the Author. Objects already created in the Destinations remain. Not to be confused with Discarded, where the Feedback is kept.
+_Avoid_: Archiving, rejection
 
-**Rétention**:
-La durée facultative, au niveau de l'Instance, au-delà de laquelle les Retours et leurs Captures sont purgés automatiquement. Illimitée par défaut.
-_Avoid_: Expiration, TTL, archivage
+**Retention**:
+The optional duration, at the Instance level, after which Feedback and its Captures are purged automatically. Unlimited by default.
+_Avoid_: Expiration, TTL, archiving

@@ -1,21 +1,23 @@
 /**
- * Build pour la balise script, exposé en `window.Nudge` :
+ * Build for the script tag, exposed as `window.Nudge`:
  *
- *   <script src="…/nudge-widget.js" data-cle="nk_pub_…" data-api="https://nudge.exemple"></script>
+ *   <script src="…/nudge-widget.js" data-public-key="nk_pub_…" data-api="https://nudge.example"></script>
  *
- * Avec `data-cle` et `data-api`, le Widget se monte seul ; sans eux, l'hôte appelle
- * `Nudge.monterWidget({ cle, api, auteur, metadonnees })`.
+ * With `data-public-key` and `data-api` (and optionally `data-locale`), the Widget mounts
+ * itself; without them, the host calls
+ * `Nudge.mountWidget({ publicKey, api, author, metadata, locale })`.
  */
-import { definirWidget, monterWidget } from './index.js';
+import type { Locale } from './locales/index.js';
+import { defineWidget, mountWidget } from './index.js';
 
-export { definirWidget, monterWidget, NudgeWidget } from './index.js';
+export { defineWidget, mountWidget, NudgeWidget } from './index.js';
 
-definirWidget();
+defineWidget();
 
 const script = document.currentScript as HTMLScriptElement | null;
-const { cle, api } = script?.dataset ?? {};
-if (cle && api) {
-  const monter = () => monterWidget({ cle, api });
-  if (document.body) monter();
-  else document.addEventListener('DOMContentLoaded', monter, { once: true });
+const { publicKey, api, locale } = script?.dataset ?? {};
+if (publicKey && api) {
+  const mount = () => mountWidget({ publicKey, api, locale: locale as Locale | undefined });
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount, { once: true });
 }

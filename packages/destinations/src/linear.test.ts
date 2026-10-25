@@ -1,626 +1,640 @@
-import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
+import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
-import { adaptateurLinear } from './linear.js';
-import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
+import { linearAdapter } from './linear.js';
+import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import {
+  API_KEY,
   ASSET_URL,
-  CLE_API,
-  EQUIPE_ID,
   ISSUE_URL,
   LABEL_BUG_ID,
   LABEL_URGENT_ID,
   LINEAR,
-  URL_TELEVERSEMENT,
-  type Enregistrement,
-} from './test/linear-enregistrements.js';
+  TEAM_ID,
+  UPLOAD_URL,
+  type Recording,
+} from './test/linear-recordings.js';
 
-const POINT_D_APPEL = 'https://api.linear.app/graphql';
+const ENDPOINT = 'https://api.linear.app/graphql';
 
-const DESTINATION: DestinationConfiguree = {
+const DESTINATION: ConfiguredDestination = {
   id: '6f1c2a40-0000-4000-8000-000000000021',
-  projetId: '6f1c2a40-0000-4000-8000-000000000022',
-  nom: 'Linear ENG',
+  projectId: '6f1c2a40-0000-4000-8000-000000000022',
+  name: 'Linear ENG',
   type: 'linear',
   config: {
-    equipe: 'ENG',
-    labels: { types: { bug: 'bug', suggestion: 'Idée' }, gravites: { bloquante: 'Urgent' } },
+    team: 'ENG',
+    labels: { types: { bug: 'bug', suggestion: 'Idea' }, severities: { blocking: 'Urgent' } },
   },
-  secrets: { cleApi: CLE_API },
+  secrets: { apiKey: API_KEY },
 };
 
-const ENVOI: EnvoiASortir = {
-  envoiId: '6f1c2a40-0000-4000-8000-000000000023',
-  essai: false,
-  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
-  retour: {
+const DELIVERY: OutgoingDelivery = {
+  deliveryId: '6f1c2a40-0000-4000-8000-000000000023',
+  isTest: false,
+  project: { id: DESTINATION.projectId!, name: 'Shop' },
+  feedback: {
     id: '6f1c2a40-0000-4000-8000-000000000024',
-    texte: 'Le panier se vide quand je change de page.\nDepuis ce matin.',
+    text: 'The cart empties when I change pages.\nSince this morning.',
     source: 'widget',
-    typeRetenu: 'bug',
-    gravite: 'bloquante',
-    incertain: false,
-    auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'declaree' },
-    contexte: { url: 'https://boutique.test/panier' },
+    resolvedType: 'bug',
+    severity: 'blocking',
+    uncertain: false,
+    author: { id: 'u-42', email: 'ada@client.test', trust: 'declared' },
+    context: { url: 'https://shop.test/cart' },
     capture: null,
-    recuLe: new Date('2026-10-24T09:29:58.000Z'),
-    lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000024',
+    receivedAt: new Date('2026-10-24T09:29:58.000Z'),
+    dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000024',
   },
 };
 
-interface RequeteGraphQL {
+interface GraphQLRequest {
   readonly url: string;
   readonly init: RequestInit;
-  readonly entetes: Headers;
+  readonly headers: Headers;
   readonly query: string;
   readonly variables: Record<string, unknown>;
 }
 
-type Reponse = Enregistrement | Error | 'bloque';
+type Reply = Recording | Error | 'hang';
 
-/** Linear enregistré : rend les réponses données, dans l'ordre, et garde les requêtes. */
-function linear(...reponses: Reponse[]) {
-  const requetes: RequeteGraphQL[] = [];
-  let suivante = 0;
+/** Recorded Linear: returns the given responses, in order, and keeps the requests. */
+function linear(...replies: Reply[]) {
+  const requests: GraphQLRequest[] = [];
+  let next = 0;
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
-    // Hors du point d'appel GraphQL : le téléversement d'une Capture, corps binaire.
+    // Outside the GraphQL endpoint: a Capture upload, binary body.
     const { query, variables } = (
-      String(url) === POINT_D_APPEL ? JSON.parse(String(init.body)) : { query: '' }
+      String(url) === ENDPOINT ? JSON.parse(String(init.body)) : { query: '' }
     ) as {
       query: string;
       variables?: Record<string, unknown>;
     };
-    requetes.push({
+    requests.push({
       url: String(url),
       init,
-      entetes: new Headers(init.headers),
+      headers: new Headers(init.headers),
       query,
       variables: variables ?? {},
     });
-    const reponse = reponses[Math.min(suivante++, reponses.length - 1)];
-    if (!reponse) throw new Error('Aucune réponse enregistrée');
-    if (reponse instanceof Error) throw reponse;
-    if (reponse === 'bloque') {
-      // Ne répond jamais : seul le délai de l'adaptateur (signal) l'interrompt.
+    const reply = replies[Math.min(next++, replies.length - 1)];
+    if (!reply) throw new Error('No recorded response');
+    if (reply instanceof Error) throw reply;
+    if (reply === 'hang') {
+      // Never answers: only the adapter's timeout (signal) interrupts it.
       return new Promise<Response>((_, reject) =>
         init.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
       );
     }
-    const texte = typeof reponse.corps === 'string';
-    return new Response(texte ? (reponse.corps as string) : JSON.stringify(reponse.corps), {
-      status: reponse.status,
+    const isText = typeof reply.body === 'string';
+    return new Response(isText ? (reply.body as string) : JSON.stringify(reply.body), {
+      status: reply.status,
       headers: {
-        'content-type': texte ? 'text/html' : 'application/json; charset=utf-8',
-        ...reponse.entetes,
+        'content-type': isText ? 'text/html' : 'application/json; charset=utf-8',
+        ...reply.headers,
       },
     });
   }) as typeof globalThis.fetch;
-  return { fetch, requetes };
+  return { fetch, requests };
 }
 
-/** Un adaptateur neuf, avec son propre cache des équipes. */
-const adaptateur = (
+/** A fresh adapter, with its own team cache. */
+const adapter = (
   fetch: typeof globalThis.fetch,
   {
     destination = DESTINATION,
-    delaiMs,
-  }: { destination?: DestinationConfiguree; delaiMs?: number } = {},
-) => adaptateurLinear(destination, { fetch, delaiMs, equipes: new Map() });
+    timeoutMs,
+  }: { destination?: ConfiguredDestination; timeoutMs?: number } = {},
+) => linearAdapter(destination, { fetch, timeoutMs, teams: new Map() });
 
-/** L'entrée `issueCreate` d'une requête de création. */
-const entreeCreation = (requete: RequeteGraphQL | undefined) =>
-  requete!.variables.entree as {
+/** The `issueCreate` input of a creation request. */
+const creationInput = (request: GraphQLRequest | undefined) =>
+  request!.variables.input as {
     teamId: string;
     title: string;
     description: string;
     labelIds: string[];
   };
 
-describe('Adaptateur Linear, Capture', () => {
+describe('Linear adapter, Capture', () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff]);
-  const avecCapture = (lire: () => Promise<Uint8Array | null>): EnvoiASortir => ({
-    ...ENVOI,
-    retour: { ...ENVOI.retour, capture: { contentType: 'image/png', octets: 9, lire } },
+  const withCapture = (read: () => Promise<Uint8Array | null>): OutgoingDelivery => ({
+    ...DELIVERY,
+    feedback: { ...DELIVERY.feedback, capture: { contentType: 'image/png', bytes: 9, read } },
   });
 
-  it('téléverse la Capture chez Linear, puis l’affiche dans la description de l’issue', async () => {
-    const { fetch, requetes } = linear(
-      LINEAR.equipe,
-      LINEAR.fichierPrepare,
-      LINEAR.televersement,
-      LINEAR.issueCreee,
+  it("uploads the Capture to Linear, then shows it in the issue's description", async () => {
+    const { fetch, requests } = linear(
+      LINEAR.team,
+      LINEAR.filePrepared,
+      LINEAR.upload,
+      LINEAR.issueCreated,
     );
 
-    const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+    const result = await adapter(fetch).send(withCapture(async () => PNG));
 
-    expect(resultat).toEqual({ statut: 'livre', lienExterne: ISSUE_URL });
-    expect(requetes.map((requete) => requete.url)).toEqual([
-      POINT_D_APPEL,
-      POINT_D_APPEL,
-      URL_TELEVERSEMENT,
-      POINT_D_APPEL,
+    expect(result).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
+    expect(requests.map((request) => request.url)).toEqual([
+      ENDPOINT,
+      ENDPOINT,
+      UPLOAD_URL,
+      ENDPOINT,
     ]);
-    expect(requetes[1]?.query).toMatch(/mutation[\s\S]*fileUpload\(/);
-    expect(requetes[1]?.variables).toEqual({
+    expect(requests[1]?.query).toMatch(/mutation[\s\S]*fileUpload\(/);
+    expect(requests[1]?.variables).toEqual({
       contentType: 'image/png',
-      filename: `capture-${ENVOI.retour.id}.png`,
+      filename: `capture-${DELIVERY.feedback.id}.png`,
       size: 9,
     });
-    const put = requetes[2]!;
+    const put = requests[2]!;
     expect(put.init.method).toBe('PUT');
     expect(new Uint8Array(put.init.body as Uint8Array)).toEqual(PNG);
-    expect(put.entetes.get('content-type')).toBe('image/png');
-    expect(put.entetes.get('cache-control')).toBe('public, max-age=31536000');
-    expect(put.entetes.get('x-goog-content-length-range')).toBe('9,9');
-    // La clé d'API ne part que vers Linear, jamais vers le stockage de l'URL signée.
-    expect(put.entetes.get('authorization')).toBeNull();
-    const html = new MarkdownIt().render(entreeCreation(requetes[3]).description);
-    expect(html).toContain(`<img src="${ASSET_URL}" alt="Capture de la page">`);
+    expect(put.headers.get('content-type')).toBe('image/png');
+    expect(put.headers.get('cache-control')).toBe('public, max-age=31536000');
+    expect(put.headers.get('x-goog-content-length-range')).toBe('9,9');
+    // The API key only goes to Linear, never to the signed URL's storage.
+    expect(put.headers.get('authorization')).toBeNull();
+    const html = new MarkdownIt().render(creationInput(requests[3]).description);
+    expect(html).toContain(`<img src="${ASSET_URL}" alt="Page capture">`);
   });
 
-  it('crée l’issue sans image si le stockage n’a plus la Capture', async () => {
-    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+  it('creates the issue without an image if storage no longer has the Capture', async () => {
+    const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
 
-    const resultat = await adaptateur(fetch).send(avecCapture(async () => null));
+    const result = await adapter(fetch).send(withCapture(async () => null));
 
-    expect(resultat).toEqual({ statut: 'livre', lienExterne: ISSUE_URL });
-    expect(requetes).toHaveLength(2);
-    expect(entreeCreation(requetes[1]).description).not.toContain('Capture');
+    expect(result).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
+    expect(requests).toHaveLength(2);
+    expect(creationInput(requests[1]).description).not.toContain('Capture');
   });
 
-  it('stockage injoignable : échec transitoire, aucune issue créée', async () => {
-    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+  it('unreachable storage: transient failure, no issue created', async () => {
+    const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
 
-    const resultat = await adaptateur(fetch).send(
-      avecCapture(() => Promise.reject(new Error('disque illisible'))),
+    const result = await adapter(fetch).send(
+      withCapture(() => Promise.reject(new Error('unreadable disk'))),
     );
 
-    expect(resultat).toEqual({
-      statut: 'echec',
-      classe: 'transient',
-      message: 'Capture illisible : disque illisible',
+    expect(result).toEqual({
+      status: 'failed',
+      failureClass: 'transient',
+      message: 'Unreadable Capture: unreadable disk',
     });
-    expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+    expect(requests.some((request) => /issueCreate/.test(request.query))).toBe(false);
   });
 
   it.each([
-    ['le téléversement refusé (403)', [LINEAR.fichierPrepare, LINEAR.televersementRefuse]],
-    ['le téléversement injoignable', [LINEAR.fichierPrepare, new TypeError('fetch failed')]],
-    ['la préparation limitée en débit', [LINEAR.limiteDeDebit]],
+    ['the upload refused (403)', [LINEAR.filePrepared, LINEAR.uploadRefused]],
+    ['the upload unreachable', [LINEAR.filePrepared, new TypeError('fetch failed')]],
+    ['the preparation rate-limited', [LINEAR.rateLimited]],
   ] as const)(
-    '%s : échec transitoire, aucune issue créée',
-    async (_cas, reponses: readonly Reponse[]) => {
-      const { fetch, requetes } = linear(LINEAR.equipe, ...reponses, LINEAR.issueCreee);
+    '%s: transient failure, no issue created',
+    async (_case, replies: readonly Reply[]) => {
+      const { fetch, requests } = linear(LINEAR.team, ...replies, LINEAR.issueCreated);
 
-      const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+      const result = await adapter(fetch).send(withCapture(async () => PNG));
 
-      expect(resultat).toMatchObject({ statut: 'echec', classe: 'transient' });
-      expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+      expect(result).toMatchObject({ status: 'failed', failureClass: 'transient' });
+      expect(requests.some((request) => /issueCreate/.test(request.query))).toBe(false);
     },
   );
 
-  it('Linear ne prépare pas le téléversement : échec permanent, aucune issue créée', async () => {
-    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.fichierNonPrepare, LINEAR.issueCreee);
+  it('Linear does not prepare the upload: permanent failure, no issue created', async () => {
+    const { fetch, requests } = linear(LINEAR.team, LINEAR.fileNotPrepared, LINEAR.issueCreated);
 
-    const resultat = await adaptateur(fetch).send(avecCapture(async () => PNG));
+    const result = await adapter(fetch).send(withCapture(async () => PNG));
 
-    expect(resultat).toMatchObject({ statut: 'echec', classe: 'permanent' });
-    expect(requetes.some((requete) => /issueCreate/.test(requete.query))).toBe(false);
+    expect(result).toMatchObject({ status: 'failed', failureClass: 'permanent' });
+    expect(requests.some((request) => /issueCreate/.test(request.query))).toBe(false);
   });
 });
 
-describe('Adaptateur Linear', () => {
-  it('crée une issue dans l’équipe configurée, avec les labels du Type et de la Gravité, et rend son lien', async () => {
-    const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+describe('Linear adapter', () => {
+  it('creates an issue in the configured team, with the Type and Severity labels, and returns its link', async () => {
+    const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
 
-    const resultat = await adaptateur(fetch).send(ENVOI);
+    const result = await adapter(fetch).send(DELIVERY);
 
-    expect(resultat).toEqual({ statut: 'livre', lienExterne: ISSUE_URL });
-    expect(requetes).toHaveLength(2);
-    for (const requete of requetes) {
-      expect(requete.url).toBe(POINT_D_APPEL);
-      expect(requete.init.method).toBe('POST');
-      expect(requete.entetes.get('content-type')).toBe('application/json');
-      // Clé d'API personnelle : « Authorization: <API_KEY> », sans « Bearer ».
-      expect(requete.entetes.get('authorization')).toBe(CLE_API);
+    expect(result).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.url).toBe(ENDPOINT);
+      expect(request.init.method).toBe('POST');
+      expect(request.headers.get('content-type')).toBe('application/json');
+      // Personal API key: "Authorization: <API_KEY>", without "Bearer".
+      expect(request.headers.get('authorization')).toBe(API_KEY);
     }
-    expect(requetes[0]?.variables).toEqual({ equipe: 'ENG' });
-    expect(requetes[1]?.query).toMatch(/mutation[\s\S]*issueCreate\(input: \$entree\)/);
-    const entree = entreeCreation(requetes[1]);
-    expect(entree.teamId).toBe(EQUIPE_ID);
-    expect(entree.labelIds).toEqual([LABEL_BUG_ID, LABEL_URGENT_ID]);
-    expect(entree.title).toBe('Bug · Le panier se vide quand je change de page.');
-    expect(entree.description).toContain('Le panier se vide quand je change de page');
+    expect(requests[0]?.variables).toEqual({ team: 'ENG' });
+    expect(requests[1]?.query).toMatch(/mutation[\s\S]*issueCreate\(input: \$input\)/);
+    const input = creationInput(requests[1]);
+    expect(input.teamId).toBe(TEAM_ID);
+    expect(input.labelIds).toEqual([LABEL_BUG_ID, LABEL_URGENT_ID]);
+    expect(input.title).toBe('Bug · The cart empties when I change pages.');
+    expect(input.description).toContain('The cart empties when I change pages');
   });
 
   it.each([
-    ['400 clé refusée (authentication error)', 'auth', LINEAR.cleRefusee],
-    ['401 sans corps GraphQL', 'auth', LINEAR.nonAutorise],
-    ['forbidden', 'auth', LINEAR.accesRefuse],
-    ['invalid input', 'permanent', LINEAR.entreeInvalide],
-    ['400 RATELIMITED', 'transient', LINEAR.limiteDeDebit],
-    ['internal error', 'transient', LINEAR.erreurInterne],
-    ['503 sans JSON', 'transient', LINEAR.serviceIndisponible],
-  ] as const)('classe un refus de la création « %s » : %s', async (_, classe, enregistrement) => {
-    const { fetch, requetes } = linear(LINEAR.equipe, enregistrement);
+    ['400 key rejected (authentication error)', 'auth', LINEAR.keyRejected],
+    ['401 without a GraphQL body', 'auth', LINEAR.unauthorized],
+    ['forbidden', 'auth', LINEAR.accessDenied],
+    ['invalid input', 'permanent', LINEAR.invalidInput],
+    ['400 RATELIMITED', 'transient', LINEAR.rateLimited],
+    ['internal error', 'transient', LINEAR.internalError],
+    ['503 without JSON', 'transient', LINEAR.serviceUnavailable],
+  ] as const)('classifies a creation refusal "%s": %s', async (_, failureClass, recording) => {
+    const { fetch, requests } = linear(LINEAR.team, recording);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-      statut: 'echec',
-      classe,
-      message: expect.stringContaining(String(enregistrement.status)),
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass,
+      message: expect.stringContaining(String(recording.status)),
     });
-    expect(requetes).toHaveLength(2);
+    expect(requests).toHaveLength(2);
   });
 
   it.each([
-    ['clé refusée', 'auth', LINEAR.cleRefusee],
-    ['limite de débit', 'transient', LINEAR.limiteDeDebit],
-    ['503', 'transient', LINEAR.serviceIndisponible],
+    ['key rejected', 'auth', LINEAR.keyRejected],
+    ['rate limit', 'transient', LINEAR.rateLimited],
+    ['503', 'transient', LINEAR.serviceUnavailable],
   ] as const)(
-    'classe un refus de la lecture de l’équipe « %s » : %s, sans créer d’issue',
-    async (_, classe, enregistrement) => {
-      const { fetch, requetes } = linear(enregistrement);
+    'classifies a team read refusal "%s": %s, without creating an issue',
+    async (_, failureClass, recording) => {
+      const { fetch, requests } = linear(recording);
 
-      expect(await adaptateur(fetch).send(ENVOI)).toMatchObject({ statut: 'echec', classe });
-      expect(requetes).toHaveLength(1);
+      expect(await adapter(fetch).send(DELIVERY)).toMatchObject({
+        status: 'failed',
+        failureClass,
+      });
+      expect(requests).toHaveLength(1);
     },
   );
 
-  it('reprend le message d’erreur de Linear, sans jamais la clé d’API', async () => {
-    const { fetch } = linear(LINEAR.equipe, LINEAR.cleRefusee);
+  it("carries over Linear's error message, never the API key", async () => {
+    const { fetch } = linear(LINEAR.team, LINEAR.keyRejected);
 
-    const resultat = await adaptateur(fetch).send(ENVOI);
+    const result = await adapter(fetch).send(DELIVERY);
 
-    expect(resultat).toMatchObject({
+    expect(result).toMatchObject({
       message: expect.stringContaining('Authentication required, not authenticated'),
     });
-    expect(JSON.stringify(resultat)).not.toContain(CLE_API);
+    expect(JSON.stringify(result)).not.toContain(API_KEY);
   });
 
-  it('ne suit pas les redirections : un 3xx est un échec permanent', async () => {
-    const { fetch, requetes } = linear({ provenance: 'reconstituee', source: '', status: 301 });
+  it('does not follow redirects: a 3xx is a permanent failure', async () => {
+    const { fetch, requests } = linear({ provenance: 'reconstructed', source: '', status: 301 });
 
-    expect(await adaptateur(fetch).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'permanent',
+    expect(await adapter(fetch).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'permanent',
     });
-    expect(requetes[0]?.init.redirect).toBe('manual');
+    expect(requests[0]?.init.redirect).toBe('manual');
   });
 
-  it('une erreur réseau ou un délai dépassé est transitoire', async () => {
-    expect(await adaptateur(linear(new TypeError('fetch failed')).fetch).send(ENVOI)).toMatchObject(
-      { statut: 'echec', classe: 'transient', message: 'fetch failed' },
+  it('a network error or a timeout is transient', async () => {
+    expect(await adapter(linear(new TypeError('fetch failed')).fetch).send(DELIVERY)).toMatchObject(
+      { status: 'failed', failureClass: 'transient', message: 'fetch failed' },
     );
     expect(
-      await adaptateur(linear(LINEAR.equipe, 'bloque').fetch, { delaiMs: 50 }).send(ENVOI),
-    ).toMatchObject({ statut: 'echec', classe: 'transient' });
+      await adapter(linear(LINEAR.team, 'hang').fetch, { timeoutMs: 50 }).send(DELIVERY),
+    ).toMatchObject({ status: 'failed', failureClass: 'transient' });
   });
 
-  describe('équipe et labels', () => {
-    const avecLabels = (labels: unknown): DestinationConfiguree => ({
+  describe('team and labels', () => {
+    const withLabels = (labels: unknown): ConfiguredDestination => ({
       ...DESTINATION,
-      config: { equipe: 'ENG', labels },
+      config: { team: 'ENG', labels },
     });
 
-    it('une équipe introuvable avec cette clé refuse la Destination (auth), sans créer d’issue', async () => {
-      const { fetch, requetes } = linear(LINEAR.equipeInconnue);
+    it('a team not found with this key rejects the Destination (auth), without creating an issue', async () => {
+      const { fetch, requests } = linear(LINEAR.unknownTeam);
 
-      expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-        statut: 'echec',
-        classe: 'auth',
+      expect(await adapter(fetch).send(DELIVERY)).toEqual({
+        status: 'failed',
+        failureClass: 'auth',
         message: expect.stringContaining('ENG'),
       });
-      expect(requetes).toHaveLength(1);
+      expect(requests).toHaveLength(1);
     });
 
-    it('un label configuré introuvable dans Linear refuse la Destination (auth), en le nommant', async () => {
-      const destination = avecLabels({ types: { bug: 'Défaut' }, gravites: {} });
-      const { fetch, requetes } = linear(LINEAR.equipe);
+    it('a configured label not found in Linear rejects the Destination (auth), naming it', async () => {
+      const destination = withLabels({ types: { bug: 'Defect' }, severities: {} });
+      const { fetch, requests } = linear(LINEAR.team);
 
-      expect(await adaptateur(fetch, { destination }).send(ENVOI)).toEqual({
-        statut: 'echec',
-        classe: 'auth',
-        message: expect.stringContaining('« Défaut »'),
+      expect(await adapter(fetch, { destination }).send(DELIVERY)).toEqual({
+        status: 'failed',
+        failureClass: 'auth',
+        message: expect.stringContaining('"Defect"'),
       });
-      expect(requetes).toHaveLength(1);
+      expect(requests).toHaveLength(1);
     });
 
-    it('un groupe de labels, qu’une issue ne peut pas porter, compte comme introuvable', async () => {
-      const destination = avecLabels({ types: { bug: 'Type' }, gravites: {} });
-      const { fetch } = linear(LINEAR.equipe);
+    it('a label group, which an issue cannot carry, counts as not found', async () => {
+      const destination = withLabels({ types: { bug: 'Type' }, severities: {} });
+      const { fetch } = linear(LINEAR.team);
 
-      expect(await adaptateur(fetch, { destination }).send(ENVOI)).toMatchObject({
-        statut: 'echec',
-        classe: 'auth',
+      expect(await adapter(fetch, { destination }).send(DELIVERY)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
       });
     });
 
-    it('sans label mappé pour ce Type ni cette Gravité, crée l’issue sans label', async () => {
-      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
-      const retour = { ...ENVOI.retour, typeRetenu: 'question' as const, gravite: null };
+    it('with no label mapped for this Type or Severity, creates the issue without labels', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+      const feedback = { ...DELIVERY.feedback, resolvedType: 'question' as const, severity: null };
 
-      expect(await adaptateur(fetch).send({ ...ENVOI, retour })).toMatchObject({ statut: 'livre' });
-      expect(entreeCreation(requetes[1]).labelIds).toEqual([]);
+      expect(await adapter(fetch).send({ ...DELIVERY, feedback })).toMatchObject({
+        status: 'delivered',
+      });
+      expect(creationInput(requests[1]).labelIds).toEqual([]);
     });
 
-    it('ne relit l’équipe que si un label manque : une fois lue, une issue ne coûte qu’un appel', async () => {
-      const equipes = new Map();
-      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee, LINEAR.issueCreee);
+    it('only reads the team again if a label is missing: once read, an issue costs a single call', async () => {
+      const teams = new Map();
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated, LINEAR.issueCreated);
 
       for (let i = 0; i < 2; i++) {
-        expect(await adaptateurLinear(DESTINATION, { fetch, equipes }).send(ENVOI)).toMatchObject({
-          statut: 'livre',
+        expect(await linearAdapter(DESTINATION, { fetch, teams }).send(DELIVERY)).toMatchObject({
+          status: 'delivered',
         });
       }
 
-      expect(requetes.map((r) => Object.keys(r.variables))).toEqual([
-        ['equipe'],
-        ['entree'],
-        ['entree'],
+      expect(requests.map((r) => Object.keys(r.variables))).toEqual([
+        ['team'],
+        ['input'],
+        ['input'],
       ]);
     });
 
-    it('relit l’équipe quand un label configuré n’est pas encore connu (label créé depuis)', async () => {
-      const equipes = new Map();
-      const premier = linear(LINEAR.equipe, LINEAR.issueCreee);
-      await adaptateurLinear(DESTINATION, { fetch: premier.fetch, equipes }).send(ENVOI);
-      const suggestion = { ...ENVOI.retour, typeRetenu: 'suggestion' as const, gravite: null };
-      const nouveau = avecLabels({ types: { suggestion: 'Nouveau' }, gravites: {} });
-      const second = linear(LINEAR.equipe);
+    it('reads the team again when a configured label is not known yet (label created since)', async () => {
+      const teams = new Map();
+      const first = linear(LINEAR.team, LINEAR.issueCreated);
+      await linearAdapter(DESTINATION, { fetch: first.fetch, teams }).send(DELIVERY);
+      const suggestion = {
+        ...DELIVERY.feedback,
+        resolvedType: 'suggestion' as const,
+        severity: null,
+      };
+      const created = withLabels({ types: { suggestion: 'New' }, severities: {} });
+      const second = linear(LINEAR.team);
 
       expect(
-        await adaptateurLinear(nouveau, { fetch: second.fetch, equipes }).send({
-          ...ENVOI,
-          retour: suggestion,
+        await linearAdapter(created, { fetch: second.fetch, teams }).send({
+          ...DELIVERY,
+          feedback: suggestion,
         }),
-      ).toMatchObject({ statut: 'echec', classe: 'auth' });
-      expect(Object.keys(second.requetes[0]!.variables)).toEqual(['equipe']);
+      ).toMatchObject({ status: 'failed', failureClass: 'auth' });
+      expect(Object.keys(second.requests[0]!.variables)).toEqual(['team']);
     });
   });
 
-  describe('alerte (Destination d’alerte)', () => {
+  describe('alert (Alert destination)', () => {
     const md = new MarkdownIt({ html: true });
-    const jetons = (corps: string) =>
-      md.parse(corps, {}).flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
 
-    it('crée une issue de l’alerte dans l’équipe, sans label, avec le lien vers le dashboard', async () => {
-      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+    it('creates an issue for the alert in the team, without labels, with the link to the dashboard', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
-        statut: 'livre',
-        lienExterne: ISSUE_URL,
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
       });
 
-      const entree = entreeCreation(requetes[1]);
-      expect(entree.teamId).toBe(EQUIPE_ID);
-      expect(entree.labelIds).toEqual([]);
-      expect(entree.title).toBe('Retour en revue · @everyone *Boutique*');
-      expect(entree.description).toContain('influencer le Triage');
-      const liens = jetons(entree.description).filter((j) => j.type === 'link_open');
-      expect(liens.map((j) => j.attrGet('href'))).toEqual([ALERTE_EN_REVUE.lienDashboard]);
+      const input = creationInput(requests[1]);
+      expect(input.teamId).toBe(TEAM_ID);
+      expect(input.labelIds).toEqual([]);
+      expect(input.title).toBe('Feedback in review · @everyone *Shop*');
+      expect(input.description).toContain('influence Triage');
+      const links = tokens(input.description).filter((j) => j.type === 'link_open');
+      expect(links.map((j) => j.attrGet('href'))).toEqual([IN_REVIEW_ALERT.dashboardUrl]);
     });
 
-    it('rend littéraux les noms et le refus de la cible : ni lien, ni HTML', async () => {
-      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
+    it("makes the names and the target's refusal literal: no link, no HTML", async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
 
-      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+      await adapter(fetch).alert(SUSPENSION_ALERT);
 
-      const { description } = entreeCreation(requetes[1]);
-      const types = jetons(description).map((j) => j.type);
+      const { description } = creationInput(requests[1]);
+      const types = tokens(description).map((j) => j.type);
       expect(types).not.toContain('link_open');
       expect(types).not.toContain('html_inline');
-      const texte = jetons(description)
+      const text = tokens(description)
         .filter((j) => j.type === 'text')
         .map((j) => j.content)
         .join('');
-      expect(texte).toContain('Linear [prod](https://piege.test)');
-      expect(texte).toContain('HTTP 401 : <!channel> @here `jeton` refusé');
+      expect(text).toContain('Linear [prod](https://trap.test)');
+      expect(text).toContain('HTTP 401: <!channel> @here `token` rejected');
     });
 
-    it('classe un refus comme un Envoi : clé refusée = auth', async () => {
-      const { fetch } = linear(LINEAR.cleRefusee);
+    it('classifies a refusal like a Delivery: key rejected = auth', async () => {
+      const { fetch } = linear(LINEAR.keyRejected);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
-        statut: 'echec',
-        classe: 'auth',
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
       });
     });
   });
 
   describe('healthCheck', () => {
-    it('lit l’équipe et ses labels avec la clé, sans rien créer ; tout trouvé, la rend joignable', async () => {
-      const { fetch, requetes } = linear(LINEAR.equipe);
+    it('reads the team and its labels with the key, creating nothing; all found, makes it reachable', async () => {
+      const { fetch, requests } = linear(LINEAR.team);
 
-      expect(await adaptateur(fetch).healthCheck()).toEqual({ joignable: true });
+      expect(await adapter(fetch).healthCheck()).toEqual({ reachable: true });
 
-      expect(requetes).toHaveLength(1);
-      expect(requetes[0]?.query).not.toMatch(/mutation/);
-      expect(requetes[0]?.variables).toEqual({ equipe: 'ENG' });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.query).not.toMatch(/mutation/);
+      expect(requests[0]?.variables).toEqual({ team: 'ENG' });
     });
 
-    it('vérifie chaque label configuré, pas seulement ceux d’un Envoi', async () => {
-      const destination: DestinationConfiguree = {
+    it("checks every configured label, not only a Delivery's", async () => {
+      const destination: ConfiguredDestination = {
         ...DESTINATION,
-        config: { equipe: 'ENG', labels: { types: { bug: 'Bug' }, gravites: { mineure: 'Gêne' } } },
+        config: {
+          team: 'ENG',
+          labels: { types: { bug: 'Bug' }, severities: { minor: 'Annoyance' } },
+        },
       };
-      const { fetch } = linear(LINEAR.equipe);
+      const { fetch } = linear(LINEAR.team);
 
-      expect(await adaptateur(fetch, { destination }).healthCheck()).toEqual({
-        joignable: false,
-        classe: 'auth',
-        message: expect.stringContaining('« Gêne »'),
+      expect(await adapter(fetch, { destination }).healthCheck()).toEqual({
+        reachable: false,
+        failureClass: 'auth',
+        message: expect.stringContaining('"Annoyance"'),
       });
     });
 
     it.each([
-      ['clé refusée', 'auth', LINEAR.cleRefusee],
-      ['équipe introuvable', 'auth', LINEAR.equipeInconnue],
-      ['limite de débit', 'transient', LINEAR.limiteDeDebit],
-      ['503', 'transient', LINEAR.serviceIndisponible],
-    ] as const)(
-      'une réponse « %s » la rend injoignable (%s)',
-      async (_, classe, enregistrement) => {
-        const { fetch } = linear(enregistrement);
+      ['key rejected', 'auth', LINEAR.keyRejected],
+      ['team not found', 'auth', LINEAR.unknownTeam],
+      ['rate limit', 'transient', LINEAR.rateLimited],
+      ['503', 'transient', LINEAR.serviceUnavailable],
+    ] as const)('a "%s" response makes it unreachable (%s)', async (_, failureClass, recording) => {
+      const { fetch } = linear(recording);
 
-        expect(await adaptateur(fetch).healthCheck()).toEqual({
-          joignable: false,
-          classe,
-          message: expect.any(String),
-        });
-      },
-    );
+      expect(await adapter(fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass,
+        message: expect.any(String),
+      });
+    });
 
-    it('une erreur réseau la rend injoignable (transient)', async () => {
-      expect(await adaptateur(linear(new TypeError('fetch failed')).fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe: 'transient',
+    it('a network error makes it unreachable (transient)', async () => {
+      expect(await adapter(linear(new TypeError('fetch failed')).fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass: 'transient',
         message: 'fetch failed',
       });
     });
   });
 
-  describe('issue créée', () => {
-    async function entree(envoi: EnvoiASortir) {
-      const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
-      await adaptateur(fetch).send(envoi);
-      return entreeCreation(requetes[1]);
+  describe('created issue', () => {
+    async function inputOf(delivery: OutgoingDelivery) {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+      await adapter(fetch).send(delivery);
+      return creationInput(requests[1]);
     }
 
-    it('titre : le Type et la première ligne du texte, bornée', async () => {
-      const texte = `\n  ${'Très long '.repeat(30)}\nsuite`;
+    it('title: the Type and the first line of the text, bounded', async () => {
+      const text = `\n  ${'Very long '.repeat(30)}\nrest`;
 
-      const { title } = await entree({ ...ENVOI, retour: { ...ENVOI.retour, texte } });
+      const { title } = await inputOf({ ...DELIVERY, feedback: { ...DELIVERY.feedback, text } });
 
-      expect(title.startsWith('Bug · Très long Très long')).toBe(true);
+      expect(title.startsWith('Bug · Very long Very long')).toBe(true);
       expect(title.length).toBeLessThanOrEqual(120);
       expect(title.endsWith('…')).toBe(true);
       expect(title).not.toContain('\n');
     });
 
-    it('description : le texte, puis le Projet, le Type, la Gravité et le lien vers le Retour', async () => {
-      const { description } = await entree(ENVOI);
+    it('description: the text, then the Project, the Type, the Severity and the link to the Feedback', async () => {
+      const { description } = await inputOf(DELIVERY);
       const html = new MarkdownIt().render(description);
 
-      expect(html).toContain('Le panier se vide quand je change de page.<br>\nDepuis ce matin.');
-      expect(html).toContain('<strong>Projet</strong> : Boutique');
-      expect(html).toContain('<strong>Type</strong> : Bug');
-      expect(html).toContain('<strong>Gravité</strong> : Bloquante');
+      expect(html).toContain('The cart empties when I change pages.<br>\nSince this morning.');
+      expect(html).toContain('<strong>Project</strong>: Shop');
+      expect(html).toContain('<strong>Type</strong>: Bug');
+      expect(html).toContain('<strong>Severity</strong>: Blocking');
       expect(html).toContain(
-        `<a href="${ENVOI.retour.lienDashboard}">Voir le Retour dans nudge</a>`,
+        `<a href="${DELIVERY.feedback.dashboardUrl}">View the feedback in nudge</a>`,
       );
-      expect(html).not.toContain('incertain');
+      expect(html).not.toContain('Uncertain');
     });
 
-    it('marque le Retour d’essai et le Verdict incertain ; sans Gravité ni lien du dashboard', async () => {
-      const retour = { ...ENVOI.retour, gravite: null, incertain: true, lienDashboard: null };
+    it('marks the test Feedback and the uncertain Verdict; without Severity or dashboard link', async () => {
+      const feedback = {
+        ...DELIVERY.feedback,
+        severity: null,
+        uncertain: true,
+        dashboardUrl: null,
+      };
 
-      const { title, description } = await entree({ ...ENVOI, essai: true, retour });
+      const { title, description } = await inputOf({ ...DELIVERY, isTest: true, feedback });
       const html = new MarkdownIt().render(description);
 
-      expect(title).toBe('Essai · Bug · Le panier se vide quand je change de page.');
-      expect(html).toContain('<strong>Gravité</strong> : Non évaluée');
-      expect(html).toContain('Verdict incertain');
+      expect(title).toBe('Test · Bug · The cart empties when I change pages.');
+      expect(html).toContain('<strong>Severity</strong>: Not assessed');
+      expect(html).toContain('Uncertain verdict');
       expect(html).not.toContain('<a ');
     });
   });
 
-  describe('encodage du texte de l’Auteur', () => {
-    const MALVEILLANT = [
-      '# Titre piégé',
-      '[cliquez ici](https://piege.test/connexion) ![pixel](https://piege.test/pixel.png)',
-      '<https://piege.test/auto> https://piege.test/direct www.piege.test',
-      '**gras** _penché_ ~~barré~~ `code` <img src=x onerror=alert(1)> &lt;b&gt;',
-      '> citation',
-      '- liste',
-      '1. numérotée',
+  describe("encoding of the Author's text", () => {
+    const MALICIOUS = [
+      '# Trapped heading',
+      '[click here](https://trap.test/login) ![pixel](https://trap.test/pixel.png)',
+      '<https://trap.test/auto> https://trap.test/direct www.trap.test',
+      '**bold** _italic_ ~~struck~~ `code` <img src=x onerror=alert(1)> &lt;b&gt;',
+      '> quote',
+      '- list',
+      '1. numbered',
       '| a | b |',
       '```',
-      'fin du bloc ? \\ @everyone :smile: $x$',
+      'end of block? \\ @everyone :smile: $x$',
     ].join('\n');
 
-    /** Les jetons markdown-it (CommonMark, liens nus reconnus) du texte de l'Auteur. */
-    async function rendu(texte: string, projet = ENVOI.projet) {
+    /** The markdown-it tokens (CommonMark, bare links recognized) of the Author's text. */
+    async function render(text: string, project = DELIVERY.project) {
       const { description } = await (async () => {
-        const { fetch, requetes } = linear(LINEAR.equipe, LINEAR.issueCreee);
-        const retour = { ...ENVOI.retour, texte, lienDashboard: null };
-        await adaptateur(fetch).send({ ...ENVOI, projet, retour });
-        return entreeCreation(requetes[1]);
+        const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+        const feedback = { ...DELIVERY.feedback, text, dashboardUrl: null };
+        await adapter(fetch).send({ ...DELIVERY, project, feedback });
+        return creationInput(requests[1]);
       })();
       const md = new MarkdownIt({ html: true, linkify: true });
-      const jetons = md
+      const tokens = md
         .parse(description, {})
-        .flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
-      return { description, jetons };
+        .flatMap((token) => [token, ...(token.children ?? [])]);
+      return { description, tokens };
     }
 
-    it('aucun lien, image, HTML ni mise en forme ne sort du texte de l’Auteur', async () => {
-      const { jetons } = await rendu(MALVEILLANT);
+    it("no link, image, HTML or formatting comes out of the Author's text", async () => {
+      const { tokens } = await render(MALICIOUS);
 
-      const interdits = jetons.filter((jeton) =>
+      const forbidden = tokens.filter((token) =>
         /^(link_open|image|html_inline|html_block|heading_open|em_open|s_open|code_inline|fence|code_block|blockquote_open|bullet_list_open|ordered_list_open|table_open|hr)$/.test(
-          jeton.type,
+          token.type,
         ),
       );
-      // Le pied de la description, écrit par nudge, est seul à porter du gras et un filet.
-      expect(interdits.map((jeton) => jeton.type)).toEqual(['hr']);
+      // The description's footer, written by nudge, is the only one with bold and a rule.
+      expect(forbidden.map((token) => token.type)).toEqual(['hr']);
     });
 
-    it('le texte s’affiche tel que l’Auteur l’a écrit, ligne pour ligne', async () => {
-      const { jetons } = await rendu(MALVEILLANT);
+    it('the text shows as the Author wrote it, line by line', async () => {
+      const { tokens } = await render(MALICIOUS);
 
-      const paragraphe = jetons.find((jeton) => jeton.type === 'inline')!;
-      const affiche = (paragraphe.children ?? [])
-        .map((jeton) =>
-          jeton.type === 'hardbreak' || jeton.type === 'softbreak' ? '\n' : jeton.content,
+      const paragraph = tokens.find((token) => token.type === 'inline')!;
+      const shown = (paragraph.children ?? [])
+        .map((token) =>
+          token.type === 'hardbreak' || token.type === 'softbreak' ? '\n' : token.content,
         )
         .join('');
-      expect(affiche).toBe(MALVEILLANT);
+      expect(shown).toBe(MALICIOUS);
     });
 
-    it('échappe aussi le nom du Projet', async () => {
-      const { jetons } = await rendu('Rien à signaler', {
-        ...ENVOI.projet,
-        nom: '[Boutique](https://piege.test) <b>',
+    it('also escapes the Project name', async () => {
+      const { tokens } = await render('Nothing to report', {
+        ...DELIVERY.project,
+        name: '[Shop](https://trap.test) <b>',
       });
 
-      expect(jetons.some((jeton) => /^(link_open|html_inline)$/.test(jeton.type))).toBe(false);
+      expect(tokens.some((token) => /^(link_open|html_inline)$/.test(token.type))).toBe(false);
     });
   });
 
-  it('une création sans issue (success faux) est un échec permanent', async () => {
-    const { fetch } = linear(LINEAR.equipe, LINEAR.creationRefusee);
+  it('a creation without an issue (success false) is a permanent failure', async () => {
+    const { fetch } = linear(LINEAR.team, LINEAR.creationRefused);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'permanent',
+    expect(await adapter(fetch).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'permanent',
     });
   });
 
-  it('après un refus de la création, relit l’équipe : un label supprimé depuis se révèle', async () => {
-    const equipes = new Map();
-    const { fetch, requetes } = linear(
-      LINEAR.equipe,
-      LINEAR.entreeInvalide,
-      LINEAR.equipe,
-      LINEAR.issueCreee,
+  it('after a creation refusal, reads the team again: a label deleted since shows up', async () => {
+    const teams = new Map();
+    const { fetch, requests } = linear(
+      LINEAR.team,
+      LINEAR.invalidInput,
+      LINEAR.team,
+      LINEAR.issueCreated,
     );
 
-    await adaptateurLinear(DESTINATION, { fetch, equipes }).send(ENVOI);
-    await adaptateurLinear(DESTINATION, { fetch, equipes }).send(ENVOI);
+    await linearAdapter(DESTINATION, { fetch, teams }).send(DELIVERY);
+    await linearAdapter(DESTINATION, { fetch, teams }).send(DELIVERY);
 
-    expect(requetes.map((r) => Object.keys(r.variables)[0])).toEqual([
-      'equipe',
-      'entree',
-      'equipe',
-      'entree',
+    expect(requests.map((r) => Object.keys(r.variables)[0])).toEqual([
+      'team',
+      'input',
+      'team',
+      'input',
     ]);
   });
 
-  it('est enregistré pour le type « linear » dans le registre des adaptateurs', () => {
-    const adaptateur = resolveDestinationAdapter(DESTINATION);
+  it('is registered for the "linear" type in the adapter registry', () => {
+    const registered = resolveDestinationAdapter(DESTINATION);
 
-    expect(typeof adaptateur.send).toBe('function');
-    expect(typeof adaptateur.healthCheck).toBe('function');
+    expect(typeof registered.send).toBe('function');
+    expect(typeof registered.healthCheck).toBe('function');
   });
 });

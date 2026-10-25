@@ -1,146 +1,148 @@
-# Design system du dashboard
+# Dashboard design system
 
-Le dashboard (`apps/dashboard`) est un outil de tri pour des devs et des PM, surtout sur bureau. La liste est dense comme chez Linear et la donnée nette comme chez Stripe. Un seul élément est mémorable : la jauge de Gravité.
+The dashboard (`apps/dashboard`) is a triage tool for devs and PMs, mostly on desktop. The list is dense like Linear's and the data crisp like Stripe's. Only one element is memorable: the Severity gauge.
 
-Les tokens et les classes sont dans `apps/dashboard/src/styles.css`, les primitives React dans `src/layout/ui.tsx` (génériques) et `src/screens/retour-badges.tsx` (valeurs du domaine).
+Tokens and classes are in `apps/dashboard/src/styles.css`, React primitives in `src/layout/ui.tsx` (generic) and `src/screens/feedback-badges.tsx` (domain values).
 
-## Principes
+## Principles
 
-1. **L'urgence se voit avant le texte.** Un Retour porte toujours sa jauge de Gravité, à la même place : liste, détail, filtres, seuil d'une Destination.
-2. **Dense et calme.** Texte courant en 14 px, contrôles de 32 px, une seule surface par liste avec des séparateurs fins. Une bordure délimite un objet entier, jamais un paragraphe.
-3. **La couleur dit un état, jamais une décoration.** L'accent sert à l'action principale et à la sélection. Les autres couleurs sont sémantiques (voir les tons).
-4. **Les mots du domaine.** Le vocabulaire de `CONTEXT.md`, avec ses majuscules (Retour, Verdict, Destination…). Pas de jargon de système.
+1. **Urgency shows before text.** A Feedback always carries its Severity gauge, in the same place: list, detail, filters, a Destination's threshold.
+2. **Dense and calm.** Body text at 14 px, 32 px controls, a single surface per list with thin separators. A border outlines a whole object, never a paragraph.
+3. **Color states something, never decorates.** The accent is for the primary action and the selection. The other colors are semantic (see the tones).
+4. **Domain words.** The vocabulary of `CONTEXT.md`, with its capitals (Feedback, Verdict, Destination…). No system jargon.
 
 ## Tokens
 
-### Couleur
+### Color
 
-| Token                           | Clair                 | Rôle                                                                          |
-| ------------------------------- | --------------------- | ----------------------------------------------------------------------------- |
-| `--cadre`                       | `#e3e9e6`             | Le cadre de l'app : barre latérale, fond derrière la feuille                  |
-| `--toile`                       | `#f6f8f7`             | La feuille : le contenu, posé sur le cadre avec un filet et un rayon de 12 px |
-| `--surface`                     | `#ffffff`             | Listes, panneaux, champs, volet d'un Retour                                   |
-| `--surface-2`                   | `#f1f4f2`             | Survol, code, pastille neutre                                                 |
-| `--texte`                       | `#16201c`             | Texte principal (16,7:1)                                                      |
-| `--discret`                     | `#5b6762`             | Métadonnées, aides (5,9:1)                                                    |
-| `--bordure` / `--bordure-forte` | `#dce2df` / `#c4ccc8` | Séparateurs / contours des contrôles                                          |
-| `--accent`                      | `#176a52`             | Action principale, sélection, liens (6,5:1)                                   |
-| `--revue`                       | `#5a48c8`             | Attend une décision humaine : En revue, Incertain                             |
-| `--succes`                      | `#1c7a4a`             | Dispatché, Livré, Active                                                      |
-| `--danger`                      | `#b42318`             | Échec, erreur, suppression                                                    |
-| `--retenu`                      | `#9a5b00`             | Suspendue, Retenu, avertissement                                              |
-| `--gravite-1…4`                 | `#87938e` → `#b4161b` | Jauge : Cosmétique, Mineure, Majeure, Bloquante                               |
+| Token                          | Light                 | Role                                                                       |
+| ------------------------------ | --------------------- | -------------------------------------------------------------------------- |
+| `--frame`                      | `#e3e9e6`             | The app frame: sidebar, background behind the sheet                        |
+| `--canvas`                     | `#f6f8f7`             | The sheet: the content, laid on the frame with a hairline and 12 px radius |
+| `--surface`                    | `#ffffff`             | Lists, panels, fields, a Feedback's pane                                   |
+| `--surface-2`                  | `#f1f4f2`             | Hover, code, neutral pill                                                  |
+| `--text`                       | `#16201c`             | Main text (16.7:1)                                                         |
+| `--muted`                      | `#5b6762`             | Metadata, help text (5.9:1)                                                |
+| `--border` / `--border-strong` | `#dce2df` / `#c4ccc8` | Separators / control outlines                                              |
+| `--accent`                     | `#176a52`             | Primary action, selection, links (6.5:1)                                   |
+| `--review`                     | `#5a48c8`             | Awaits a human decision: In review, Uncertain                              |
+| `--success`                    | `#1c7a4a`             | Dispatched, Delivered, Active                                              |
+| `--danger`                     | `#b42318`             | Failure, error, deletion                                                   |
+| `--held`                       | `#9a5b00`             | Suspended, Held, warning                                                   |
+| `--severity-1…4`               | `#87938e` → `#b4161b` | Gauge: Cosmetic, Minor, Major, Blocking                                    |
 
-Chaque couleur sémantique a sa variante `-doux` pour les fonds. Le mode sombre (`prefers-color-scheme: dark`) redéfinit chaque token avec ses propres valeurs ; aucun composant n'utilise de couleur littérale.
+Each semantic color has a `-soft` variant for backgrounds. Dark mode (`prefers-color-scheme: dark`) redefines every token with its own values; no component uses a literal color.
 
-### Typographie
+### Typography
 
-- **Instrument Sans** (variable, `@fontsource-variable/instrument-sans`) pour tout.
-- **JetBrains Mono** (`@fontsource/jetbrains-mono`) seulement pour des valeurs techniques réelles : clés, URL de webhook, identifiants. Jamais pour un libellé.
-- Les polices sont embarquées dans le build : l'Instance auto-hébergée ne contacte aucun service tiers.
-- Échelle : `--t-xs` 12, `--t-s` 13 (métadonnées, libellés de champ), `--t-m` 14 (texte courant), `--t-l` 16 (titres de panneau, texte d'un Retour), `--t-xl` 20 (titre d'écran), `--t-2xl` 28 (écrans publics). Graisses : 400, 500 (libellés, boutons), 600 (titres).
-- Chiffres alignés (`tabular-nums`) partout où des nombres se comparent : dates, compteurs, tentatives.
+- **Instrument Sans** (variable, `@fontsource-variable/instrument-sans`) for everything.
+- **JetBrains Mono** (`@fontsource/jetbrains-mono`) only for actual technical values: keys, webhook URLs, identifiers. Never for a label.
+- Fonts are bundled in the build: the self-hosted Instance contacts no third-party service.
+- Scale: `--t-xs` 12, `--t-s` 13 (metadata, field labels), `--t-m` 14 (body text), `--t-l` 16 (panel titles, a Feedback's text), `--t-xl` 20 (screen title), `--t-2xl` 28 (public screens). Weights: 400, 500 (labels, buttons), 600 (titles).
+- Tabular figures (`tabular-nums`) wherever numbers are compared: dates, counters, attempts.
 
-### Forme et mouvement
+### Shape and motion
 
-- Rayons : `--r-controle` 6 px (boutons, champs, cases), `--r-panneau` 10 px (panneaux, listes, dialogues), pilule pour les pastilles.
-- Pas d'ombre au repos. `--ombre-flottant` est réservée à ce qui flotte : tiroir mobile, menus, dialogues.
-- `--duree` 140 ms, ease-out, seulement en réponse à une action. Tout est coupé sous `prefers-reduced-motion`.
+- Radii: `--r-control` 6 px (buttons, fields, checkboxes), `--r-panel` 10 px (panels, lists, dialogs), pill for pills.
+- No shadow at rest. `--shadow-floating` is reserved for what floats: mobile drawer, menus, dialogs.
+- `--duration` 140 ms, ease-out, only in response to an action. Everything is turned off under `prefers-reduced-motion`.
 
-## Gabarit
+## Layout
 
 ```
 ┌────────────────────┬────────────────────────────────────────────┐
-│ ▂▄▆█ nudge         │ ← retour                                   │
-│ Boîte de réception │ Titre de l'écran              [actions]    │
+│ ▂▄▆█ nudge         │ ← back                                     │
+│ Inbox              │ Screen title                  [actions]    │
 │                    │ description                                │
-│ Projets            ├────────────────────────────────────────────┤
-│   Boutique         │ contenu (max 1040 px)                      │
-│   Comptoir         │                                            │
-│ [alertes]          │                                            │
-│ Membres            │                                            │
-│ Paramètres         │                                            │
-│ compte             │                                            │
+│ Projects           ├────────────────────────────────────────────┤
+│   Shop             │ content (max 1040 px)                      │
+│   Storefront       │                                            │
+│ [alerts]           │                                            │
+│ Members            │                                            │
+│ Settings           │                                            │
+│ account            │                                            │
 └────────────────────┴────────────────────────────────────────────┘
 ```
 
-- Trois plans, du plus sombre au plus clair : le cadre, la feuille, puis les surfaces. Un objet se détache de ce qui l'entoure en passant au plan suivant, jamais par une ombre.
-- `Layout` : barre latérale de 232 px, sticky, sur le cadre ; le contenu est une feuille posée à côté. Sous 860 px, la feuille occupe tout l'écran. Sous 860 px, elle devient un tiroir ouvert par « Menu » (fermé par Échap, le voile ou une navigation).
-- Les entrées fixes sont dans `layout/navigation.ts` ; les Projets sont lus depuis l'API.
-- Les alertes (`Alertes`) vivent dans la barre latérale : En revue en violet, Destination suspendue en ambre.
-- `PublicPage` : écrans sans session (setup, connexion, invitation), colonne de 400 px centrée.
+- Three planes, from darkest to lightest: the frame, the sheet, then the surfaces. An object stands out from its surroundings by moving to the next plane, never through a shadow.
+- `Layout`: 232 px sticky sidebar, on the frame; the content is a sheet laid beside it. Below 860 px, the sheet fills the whole screen. Below 860 px, it becomes a drawer opened by "Menu" (closed by Escape, the backdrop or a navigation).
+- Fixed entries are in `layout/navigation.ts`; Projects are read from the API.
+- Alerts (`Alerts`) live in the sidebar: In review in violet, suspended Destination in amber.
+- `PublicPage`: screens without a session (setup, sign in, invitation), a centered 400 px column.
+- `LocaleSelect`: the language, per browser; in the sidebar's account block and at the foot of a `PublicPage`.
 
 ## Primitives
 
-| Primitive                                                                          | Où                  | Quand                                                                                                                                                 |
-| ---------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PageHeader`                                                                       | `ui.tsx`            | En tête de chaque écran connecté : le seul `h1`, un lien de retour facultatif, une description, les actions de l'écran.                               |
-| `EmptyState`                                                                       | `ui.tsx`            | Une liste ou une section sans contenu : dire pourquoi, proposer l'action qui la remplit.                                                              |
-| `Loading`                                                                          | `ui.tsx`            | Pendant une requête : silhouettes de lignes, annoncées « Chargement… ».                                                                               |
-| `ErrorMessage`                                                                     | `ui.tsx`            | Erreur d'API, en clair et avec l'action à faire (codes dans `MESSAGES`). `onRetry` ajoute « Réessayer » sur une lecture qui a échoué.                 |
-| `Field`                                                                            | `ui.tsx`            | Un champ texte avec libellé et aide.                                                                                                                  |
-| `CopyableValue`                                                                    | `ui.tsx`            | Clé ou lien à copier.                                                                                                                                 |
-| `ConfirmAction`                                                                    | `ui.tsx`            | Action irréversible derrière un bouton : la confirmation s'ouvre sur place, avec le focus sur Annuler. Échap annule et rend le focus au bouton.       |
-| `Confirmation`                                                                     | `ui.tsx`            | La même question, déclenchée autrement, par exemple un enregistrement qui efface des données (rétention plus courte).                                 |
-| `StatutEnregistrement`                                                             | `ui.tsx`            | « Enregistré. » après un enregistrement, annoncé aux lecteurs d'écran. Le formulaire l'efface dès qu'il change (`onChange={() => mutation.reset()}`). |
-| `useFocusAuRetour`                                                                 | `ui.tsx`            | Rend le focus au bouton qui a ouvert un formulaire (Corriger, Modifier) quand celui-ci se referme.                                                    |
-| `LienExterne`                                                                      | `ui.tsx`            | Toute URL venue de l'extérieur (lien seulement en http(s)).                                                                                           |
-| `Pastille`                                                                         | `ui.tsx`            | Un État ou un Statut, colorée par un ton : `neutre`, `succes`, `revue`, `danger`, `retenu`, `eteint`.                                                 |
-| `JaugeGravite`                                                                     | `retour-badges.tsx` | La Gravité d'un Retour ; `grande` dans le détail. Pointillés sans Gravité.                                                                            |
-| `PastilleEtat`, `PastilleStatutEnvoi`, `PastilleEtatDestination`, `BadgeIncertain` | `retour-badges.tsx` | Les valeurs du domaine, avec leur ton fixé une fois pour toutes.                                                                                      |
+| Primitive                                                                   | Where                 | When                                                                                                                                          |
+| --------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PageHeader`                                                                | `ui.tsx`              | At the top of every signed-in screen: the only `h1`, an optional back link, a description, the screen's actions.                              |
+| `EmptyState`                                                                | `ui.tsx`              | A list or section with no content: say why, offer the action that fills it.                                                                   |
+| `Loading`                                                                   | `ui.tsx`              | During a request: row skeletons, announced as "Loading…".                                                                                     |
+| `ErrorMessage`                                                              | `ui.tsx`              | API error, in plain words and with the action to take (codes in the dictionaries' `apiErrors`). `onRetry` adds "Retry" on a read that failed. |
+| `Field`                                                                     | `ui.tsx`              | A text field with a label and help text.                                                                                                      |
+| `CopyableValue`                                                             | `ui.tsx`              | Key or link to copy.                                                                                                                          |
+| `ConfirmAction`                                                             | `ui.tsx`              | Irreversible action behind a button: the confirmation opens in place, with focus on Cancel. Escape cancels and returns focus to the button.   |
+| `Confirmation`                                                              | `ui.tsx`              | The same question, triggered another way, for example a save that erases data (shorter retention).                                            |
+| `SaveStatus`                                                                | `ui.tsx`              | "Saved." after a save, announced to screen readers. The form clears it as soon as it changes (`onChange={() => mutation.reset()}`).           |
+| `useReturnFocus`                                                            | `ui.tsx`              | Returns focus to the button that opened a form (Correct, Edit) when the form closes.                                                          |
+| `ExternalLink`                                                              | `ui.tsx`              | Any URL coming from outside (a link only for http(s)).                                                                                        |
+| `Pill`                                                                      | `ui.tsx`              | A State or a Status, colored by a tone: `neutral`, `success`, `review`, `danger`, `held`, `off`.                                              |
+| `SeverityGauge`                                                             | `feedback-badges.tsx` | A Feedback's Severity; `large` in the detail view. Dotted when there is no Severity.                                                          |
+| `StatePill`, `DeliveryStatusPill`, `DestinationStatePill`, `UncertainBadge` | `feedback-badges.tsx` | Domain values, with their tone set once and for all.                                                                                          |
 
 ### Classes
 
-- `.encadre` : un panneau, pour un objet entier (un Verdict, une Destination, une section de réglages).
-- `.liste` : une surface avec des séparateurs, pour une collection. Pas de carte par élément.
-- `.formulaire`, `.champ`, `fieldset.champ` + `.case` (cases à cocher en pastilles), `.actions` (rangée de boutons), `.aide`, `.discret`.
-- `.alerte` (erreur), `.avertissement` (attention, ambre), `.vide` (état vide), `.meta` (métadonnées en ligne), `.proprietes` (paires libellé / valeur).
+- `.panel`: a panel, for a whole object (a Verdict, a Destination, a settings section).
+- `.list`: a surface with separators, for a collection. No card per item.
+- `.form`, `.field`, `fieldset.field` + `.check` (checkboxes as pills), `.actions` (row of buttons), `.help`, `.muted`.
+- `.alert` (error), `.warning` (caution, amber), `.empty` (empty state), `.meta` (inline metadata), `.properties` (label / value pairs).
 
-### Boutons
+### Buttons
 
-- `button` sans classe : **plein**, l'action principale. Au plus un par écran ou par panneau.
-- `.secondaire` : contour, pour toutes les autres actions.
-- `.fantome` : sans contour, pour Annuler et les actions de faible poids.
-- `.danger` : plein rouge, seulement pour confirmer une suppression (dans `ConfirmAction`).
+- `button` with no class: **solid**, the primary action. At most one per screen or per panel.
+- `.secondary`: outlined, for all other actions.
+- `.ghost`: no outline, for Cancel and low-weight actions.
+- `.danger`: solid red, only to confirm a deletion (in `ConfirmAction`).
 
-## Motifs d'écran
+## Screen patterns
 
-Chaque écran connecté commence par `PageHeader`. Les motifs ci-dessous sont les formes déjà résolues : un nouvel écran de la même forme les reprend.
+Every signed-in screen starts with `PageHeader`. The patterns below are the shapes already solved: a new screen of the same shape reuses them.
 
-- **Liste à trier** (Boîte de réception, `screens/Retours.tsx`) :
-  - `.vues` : raccourcis vers un filtre, en liens avec `aria-current` ;
-  - `.filtres` / `.filtre` : pastilles qui portent un `select` natif et passent en trait plein quand elles sont actives ;
-  - `.liste-retours` : une surface, des groupes par jour (`.groupe-jour`) et des lignes `.ligne-retour` en grille à colonnes fixes ;
-  - toute la ligne ouvre l'élément : un lien étiré par `::after`.
+- **List to triage** (Inbox, `screens/Feedbacks.tsx`):
+  - `.views`: shortcuts to a filter, as links with `aria-current`;
+  - `.filters` / `.filter`: pills that carry a native `select` and switch to a solid outline when active;
+  - `.feedback-list`: one surface, groups by day (`.day-group`) and `.feedback-row` rows in a fixed-column grid;
+  - the whole row opens the item: a link stretched by `::after`.
 
-  Un résultat vide propose « Effacer les filtres ».
+  An empty result offers "Clear filters".
 
-- **Lecture en volet** (Boîte de réception, au-dessus de 1200 px) :
-  - comme une boîte mail, le Retour s'ouvre dans un volet (`.volet-retour`) à côté de la liste, qui se resserre ;
-  - la route reste `/retours/:id`, imbriquée sous `/retours` ; les filtres suivent dans l'URL ;
-  - la fiche sait qu'elle est dans le volet par le contexte `VoletRetour` : elle propose « Fermer », et son titre devient un `h2` ;
-  - J et K passent au Retour suivant ou précédent, et Échap ferme le volet ;
-  - lignes et fiche s'adaptent à la place qu'elles ont, par des container queries (`liste`, `fiche`) plutôt que par la largeur de l'écran.
-    Sous 1200 px, le Retour s'ouvre en pleine page.
+- **Reading pane** (Inbox, above 1200 px):
+  - like a mail client, the Feedback opens in a pane (`.feedback-pane`) beside the list, which narrows;
+  - the route stays `/feedbacks/:id`, nested under `/feedbacks`; the filters follow in the URL;
+  - the detail view knows it is in the pane through the `FeedbackPane` context: it offers "Close", and its title becomes an `h2`;
+  - J and K move to the next or previous Feedback, and Escape closes the pane;
+  - rows and detail adapt to the space they have, through container queries (`list`, `detail`) rather than the screen width.
+    Below 1200 px, the Feedback opens as a full page.
 
-- **Fiche d'un élément** (détail d'un Retour, `screens/Retour.tsx`) :
-  - `.fil` : retour à la liste d'origine, avec ses filtres, et Précédent / Suivant d'après l'état de navigation `ListeState` ;
-  - `.retour-grille` : contenu et décision à gauche, propriétés à droite (`.retour-cote`, sections à plat séparées par des filets). Une seule colonne sous 1100 px ;
-  - une décision qui attend un Membre se met en bandeau (`.bandeau-revue`), au-dessus de tout le reste.
-- **Objet à onglets** (Projet, `EnteteProjet` dans `screens/Projet.tsx`) :
-  - un en-tête commun et des `.onglets` en `NavLink`, une route par onglet ;
-  - l'action principale de l'onglet va dans l'en-tête.
-- **Collection configurable** (Destinations, Projets) :
-  - une ligne par objet (`.destination`) ;
-  - l'ajout est l'action de l'en-tête et ouvre le formulaire en haut de la liste. Il est ouvert d'office quand la collection est vide, et l'état vide (`EmptyState`) dit quoi y mettre ;
-  - un objet en difficulté dit pourquoi et quoi faire (`.probleme`).
-- **Réglages** (Paramètres, Réglages d'un Projet) : une colonne `.reglages` de 760 px au plus, un panneau `.encadre` par sujet, et un bouton plein par panneau.
+- **Item detail** (a Feedback's detail, `screens/Feedback.tsx`):
+  - `.trail`: back to the originating list, with its filters, and Previous / Next from the `ListState` navigation state;
+  - `.feedback-grid`: content and decision on the left, properties on the right (`.feedback-side`, flat sections separated by hairlines). A single column below 1100 px;
+  - a decision awaiting a Member is shown as a banner (`.review-banner`), above everything else.
+- **Tabbed object** (Project, `ProjectHeader` in `screens/Project.tsx`):
+  - a shared header and `.tabs` as `NavLink`s, one route per tab;
+  - the tab's primary action goes in the header.
+- **Configurable collection** (Destinations, Projects):
+  - one row per object (`.destination`);
+  - adding is the header's action and opens the form at the top of the list. It is open by default when the collection is empty, and the empty state (`EmptyState`) says what to put in it;
+  - an object in trouble says why and what to do (`.problem`).
+- **Settings** (Settings, a Project's settings): a `.settings` column of at most 760 px, one `.panel` per topic, and one solid button per panel.
 
-## Règles de rédaction
+## Writing rules
 
-- Un bouton dit ce qu'il fait, avec le nom du domaine : « Ajouter la Destination », « Réhabiliter », pas « Valider le formulaire ».
-- Une action garde le même nom dans tout le parcours (bouton, confirmation, message de succès).
-- Une erreur dit ce qui s'est passé et quoi faire, sans s'excuser.
-- Dans les listes, les dates sont relatives (`formatDateRelative`), et la date exacte s'affiche en `title`. Les groupes par jour utilisent `formatJour`.
-- Un état vide invite à agir.
-- Pas de majuscules pour les libellés, pas de point médian pour joindre des métadonnées : chaque métadonnée est un élément à part.
+- A button says what it does, with the domain name: "Add Destination", "Reinstate", not "Submit form".
+- An action keeps the same name throughout the flow (button, confirmation, success message).
+- An error says what happened and what to do, without apologizing.
+- In lists, dates are relative (`format.dateRelative`), and the exact date shows in `title`. Day groups use `format.day`.
+- No copy in components: every string lives in `src/i18n/en.ts` (the source of the keys) and `src/i18n/fr.ts`, read with `useT()` or `useI18n()` (which also gives `format`, the dates and sizes of the active locale). A sentence with a number is a function, so each language handles its own plurals.
+- An empty state invites action.
+- No capitals for labels, no middle dot to join metadata: each piece of metadata is its own element.

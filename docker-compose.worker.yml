@@ -1,9 +1,9 @@
-# Le worker dans ses propres conteneurs, pour le répliquer sans répliquer l'api :
+# The worker in its own containers, to replicate it without replicating the api:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.worker.yml up -d --scale worker=3
 #
-# Le service `nudge` ne sert plus que l'api ; Triage et Dispatch passent au service
-# `worker`, la même image démarrée avec NUDGE_ROLES=worker.
+# The `nudge` service then only serves the api; Triage and Dispatch move to the
+# `worker` service, the same image started with NUDGE_ROLES=worker.
 
 services:
   nudge:

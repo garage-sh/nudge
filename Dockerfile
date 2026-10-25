@@ -1,26 +1,26 @@
 # syntax=docker/dockerfile:1
 #
-# Les deux images de nudge, construites depuis une même étape de build :
+# The two nudge images, built from the same build stage:
 #
-#   docker build --target server    -t nudge .            # l'api et le worker (NUDGE_ROLES)
+#   docker build --target server    -t nudge .            # the api and the worker (NUDGE_ROLES)
 #   docker build --target dashboard -t nudge-dashboard .
 #
-# Publiées sur ghcr.io/garage-sh/nudge et ghcr.io/garage-sh/nudge-dashboard par la CI
-# (.github/workflows/images.yml). Pour les construire en local :
+# Published to ghcr.io/garage-sh/nudge and ghcr.io/garage-sh/nudge-dashboard by CI
+# (.github/workflows/images.yml). To build them locally:
 # `docker compose -f docker-compose.yml -f docker-compose.build.yml build`.
 
-# Les images de base sont épinglées par digest : elles ne changent pas sous un même tag
-# de nudge. Dependabot propose le nouveau digest quand Alpine ou Node sont corrigés.
+# The base images are pinned by digest: they do not change under the same nudge tag.
+# Dependabot proposes the new digest when Alpine or Node are patched.
 
-# --- Build : dépendances complètes, puis builds de toutes les apps et du Widget ----------
+# --- Build: full dependencies, then builds of all the apps and the Widget ----------------
 FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
 WORKDIR /app
 ENV YARN_ENABLE_TELEMETRY=0 TURBO_TELEMETRY_DISABLED=1
 
-# Les manifestes seuls d'abord : l'installation reste en cache tant qu'ils ne changent pas.
+# The manifests alone first: the install stays cached as long as they do not change.
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY .yarn/releases .yarn/releases
-# Les images Node récentes n'embarquent plus Yarn : celui du dépôt (`yarnPath`) suffit.
+# Recent Node images no longer ship Yarn: the repository's (`yarnPath`) is enough.
 RUN printf '#!/bin/sh\nexec node /app/.yarn/releases/yarn-*.cjs "$@"\n' > /usr/local/bin/yarn \
  && chmod +x /usr/local/bin/yarn
 COPY apps/api/package.json apps/api/
@@ -32,7 +32,7 @@ COPY packages/eslint-config/package.json packages/eslint-config/
 COPY packages/judge/package.json packages/judge/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/shared/package.json packages/shared/
-COPY packages/stockage/package.json packages/stockage/
+COPY packages/storage/package.json packages/storage/
 COPY packages/tsup-config/package.json packages/tsup-config/
 COPY packages/typescript-config/package.json packages/typescript-config/
 COPY packages/widget/package.json packages/widget/
@@ -45,37 +45,37 @@ COPY . .
 RUN yarn turbo run build \
       --filter=@nudge/api --filter=@nudge/dashboard --filter=@nudge/widget
 
-# Ce dont le serveur (api et worker) a besoin à l'exécution : dépendances de production,
-# builds des packages et migrations SQL. Rien de leurs sources ni des outils de build.
+# What the server (api and worker) needs at runtime: production dependencies, package
+# builds and SQL migrations. None of their sources nor the build tools.
 RUN --mount=type=cache,target=/root/.yarn/berry/cache \
     yarn workspaces focus @nudge/api --production \
  && mkdir -p /prod \
  && cp -a package.json node_modules /prod/ \
  && for ws in apps/api packages/core packages/database packages/destinations \
-              packages/judge packages/shared packages/stockage packages/worker; do \
+              packages/judge packages/shared packages/storage packages/worker; do \
       mkdir -p "/prod/$ws" && cp -a "$ws/package.json" "$ws/dist" "/prod/$ws/"; \
     done \
  && cp -a packages/database/drizzle /prod/packages/database/
 
-# --- server : l'api et le worker, dans un ou plusieurs processus ----------------------
-# NUDGE_ROLES choisit le rôle : `api`, `worker`, ou les deux (par défaut). Le
-# service `migrate` du compose y lance `node apps/api/dist/migrate.js`.
+# --- server: the api and the worker, in one or more processes ------------------------
+# NUDGE_ROLES picks the role: `api`, `worker`, or both (the default). The compose
+# `migrate` service runs `node apps/api/dist/migrate.js` in it.
 FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS server
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge" \
-      org.opencontainers.image.description="Collecte, trie et dispatche les retours utilisateurs : api et worker." \
+      org.opencontainers.image.description="Collects, triages and dispatches user feedback: api and worker." \
       org.opencontainers.image.source="https://github.com/garage-sh/nudge" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 ENV NODE_ENV=production
 WORKDIR /app
-# Le volume des Captures (stockage disque) : un volume nommé neuf hérite de ce
-# propriétaire, et le serveur tourne en `node`.
+# The Captures volume (disk storage): a new named volume inherits this owner, and the
+# server runs as `node`.
 RUN mkdir -p /var/lib/nudge/captures && chown node:node /var/lib/nudge/captures
 COPY --from=build /prod /app
 USER node
 EXPOSE 3000
-# Un processus sans le rôle api n'écoute pas : il est sain tant qu'il tourne.
+# A process without the api role does not listen: it is healthy as long as it runs.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD case ",${NUDGE_ROLES:-api,worker}," in \
         *,api,*) wget -q -O /dev/null "http://127.0.0.1:${NUDGE_API_PORT:-3000}/api/setup" ;; \
@@ -83,16 +83,16 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
       esac || exit 1
 CMD ["node", "apps/api/dist/main.js"]
 
-# --- dashboard : fichiers statiques, Widget et proxy vers l'api (même origine) --------
+# --- dashboard: static files, Widget and proxy to the api (same origin) --------------
 FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS dashboard
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge-dashboard" \
-      org.opencontainers.image.description="Dashboard et Widget de nudge, servis par nginx avec un proxy vers l'api." \
+      org.opencontainers.image.description="nudge dashboard and Widget, served by nginx with a proxy to the api." \
       org.opencontainers.image.source="https://github.com/garage-sh/nudge" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
-# Adresse de l'api vue depuis ce conteneur, et serveur DNS qui la résout (celui de
-# Docker) : relu toutes les 10 s, l'api peut redémarrer ou avoir plusieurs répliques.
+# Address of the api as seen from this container, and the DNS server that resolves it
+# (Docker's): re-resolved every 10 s, the api can restart or have several replicas.
 ENV NUDGE_API_UPSTREAM=http://nudge:3000 NUDGE_DNS_RESOLVER=127.0.0.11
 COPY apps/dashboard/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/dashboard/dist /usr/share/nginx/html

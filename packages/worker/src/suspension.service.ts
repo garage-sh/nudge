@@ -1,68 +1,68 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   DISPATCH_JOB,
-  idJobLiberation,
+  releaseJobId,
   type DestinationAdapterResolver,
   type DispatchJob,
-  type ResultatEnvoi,
-  type SanteDestination,
+  type DeliveryResult,
+  type DestinationHealth,
   type SecretCipher,
 } from '@nudge/core';
-import { destinations, envois, toDestinationConfiguree, type Db } from '@nudge/database';
-import { messageErreur } from '@nudge/shared';
+import { destinations, deliveries, toConfiguredDestination, type Db } from '@nudge/database';
+import { errorMessage } from '@nudge/shared';
 import type { Queue } from 'bullmq';
 import { and, eq, lte, ne, sql } from 'drizzle-orm';
 import {
-  SUSPENSION_PAR_DEFAUT,
-  type OptionsSuspension,
+  DEFAULT_SUSPENSION,
+  type SuspensionOptions,
   type Suspension,
-  type SurSuspension,
+  type OnSuspension,
   type WorkerOptions,
 } from './options.js';
-import { avecDelai } from './delai.js';
+import { withTimeout } from './timeout.js';
 import {
   DB,
   DESTINATION_ADAPTER_RESOLVER,
   DISPATCH_QUEUE_TOKEN,
   OPTIONS,
   SECRET_CIPHER,
-  SUR_SUSPENSION,
+  ON_SUSPENSION,
 } from './tokens.js';
 
 type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
-type Echec = Extract<ResultatEnvoi, { statut: 'echec' }>;
+type Failure = Extract<DeliveryResult, { status: 'failed' }>;
 
-/** Ce que devient un Envoi après un échec. */
-export type IssueEchec = 'retenu' | 'a_retenter' | 'echec';
+/** What a Delivery becomes after a failure. */
+export type FailureOutcome = 'held' | 'retry' | 'failed';
 
-/** Au-delà, une sonde sans réponse compte comme injoignable. */
-const DELAI_SONDE_MS = 10_000;
+/** Beyond this, an unanswered probe counts as unreachable. */
+const PROBE_TIMEOUT_MS = 10_000;
 
-const motif = (classe: string, message: string) => `${classe}: ${message}`;
+const reason = (failureClass: string, message: string) => `${failureClass}: ${message}`;
 
-/** Un Envoi précis, tant qu'il attend sa livraison. */
-const envoiEnAttente = (envoiId: string) =>
-  and(eq(envois.id, envoiId), eq(envois.statut, 'en_attente'));
+/** One specific Delivery, as long as it awaits delivery. */
+const pendingDelivery = (deliveryId: string) =>
+  and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'pending'));
 
 /**
- * Issue des Envois et Suspension des Destinations. Chaque transition est un UPDATE
- * conditionnel sur l'état courant : deux workers qui échouent en même temps ne
- * suspendent la Destination qu'une fois, une sonde ne réactive pas une Destination
- * déjà réactivée, et un Envoi ne change de statut que depuis celui qu'on a lu.
+ * Outcome of Deliveries and Suspension of Destinations. Every transition is an UPDATE
+ * conditional on the current state: two workers failing at the same time suspend the
+ * Destination only once, a probe does not reactivate a Destination already
+ * reactivated, and a Delivery only changes status from the one that was read.
  *
- * - `transient` : un échec consécutif de plus ; au seuil, la Destination est Suspendue ;
- * - `auth` : la Destination est Suspendue aussitôt ;
- * - `permanent` : l'Envoi échoue ; la Destination a répondu, la série repart de zéro.
+ * - `transient`: one more consecutive failure; at the threshold, the Destination is Suspended;
+ * - `auth`: the Destination is Suspended at once;
+ * - `permanent`: the Delivery fails; the Destination answered, the streak starts over.
  *
- * L'Envoi d'une Destination Suspendue est retenu, sans appel sortant. Les Envois
- * retenus d'une Destination active sont remis en queue à chaque passage de la sonde,
- * jusqu'à ce que leur job les reprenne : une libération interrompue (redémarrage,
- * Redis indisponible) est rattrapée au passage suivant.
+ * The Delivery of a Suspended Destination is held, without an outgoing call. The held
+ * Deliveries of an active Destination are queued again on every probe run, until their
+ * job picks them up: an interrupted release (restart, Redis unavailable) is caught up
+ * on the next run.
  */
 @Injectable()
 export class SuspensionService {
   private readonly logger = new Logger(SuspensionService.name);
-  private readonly politique: OptionsSuspension;
+  private readonly policy: SuspensionOptions;
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -70,262 +70,260 @@ export class SuspensionService {
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
-    @Inject(SUR_SUSPENSION) private readonly surSuspension: SurSuspension,
+    @Inject(ON_SUSPENSION) private readonly onSuspension: OnSuspension,
     @Inject(OPTIONS) options: WorkerOptions,
   ) {
-    this.politique = options.suspension ?? SUSPENSION_PAR_DEFAUT;
+    this.policy = options.suspension ?? DEFAULT_SUSPENSION;
   }
 
-  /** Retient un Envoi en attente, sans appel sortant (sa Destination est Suspendue). */
-  async retenir(envoiId: string): Promise<void> {
+  /** Holds a pending Delivery, without an outgoing call (its Destination is Suspended). */
+  async hold(deliveryId: string): Promise<void> {
     await this.db
-      .update(envois)
-      .set({ statut: 'retenu', retenuLe: sql`now()` })
-      .where(envoiEnAttente(envoiId));
+      .update(deliveries)
+      .set({ status: 'held', heldAt: sql`now()` })
+      .where(pendingDelivery(deliveryId));
   }
 
   /**
-   * Reprend un Envoi retenu dont la Destination est active : il repasse en attente.
-   * Rend faux s'il n'était plus retenu (un autre job l'a déjà repris).
+   * Resumes a held Delivery whose Destination is active: it goes back to pending.
+   * Returns false if it was no longer held (another job already resumed it).
    */
-  async reprendre(envoiId: string): Promise<boolean> {
-    const repris = await this.db
-      .update(envois)
-      .set({ statut: 'en_attente', retenuLe: null })
-      .where(and(eq(envois.id, envoiId), eq(envois.statut, 'retenu')))
-      .returning({ id: envois.id });
-    return repris.length > 0;
+  async resume(deliveryId: string): Promise<boolean> {
+    const resumed = await this.db
+      .update(deliveries)
+      .set({ status: 'pending', heldAt: null })
+      .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'held')))
+      .returning({ id: deliveries.id });
+    return resumed.length > 0;
   }
 
   /**
-   * Un job de libération arrivé quand la Destination est de nouveau Suspendue : la
-   * retenue recommence, et la prochaine libération aura un nouvel id de job.
+   * A release job that arrived when the Destination is Suspended again: the hold starts
+   * over, and the next release will have a new job id.
    */
-  async prolongerRetenue(envoiId: string): Promise<void> {
+  async extendHold(deliveryId: string): Promise<void> {
     await this.db
-      .update(envois)
-      .set({ retenuLe: sql`now()` })
-      .where(and(eq(envois.id, envoiId), eq(envois.statut, 'retenu')));
+      .update(deliveries)
+      .set({ heldAt: sql`now()` })
+      .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'held')));
   }
 
-  /** L'Envoi est livré ; la série d'échecs consécutifs de sa Destination repart de zéro. */
-  async apresLivraison(
-    envoi: { readonly id: string; readonly destinationId: string },
-    lienExterne: string | null,
+  /** The Delivery is delivered; its Destination's consecutive failure streak starts over. */
+  async afterDelivery(
+    delivery: { readonly id: string; readonly destinationId: string },
+    externalUrl: string | null,
   ): Promise<void> {
     await this.db
-      .update(envois)
+      .update(deliveries)
       .set({
-        statut: 'livre',
-        lienExterne,
-        tentatives: sql`${envois.tentatives} + 1`,
-        derniereErreur: null,
+        status: 'delivered',
+        externalUrl,
+        attempts: sql`${deliveries.attempts} + 1`,
+        lastError: null,
       })
-      .where(envoiEnAttente(envoi.id));
-    await this.remettreAZero(envoi.destinationId);
+      .where(pendingDelivery(delivery.id));
+    await this.resetFailures(delivery.destinationId);
   }
 
   /**
-   * Enregistre l'échec d'un Envoi en attente et rend ce qu'il devient : retenu (sa
-   * Destination est, ou vient d'être, Suspendue), à retenter (transient sous le seuil)
-   * ou en échec (permanent, ou transient à la dernière tentative).
+   * Records the failure of a pending Delivery and returns what it becomes: held (its
+   * Destination is, or just became, Suspended), to retry (transient below the
+   * threshold) or failed (permanent, or transient on the last attempt).
    *
-   * `derniereTentative` : BullMQ ne relancera plus le job. `interne` : l'échec vient de
-   * nudge et non de la cible (D25) ; il est retenté mais ne compte pas pour la Suspension.
+   * `lastAttempt`: BullMQ will not run the job again. `internal`: the failure comes from
+   * nudge and not from the target (D25); it is retried but does not count toward Suspension.
    */
-  async apresEchec(
-    envoi: { readonly id: string; readonly destinationId: string },
-    resultat: Echec,
-    { derniereTentative, interne }: { derniereTentative: boolean; interne: boolean },
-  ): Promise<IssueEchec> {
-    const tentatives = sql`${envois.tentatives} + 1`;
-    const derniereErreur = motif(resultat.classe, resultat.message);
+  async afterFailure(
+    delivery: { readonly id: string; readonly destinationId: string },
+    result: Failure,
+    { lastAttempt, internal }: { lastAttempt: boolean; internal: boolean },
+  ): Promise<FailureOutcome> {
+    const attempts = sql`${deliveries.attempts} + 1`;
+    const lastError = reason(result.failureClass, result.message);
 
-    if (resultat.classe === 'permanent') {
+    if (result.failureClass === 'permanent') {
       await this.db
-        .update(envois)
-        .set({ statut: 'echec', tentatives, derniereErreur })
-        .where(envoiEnAttente(envoi.id));
-      await this.remettreAZero(envoi.destinationId);
-      return 'echec';
+        .update(deliveries)
+        .set({ status: 'failed', attempts, lastError })
+        .where(pendingDelivery(delivery.id));
+      await this.resetFailures(delivery.destinationId);
+      return 'failed';
     }
-    const { classe, message } = resultat;
+    const { failureClass, message } = result;
 
-    const { issue, suspension } = await this.db.transaction(async (tx) => {
-      // Verrou jusqu'au commit : les échecs concurrents se comptent l'un après l'autre.
+    const { outcome, suspension } = await this.db.transaction(async (tx) => {
+      // Lock until commit: concurrent failures are counted one after the other.
       const [destination] = await tx
-        .select({ etat: destinations.etat })
+        .select({ state: destinations.state })
         .from(destinations)
-        .where(eq(destinations.id, envoi.destinationId))
+        .where(eq(destinations.id, delivery.destinationId))
         .for('update');
       let suspension: Suspension | null = null;
-      if (destination?.etat === 'active' && !interne) {
-        const seuilAtteint =
-          classe === 'transient' &&
-          (await this.compterEchec(tx, envoi.destinationId)) >= this.politique.seuilEchecs;
-        if (classe === 'auth' || seuilAtteint) {
-          suspension = await this.suspendre(tx, envoi.destinationId, classe, message);
+      if (destination?.state === 'active' && !internal) {
+        const thresholdReached =
+          failureClass === 'transient' &&
+          (await this.countFailure(tx, delivery.destinationId)) >= this.policy.failureThreshold;
+        if (failureClass === 'auth' || thresholdReached) {
+          suspension = await this.suspend(tx, delivery.destinationId, failureClass, message);
         }
       }
 
-      const suspendue = destination?.etat === 'suspendue' || suspension !== null;
-      if (suspendue) {
+      const suspended = destination?.state === 'suspended' || suspension !== null;
+      if (suspended) {
         await tx
-          .update(envois)
-          .set({ statut: 'retenu', retenuLe: sql`now()`, tentatives, derniereErreur })
-          .where(envoiEnAttente(envoi.id));
-        return { issue: 'retenu' as const, suspension };
+          .update(deliveries)
+          .set({ status: 'held', heldAt: sql`now()`, attempts, lastError })
+          .where(pendingDelivery(delivery.id));
+        return { outcome: 'held' as const, suspension };
       }
-      if (derniereTentative) {
+      if (lastAttempt) {
         await tx
-          .update(envois)
-          .set({ statut: 'echec', tentatives, derniereErreur })
-          .where(envoiEnAttente(envoi.id));
-        return { issue: 'echec' as const, suspension };
+          .update(deliveries)
+          .set({ status: 'failed', attempts, lastError })
+          .where(pendingDelivery(delivery.id));
+        return { outcome: 'failed' as const, suspension };
       }
-      await tx.update(envois).set({ tentatives, derniereErreur }).where(envoiEnAttente(envoi.id));
-      return { issue: 'a_retenter' as const, suspension };
+      await tx.update(deliveries).set({ attempts, lastError }).where(pendingDelivery(delivery.id));
+      return { outcome: 'retry' as const, suspension };
     });
 
-    if (suspension) await this.notifier(suspension);
-    return issue;
+    if (suspension) await this.notify(suspension);
+    return outcome;
   }
 
   /**
-   * Tâche planifiée : sonde chaque Destination Suspendue dont le refroidissement est
-   * écoulé et réactive celles qui répondent, puis remet en queue les Envois retenus
-   * de toute Destination active.
+   * Scheduled task: probes each Suspended Destination whose cooldown has elapsed and
+   * reactivates those that answer, then queues again the held Deliveries of every
+   * active Destination.
    */
-  async sonder(): Promise<void> {
-    // Réserver la sonde en repoussant la suivante : deux passages concurrents ne
-    // sondent pas deux fois la même Destination.
-    const aSonder = await this.db
+  async probe(): Promise<void> {
+    // Reserve the probe by pushing back the next one: two concurrent runs do not probe
+    // the same Destination twice.
+    const toProbe = await this.db
       .update(destinations)
-      .set({ prochaineSondeLe: this.finRefroidissement() })
-      .where(
-        and(eq(destinations.etat, 'suspendue'), lte(destinations.prochaineSondeLe, sql`now()`)),
-      )
+      .set({ nextProbeAt: this.cooldownEnd() })
+      .where(and(eq(destinations.state, 'suspended'), lte(destinations.nextProbeAt, sql`now()`)))
       .returning();
-    for (const destination of aSonder) {
-      const sante = await this.sante(destination);
-      if (!sante.joignable) {
+    for (const destination of toProbe) {
+      const health = await this.health(destination);
+      if (!health.reachable) {
         this.logger.warn(
-          `Destination ${destination.id} toujours injoignable (${motif(sante.classe, sante.message)}) : reste Suspendue`,
+          `Destination ${destination.id} still unreachable (${reason(health.failureClass, health.message)}): stays Suspended`,
         );
         continue;
       }
-      const [reactivee] = await this.db
+      const [reactivated] = await this.db
         .update(destinations)
         .set({
-          etat: 'active',
-          echecsConsecutifs: 0,
-          suspendueLe: null,
-          motifSuspension: null,
-          prochaineSondeLe: null,
+          state: 'active',
+          consecutiveFailures: 0,
+          suspendedAt: null,
+          suspensionReason: null,
+          nextProbeAt: null,
         })
-        .where(and(eq(destinations.id, destination.id), eq(destinations.etat, 'suspendue')))
+        .where(and(eq(destinations.id, destination.id), eq(destinations.state, 'suspended')))
         .returning({ id: destinations.id });
-      if (reactivee) this.logger.log(`Destination ${destination.id} joignable : de nouveau active`);
+      if (reactivated) this.logger.log(`Destination ${destination.id} reachable: active again`);
     }
-    await this.liberer();
+    await this.release();
   }
 
   /**
-   * Seul passage d'une Destination en Suspendue : conditionnel sur `active`, il rend
-   * `null` si elle l'était déjà. L'appelant notifie `SUR_SUSPENSION` après le commit.
+   * The only transition of a Destination to Suspended: conditional on `active`, it
+   * returns `null` if it already was. The caller notifies `ON_SUSPENSION` after the commit.
    */
-  private async suspendre(
+  private async suspend(
     tx: Transaction,
     destinationId: string,
-    classe: Suspension['classe'],
+    failureClass: Suspension['failureClass'],
     message: string,
   ): Promise<Suspension | null> {
-    const [suspendue] = await tx
+    const [suspended] = await tx
       .update(destinations)
       .set({
-        etat: 'suspendue',
-        suspendueLe: sql`now()`,
-        motifSuspension: motif(classe, message),
-        prochaineSondeLe: this.finRefroidissement(),
+        state: 'suspended',
+        suspendedAt: sql`now()`,
+        suspensionReason: reason(failureClass, message),
+        nextProbeAt: this.cooldownEnd(),
       })
-      .where(and(eq(destinations.id, destinationId), eq(destinations.etat, 'active')))
+      .where(and(eq(destinations.id, destinationId), eq(destinations.state, 'active')))
       .returning({
         destinationId: destinations.id,
-        projetId: destinations.projetId,
-        nom: destinations.nom,
-        suspendueLe: destinations.suspendueLe,
+        projectId: destinations.projectId,
+        name: destinations.name,
+        suspendedAt: destinations.suspendedAt,
       });
-    if (!suspendue?.suspendueLe) return null;
-    return { ...suspendue, suspendueLe: suspendue.suspendueLe, classe, message };
+    if (!suspended?.suspendedAt) return null;
+    return { ...suspended, suspendedAt: suspended.suspendedAt, failureClass, message };
   }
 
-  private async notifier(suspension: Suspension): Promise<void> {
+  private async notify(suspension: Suspension): Promise<void> {
     this.logger.warn(
-      `Destination ${suspension.destinationId} Suspendue (${motif(suspension.classe, suspension.message)})`,
+      `Destination ${suspension.destinationId} Suspended (${reason(suspension.failureClass, suspension.message)})`,
     );
     try {
-      await this.surSuspension(suspension);
-    } catch (erreur) {
+      await this.onSuspension(suspension);
+    } catch (error) {
       this.logger.error(
-        `Suspension de la Destination ${suspension.destinationId} non signalée : ${String(erreur)}`,
+        `Suspension of Destination ${suspension.destinationId} not reported: ${String(error)}`,
       );
     }
   }
 
   /**
-   * Remet en queue les Envois retenus des Destinations actives, sans les modifier : le
-   * job les reprend lui-même. L'id de job tient à la retenue en cours, de sorte qu'un
-   * passage suivant ne double pas un job encore en attente.
+   * Queues again the held Deliveries of the active Destinations, without modifying
+   * them: the job resumes them itself. The job id derives from the current hold, so
+   * that a later run does not double a job still waiting.
    */
-  private async liberer(): Promise<void> {
-    const retenus = await this.db
-      .select({ id: envois.id, retenuLe: envois.retenuLe })
-      .from(envois)
-      .innerJoin(destinations, eq(destinations.id, envois.destinationId))
-      .where(and(eq(envois.statut, 'retenu'), eq(destinations.etat, 'active')));
-    if (retenus.length === 0) return;
+  private async release(): Promise<void> {
+    const held = await this.db
+      .select({ id: deliveries.id, heldAt: deliveries.heldAt })
+      .from(deliveries)
+      .innerJoin(destinations, eq(destinations.id, deliveries.destinationId))
+      .where(and(eq(deliveries.status, 'held'), eq(destinations.state, 'active')));
+    if (held.length === 0) return;
     await this.dispatchQueue.addBulk(
-      retenus.map(({ id, retenuLe }) => ({
+      held.map(({ id, heldAt }) => ({
         name: DISPATCH_JOB,
-        data: { envoiId: id },
-        opts: { jobId: idJobLiberation(id, retenuLe) },
+        data: { deliveryId: id },
+        opts: { jobId: releaseJobId(id, heldAt) },
       })),
     );
   }
 
-  /** Un échec transient de plus ; rend la série en cours. */
-  private async compterEchec(tx: Transaction, destinationId: string): Promise<number> {
+  /** One more transient failure; returns the current streak. */
+  private async countFailure(tx: Transaction, destinationId: string): Promise<number> {
     const [destination] = await tx
       .update(destinations)
-      .set({ echecsConsecutifs: sql`${destinations.echecsConsecutifs} + 1` })
+      .set({ consecutiveFailures: sql`${destinations.consecutiveFailures} + 1` })
       .where(eq(destinations.id, destinationId))
-      .returning({ echecsConsecutifs: destinations.echecsConsecutifs });
-    return destination?.echecsConsecutifs ?? 0;
+      .returning({ consecutiveFailures: destinations.consecutiveFailures });
+    return destination?.consecutiveFailures ?? 0;
   }
 
-  private async sante(destination: typeof destinations.$inferSelect): Promise<SanteDestination> {
+  private async health(destination: typeof destinations.$inferSelect): Promise<DestinationHealth> {
     try {
-      const adaptateur = this.resolveDestinationAdapter(
-        toDestinationConfiguree(destination, this.cipher),
+      const adapter = this.resolveDestinationAdapter(
+        toConfiguredDestination(destination, this.cipher),
       );
-      return await avecDelai(
-        DELAI_SONDE_MS,
-        () => new Error(`sans réponse après ${DELAI_SONDE_MS} ms`),
-        () => adaptateur.healthCheck(),
+      return await withTimeout(
+        PROBE_TIMEOUT_MS,
+        () => new Error(`no response after ${PROBE_TIMEOUT_MS} ms`),
+        () => adapter.healthCheck(),
       );
-    } catch (erreur) {
-      return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
+    } catch (error) {
+      return { reachable: false, failureClass: 'transient', message: errorMessage(error) };
     }
   }
 
-  private async remettreAZero(destinationId: string): Promise<void> {
+  private async resetFailures(destinationId: string): Promise<void> {
     await this.db
       .update(destinations)
-      .set({ echecsConsecutifs: 0 })
-      .where(and(eq(destinations.id, destinationId), ne(destinations.echecsConsecutifs, 0)));
+      .set({ consecutiveFailures: 0 })
+      .where(and(eq(destinations.id, destinationId), ne(destinations.consecutiveFailures, 0)));
   }
 
-  private finRefroidissement() {
-    return sql`now() + ${this.politique.refroidissementMs} * interval '1 millisecond'`;
+  private cooldownEnd() {
+    return sql`now() + ${this.policy.cooldownMs} * interval '1 millisecond'`;
   }
 }

@@ -1,113 +1,117 @@
-import { GRAVITES, TYPES_RETOUR } from '@nudge/shared';
+import { SEVERITIES, FEEDBACK_TYPES } from '@nudge/shared';
+import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
-import { LIBELLES_GRAVITE, LIBELLES_TYPE } from '../../../libelles.js';
-import type { FormulaireTypeDestination } from './type-destination.js';
+import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
 
 type Mapping = Readonly<Record<string, string>>;
 
-interface ConfigSaisie {
-  readonly equipe: string;
-  readonly labels: { readonly types: Mapping; readonly gravites: Mapping };
+interface ConfigInput {
+  readonly team: string;
+  readonly labels: { readonly types: Mapping; readonly severities: Mapping };
 }
 
-const texte = (valeur: unknown): string => (typeof valeur === 'string' ? valeur : '');
+const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
-const mapping = (valeur: unknown): Mapping =>
-  valeur && typeof valeur === 'object'
+const mapping = (value: unknown): Mapping =>
+  value && typeof value === 'object'
     ? Object.fromEntries(
-        Object.entries(valeur).filter(
-          (entree): entree is [string, string] => typeof entree[1] === 'string',
+        Object.entries(value).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
         ),
       )
     : {};
 
-/** La config telle qu'enregistrée, lue sans faire confiance à sa forme. */
-function lire(config: Readonly<Record<string, unknown>>): ConfigSaisie {
+/** The config as saved, read without trusting its shape. */
+function read(config: Readonly<Record<string, unknown>>): ConfigInput {
   const labels = (config.labels ?? {}) as Record<string, unknown>;
   return {
-    equipe: texte(config.equipe),
-    labels: { types: mapping(labels.types), gravites: mapping(labels.gravites) },
+    team: text(config.team),
+    labels: { types: mapping(labels.types), severities: mapping(labels.severities) },
   };
 }
 
-/** Un label vidé n'est plus envoyé : pas de label pour ce Type ou cette Gravité. */
-function avecLabel(actuel: Mapping, cle: string, valeur: string): Mapping {
-  const { [cle]: _retire, ...reste } = actuel;
-  return valeur ? { ...reste, [cle]: valeur } : reste;
+/** A cleared label is no longer sent: no label for this type or Severity. */
+function withLabel(current: Mapping, key: string, value: string): Mapping {
+  const { [key]: _removed, ...rest } = current;
+  return value ? { ...rest, [key]: value } : rest;
 }
 
 /**
- * Linear : la clé d'API personnelle est un secret, saisi sans jamais être réaffiché ;
- * l'équipe et les labels sont désignés comme on les lit dans Linear.
+ * Linear: the personal API key is a secret, typed in and never shown again; the team
+ * and the labels are named as they read in Linear.
  */
-export const formulaireLinear: FormulaireTypeDestination<'linear'> = {
-  libelle: 'Linear',
-  configInitiale: { equipe: '', labels: { types: {}, gravites: {} } },
-  Champs: ({ idPrefixe, config, setConfig, secrets, setSecrets, secretsEnregistres }) => {
-    const saisie = lire(config);
-    const gardee = secretsEnregistres.includes('cleApi');
-    const changerLabel = (famille: 'types' | 'gravites', cle: string, valeur: string) =>
-      setConfig({
-        ...saisie,
-        labels: { ...saisie.labels, [famille]: avecLabel(saisie.labels[famille], cle, valeur) },
-      });
-    return (
-      <>
-        <Field
-          libelle="Clé d’API"
-          id={`${idPrefixe}-linear-cle`}
-          type="password"
-          autoComplete="off"
-          required={!gardee}
-          placeholder="lin_api_…"
-          value={secrets.cleApi ?? ''}
-          onChange={(e) => setSecrets({ ...secrets, cleApi: e.target.value })}
-          aide={
-            gardee
-              ? 'Une clé est enregistrée (chiffrée) : laissez vide pour la garder.'
-              : 'Linear › Paramètres › Sécurité et accès › Clés d’API personnelles. Stockée chiffrée, jamais réaffichée.'
-          }
-        />
-        <Field
-          libelle="Équipe"
-          id={`${idPrefixe}-linear-equipe`}
-          required
-          placeholder="ENG"
-          value={saisie.equipe}
-          onChange={(e) => setConfig({ ...saisie, equipe: e.target.value })}
-          aide="La clé de l’équipe : les lettres avant le numéro des issues (ENG dans ENG-123)."
-        />
-        <fieldset className="champ">
-          <legend>Labels posés selon le Type</legend>
-          {TYPES_RETOUR.map((type) => (
-            <Field
-              key={type}
-              libelle={`Label du Type ${LIBELLES_TYPE[type]}`}
-              id={`${idPrefixe}-linear-type-${type}`}
-              value={saisie.labels.types[type] ?? ''}
-              onChange={(e) => changerLabel('types', type, e.target.value)}
-            />
-          ))}
-        </fieldset>
-        <fieldset className="champ">
-          <legend>Labels posés selon la Gravité</legend>
-          {GRAVITES.map((gravite) => (
-            <Field
-              key={gravite}
-              libelle={`Label de la Gravité ${LIBELLES_GRAVITE[gravite]}`}
-              id={`${idPrefixe}-linear-gravite-${gravite}`}
-              value={saisie.labels.gravites[gravite] ?? ''}
-              onChange={(e) => changerLabel('gravites', gravite, e.target.value)}
-            />
-          ))}
-          <p className="aide">
-            Le nom du label tel qu’il s’affiche dans Linear, de l’équipe ou de l’espace de travail.
-            Laissé vide : aucun label. Un label introuvable suspend la Destination.
-          </p>
-        </fieldset>
-      </>
-    );
-  },
-  resume: (config) => `Équipe ${lire(config).equipe}`,
-  secretsGeneres: {},
+function LinearFields({
+  idPrefix,
+  config,
+  setConfig,
+  secrets,
+  setSecrets,
+  savedSecrets,
+}: TypeFieldsProps) {
+  const t = useT();
+  const l = t.destinationTypes.linear;
+  const input = read(config);
+  const kept = savedSecrets.includes('apiKey');
+  const changeLabel = (family: 'types' | 'severities', key: string, value: string) =>
+    setConfig({
+      ...input,
+      labels: { ...input.labels, [family]: withLabel(input.labels[family], key, value) },
+    });
+  return (
+    <>
+      <Field
+        label={l.apiKey}
+        id={`${idPrefix}-linear-key`}
+        type="password"
+        autoComplete="off"
+        required={!kept}
+        placeholder="lin_api_…"
+        value={secrets.apiKey ?? ''}
+        onChange={(e) => setSecrets({ ...secrets, apiKey: e.target.value })}
+        help={kept ? t.destinationTypes.savedKey : l.apiKeyHelp}
+      />
+      <Field
+        label={l.team}
+        id={`${idPrefix}-linear-team`}
+        required
+        placeholder="ENG"
+        value={input.team}
+        onChange={(e) => setConfig({ ...input, team: e.target.value })}
+        help={l.teamHelp}
+      />
+      <fieldset className="field">
+        <legend>{l.typeLabels}</legend>
+        {FEEDBACK_TYPES.map((type) => (
+          <Field
+            key={type}
+            label={l.typeLabel(t.labels.feedbackType[type])}
+            id={`${idPrefix}-linear-type-${type}`}
+            value={input.labels.types[type] ?? ''}
+            onChange={(e) => changeLabel('types', type, e.target.value)}
+          />
+        ))}
+      </fieldset>
+      <fieldset className="field">
+        <legend>{l.severityLabels}</legend>
+        {SEVERITIES.map((severity) => (
+          <Field
+            key={severity}
+            label={l.severityLabel(t.labels.severity[severity])}
+            id={`${idPrefix}-linear-severity-${severity}`}
+            value={input.labels.severities[severity] ?? ''}
+            onChange={(e) => changeLabel('severities', severity, e.target.value)}
+          />
+        ))}
+        <p className="help">{l.labelsHelp}</p>
+      </fieldset>
+    </>
+  );
+}
+
+export const linearForm: DestinationTypeForm<'linear'> = {
+  label: 'Linear',
+  initialConfig: { team: '', labels: { types: {}, severities: {} } },
+  Fields: LinearFields,
+  summary: (config, t) => t.destinationTypes.linear.summary(read(config).team),
+  generatedSecrets: {},
 };

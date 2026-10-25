@@ -1,104 +1,104 @@
 import { randomUUID } from 'node:crypto';
-import type { ClasseEchec } from '@nudge/shared';
+import type { FailureClass } from '@nudge/shared';
 
 /**
- * Contrat des queues BullMQ entre l'api et le worker. La queue n'est qu'un
- * transport : l'état d'un Retour ou d'un Envoi se lit toujours en base.
+ * Contract of the BullMQ queues between the api and the worker. The queue is only a
+ * transport: the state of a Feedback or a Delivery is always read from the database.
  */
 
 export const TRIAGE_QUEUE = 'triage';
 export const DISPATCH_QUEUE = 'dispatch';
-/** Alertes des Membres, envoyées à la Destination d'alerte de l'Instance (retentées). */
-export const ALERTES_QUEUE = 'alertes';
-/** Tâches planifiées du worker (jobs répétables) : balayage des Retours restés Reçu… */
+/** Member alerts, sent to the Instance's Alert destination (retried). */
+export const ALERTS_QUEUE = 'alerts';
+/** The worker's scheduled tasks (repeatable jobs): sweep of Feedback left Received… */
 export const MAINTENANCE_QUEUE = 'maintenance';
-export const BALAYAGE_RECUS_JOB = 'balayage-recus';
-/** Balayage des Envois restés en attente sans job de dispatch vivant (D26). */
-export const BALAYAGE_ENVOIS_JOB = 'balayage-envois';
-/** Sonde des Destinations Suspendues dont le refroidissement est écoulé. */
-export const SONDE_SUSPENDUES_JOB = 'sonde-suspendues';
-/** Purge des Retours (et de leurs Captures) plus anciens que la durée de rétention. */
+export const SWEEP_RECEIVED_JOB = 'sweep-received';
+/** Sweep of the Deliveries left pending without a live dispatch job (D26). */
+export const SWEEP_DELIVERIES_JOB = 'sweep-deliveries';
+/** Probe of the Suspended Destinations whose cooldown has elapsed. */
+export const PROBE_SUSPENDED_JOB = 'probe-suspended';
+/** Purge of the Feedback (and its Captures) older than the retention period. */
 export const PURGE_RETENTION_JOB = 'purge-retention';
 
-/** Préfixe des clés BullMQ par défaut ; l'api et le worker doivent partager le même. */
+/** Default BullMQ key prefix; the api and the worker must share the same one. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';
 
-/** Nom des jobs des queues de Triage et de dispatch (une seule sorte de job chacune). */
+/** Job names of the Triage and dispatch queues (a single kind of job each). */
 export const TRIAGE_JOB = 'triage';
 export const DISPATCH_JOB = 'dispatch';
 
-/** Identifiant de job : `idJobTriage` ou `idJobRevue`. */
+/** Job id: `triageJobId` or `reviewJobId`. */
 export interface TriageJob {
-  readonly retourId: string;
+  readonly feedbackId: string;
 }
 
-/** Identifiant de job : `idJobDispatch`, puis `idJobRejeu`, `idJobLiberation`, `idJobBalayage`. */
+/** Job id: `dispatchJobId`, then `replayJobId`, `releaseJobId`, `sweepJobId`. */
 export interface DispatchJob {
-  readonly envoiId: string;
+  readonly deliveryId: string;
 }
 
-/** Premier job de Triage d'un Retour (ingestion, balayage D18) : il n'est mis en queue qu'une fois. */
-export const idJobTriage = (retourId: string): string => retourId;
+/** First Triage job of a Feedback (ingestion, sweep D18): it is queued only once. */
+export const triageJobId = (feedbackId: string): string => feedbackId;
 
-/** Un Retour ne redevient Trié par une revue qu'une fois : un job propre à la revue suffit. */
-export const idJobRevue = (retourId: string): string => `${retourId}-revue`;
-
-/**
- * Premier job de dispatch d'un Envoi (après le Triage ou un redispatch, D22) : un Envoi
- * n'est créé qu'une fois, son premier job aussi. Les jobs suivants ont un id propre,
- * cet id restant pris par le job terminé de la première tentative.
- */
-export const idJobDispatch = (envoiId: string): string => envoiId;
-
-/** Rejeu manuel d'un Envoi (D9) : un job neuf par demande du Membre. */
-export const idJobRejeu = (envoiId: string): string => `${envoiId}-rejeu-${randomUUID()}`;
+/** A Feedback becomes Triaged again through a review only once: a review-specific job is enough. */
+export const reviewJobId = (feedbackId: string): string => `${feedbackId}-review`;
 
 /**
- * Libération d'un Envoi retenu, propre à la retenue en cours : une sonde suivante ne
- * double pas un job encore en attente.
+ * First dispatch job of a Delivery (after Triage or a redispatch, D22): a Delivery is
+ * created only once, and so is its first job. Later jobs have their own id, since this
+ * one stays taken by the finished job of the first attempt.
  */
-export const idJobLiberation = (envoiId: string, retenuLe: Date | null): string =>
-  `${envoiId}-liberation-${retenuLe?.getTime() ?? 0}`;
+export const dispatchJobId = (deliveryId: string): string => deliveryId;
+
+/** Manual replay of a Delivery (D9): a fresh job per Member request. */
+export const replayJobId = (deliveryId: string): string => `${deliveryId}-replay-${randomUUID()}`;
 
 /**
- * Remise au dispatch par le balayage (D26), propre au passage : un job en échec garde
- * son id, l'Envoi repart avec toutes ses tentatives.
+ * Release of a held Delivery, specific to the current hold: a later probe does not
+ * duplicate a job that is still pending.
  */
-export const idJobBalayage = (envoiId: string, passage: number): string =>
-  `${envoiId}-balayage-${passage}`;
+export const releaseJobId = (deliveryId: string, heldAt: Date | null): string =>
+  `${deliveryId}-release-${heldAt?.getTime() ?? 0}`;
 
 /**
- * Un événement à signaler aux Membres. L'alerte est composée à l'envoi, d'après la
- * base ; l'identifiant du job (`idJobAlerte`) la rend unique par événement.
+ * Handing back to dispatch by the sweep (D26), specific to the pass: a failed job keeps
+ * its id, the Delivery starts again with all its attempts.
  */
-export type AlerteJob =
-  | { readonly evenement: 'retour_en_revue'; readonly retourId: string }
+export const sweepJobId = (deliveryId: string, pass: number): string =>
+  `${deliveryId}-sweep-${pass}`;
+
+/**
+ * An event to report to the Members. The alert is composed when sent, from the
+ * database; the job id (`alertJobId`) makes it unique per event.
+ */
+export type AlertJob =
+  | { readonly event: 'feedback_in_review'; readonly feedbackId: string }
   | {
-      readonly evenement: 'destination_suspendue';
+      readonly event: 'destination_suspended';
       readonly destinationId: string;
-      readonly classe: Exclude<ClasseEchec, 'permanent'>;
+      readonly failureClass: Exclude<FailureClass, 'permanent'>;
       readonly message: string;
-      /** ISO 8601 : distingue deux Suspensions successives de la même Destination. */
-      readonly suspendueLe: string;
+      /** ISO 8601: tells apart two successive Suspensions of the same Destination. */
+      readonly suspendedAt: string;
     };
 
-/** Un job par événement : un Retour ne passe En revue qu'une fois, une Suspension a sa date. */
-export function idJobAlerte(job: AlerteJob): string {
-  return job.evenement === 'retour_en_revue'
-    ? `en-revue-${job.retourId}`
-    : `suspension-${job.destinationId}-${Date.parse(job.suspendueLe)}`;
+/** One job per event: a Feedback goes In review only once, a Suspension has its date. */
+export function alertJobId(job: AlertJob): string {
+  return job.event === 'feedback_in_review'
+    ? `in-review-${job.feedbackId}`
+    : `suspension-${job.destinationId}-${Date.parse(job.suspendedAt)}`;
 }
 
-/** Politique de retry des jobs : backoff exponentiel avec jitter. */
+/** Job retry policy: exponential backoff with jitter. */
 export interface RetryPolicy {
   readonly attempts: number;
-  /** Délai du premier retry ; il double à chaque tentative. */
+  /** Delay of the first retry; it doubles at each attempt. */
   readonly backoffDelayMs: number;
 }
 
 export const DEFAULT_RETRY_POLICY: RetryPolicy = { attempts: 8, backoffDelayMs: 1000 };
 
-/** Options BullMQ par défaut d'une queue, selon la politique de retry. */
+/** Default BullMQ options of a queue, according to the retry policy. */
 export function jobOptions(policy: RetryPolicy = DEFAULT_RETRY_POLICY) {
   return {
     attempts: policy.attempts,

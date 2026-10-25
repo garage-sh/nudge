@@ -1,41 +1,41 @@
 /**
- * Port Juge (ADR « triage via port System One ») : le Triage pose des questions
- * typées Noul / Choice / Score sur un state, et chaque fournisseur compatible
- * System One (Jev, pplx-decider…) en est un adapter.
+ * Judge port (ADR "triage via System One port"): Triage asks typed Noul / Choice /
+ * Score questions about a state, and each System One compatible provider (Jev,
+ * pplx-decider…) is an adapter of it.
  *
- * Le port ne connaît pas le domaine : il ne sait rien des Retours. Les
- * primitives System One (questions, réponses et leurs champs) gardent le
- * vocabulaire anglais des fournisseurs ; seul le Juge porte un nom du domaine.
+ * The port does not know the domain: it knows nothing about Feedback. The System One
+ * primitives (questions, answers and their fields) keep the providers' vocabulary;
+ * only the Judge bears a domain name.
  */
 
-/** Ce qui compte comme « oui » et comme « non ». */
+/** What counts as "yes" and as "no". */
 export interface NoulCriteria {
   readonly true: string;
   readonly false: string;
 }
 
-/** Une condition est-elle vraie ? Réponse : probabilité de « oui ». */
+/** Is a condition true? Answer: probability of "yes". */
 export interface NoulQuestion {
   readonly kind: 'noul';
   readonly question: string;
   readonly criteria?: NoulCriteria;
 }
 
-/** Une option parmi un ensemble fermé. */
+/** One option out of a closed set. */
 export interface ChoiceQuestion<C extends string = string> {
   readonly kind: 'choice';
   readonly question: string;
   readonly choices: readonly [C, ...C[]];
-  /** Quand chaque option s'applique ; une option sans description vaut par son nom. */
+  /** When each option applies; an option without a description stands for its name. */
   readonly descriptions?: Readonly<Partial<Record<C, string>>>;
 }
 
-/** Une position sur des niveaux ordonnés, du plus bas au plus haut. */
+/** A position on ordered levels, from lowest to highest. */
 export interface ScoreQuestion<N extends string = string> {
   readonly kind: 'score';
   readonly question: string;
   readonly levels: readonly [N, ...N[]];
-  /** La situation concrète que décrit chaque niveau ; un niveau sans description vaut par son nom. */
+  /** The concrete situation each level describes; a level without a description stands for its name. */
   readonly descriptions?: Readonly<Partial<Record<N, string>>>;
 }
 
@@ -44,24 +44,24 @@ export type Questions = Readonly<Record<string, Question>>;
 
 export interface NoulAnswer {
   readonly kind: 'noul';
-  /** Probabilité de « oui », entre 0 et 1. */
+  /** Probability of "yes", between 0 and 1. */
   readonly probability: number;
 }
 
 export interface ChoiceAnswer<C extends string = string> {
   readonly kind: 'choice';
-  /** L'option la plus probable. */
+  /** The most likely option. */
   readonly choice: C;
   readonly distribution: Readonly<Record<C, number>>;
-  /** Concentration de la distribution, entre 0 et 1. */
+  /** Concentration of the distribution, between 0 and 1. */
   readonly confidence: number;
 }
 
 export interface ScoreAnswer<N extends string = string> {
   readonly kind: 'score';
-  /** Le niveau le plus probable. */
+  /** The most likely level. */
   readonly level: N;
-  /** Position pondérée sur l'échelle, de 0 (premier niveau) à 1 (dernier). */
+  /** Weighted position on the scale, from 0 (first level) to 1 (last). */
   readonly value: number;
   readonly distribution: Readonly<Record<N, number>>;
   readonly confidence: number;
@@ -76,51 +76,51 @@ export type Answer<Q extends Question> =
 
 export type Answers<Qs extends Questions> = { readonly [K in keyof Qs]: Answer<Qs[K]> };
 
-/** Données sur lesquelles le Juge raisonne. Le contenu de l'Auteur n'apparaît QUE ici. */
-export type StateJuge = Readonly<Record<string, unknown>>;
+/** Data the Judge reasons about. The Author's content appears ONLY here. */
+export type JudgeState = Readonly<Record<string, unknown>>;
 
-export interface RequeteJuge<Qs extends Questions = Questions> {
-  /** Consignes générales, fixes : jamais de contenu venant d'un Auteur. */
+export interface JudgeRequest<Qs extends Questions = Questions> {
+  /** General, fixed instructions: never content coming from an Author. */
   readonly instructions?: string;
-  readonly state: StateJuge;
-  /** Questions indépendantes, posées en une seule requête. */
+  readonly state: JudgeState;
+  /** Independent questions, asked in a single request. */
   readonly questions: Qs;
 }
 
-export interface OptionsJugement {
-  /** Annule l'appel en cours (délai dépassé côté appelant). */
+export interface JudgeOptions {
+  /** Aborts the call in progress (timeout on the caller's side). */
   readonly signal?: AbortSignal;
 }
 
-export interface Juge {
-  juger<Qs extends Questions>(
-    requete: RequeteJuge<Qs>,
-    options?: OptionsJugement,
+export interface Judge {
+  judge<Qs extends Questions>(
+    request: JudgeRequest<Qs>,
+    options?: JudgeOptions,
   ): Promise<Answers<Qs>>;
 }
 
-/** Erreur passagère du Juge (indisponible, timeout, limite de débit) : l'appelant retente plus tard. */
-export class ErreurJugeTransitoire extends Error {
-  override readonly name = 'ErreurJugeTransitoire';
+/** Temporary Judge error (unavailable, timeout, rate limit): the caller retries later. */
+export class JudgeTransientError extends Error {
+  override readonly name = 'JudgeTransientError';
 }
 
 /**
- * Pourquoi un Juge refuse durablement, sans qu'un nouvel essai identique y change rien :
- * - `auth` : clé refusée, droits ou crédits insuffisants — la configuration de l'Instance est en cause ;
- * - `requete` : requête rejetée (schéma, taille, modèle inconnu) ;
- * - `reponse` : réponse illisible ou qui ne correspond pas aux questions posées.
+ * Why a Judge refuses for good, with no identical retry changing anything:
+ * - `auth`: key rejected, insufficient rights or credits — the Instance's configuration is at fault;
+ * - `request`: request rejected (schema, size, unknown model);
+ * - `response`: unreadable response, or one that does not match the questions asked.
  */
-export type MotifRefusJuge = 'auth' | 'requete' | 'reponse';
+export type JudgeRefusalReason = 'auth' | 'request' | 'response';
 
-/** Refus durable du Juge : retenter la même requête ne suffit pas. */
-export class ErreurJugeRefusee extends Error {
-  override readonly name = 'ErreurJugeRefusee';
+/** Lasting Judge refusal: retrying the same request is not enough. */
+export class JudgeRefusedError extends Error {
+  override readonly name = 'JudgeRefusedError';
 
   constructor(
-    readonly motif: MotifRefusJuge,
+    readonly reason: JudgeRefusalReason,
     message: string,
-    /** Statut HTTP de la réponse du fournisseur, s'il y en a une. */
-    readonly statut?: number,
+    /** HTTP status of the provider's response, if there is one. */
+    readonly status?: number,
   ) {
     super(message);
   }

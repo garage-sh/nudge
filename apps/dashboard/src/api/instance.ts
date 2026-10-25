@@ -1,70 +1,70 @@
 import type {
-  ChoixJuge,
-  DestinationAlerteAvecSecretsGeneres,
-  DestinationAlerteSaisie,
-  DestinationAlerteVu,
-  JugeInstanceVu,
-  ResultatTestDestination,
-  RetentionVu,
+  JudgeChoice,
+  AlertDestinationWithGeneratedSecrets,
+  AlertDestinationInput,
+  AlertDestinationView,
+  InstanceJudgeView,
+  DestinationTestResult,
+  RetentionView,
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
 
-const CLE_JUGE = ['instance', 'juge'] as const;
-const CHEMIN_JUGE = '/api/instance/juge';
+const JUDGE_KEY = ['instance', 'judge'] as const;
+const JUDGE_PATH = '/api/instance/judge';
 
-export const useJugeInstance = () =>
-  useQuery({ queryKey: CLE_JUGE, queryFn: () => api.get<JugeInstanceVu>(CHEMIN_JUGE) });
+export const useInstanceJudge = () =>
+  useQuery({ queryKey: JUDGE_KEY, queryFn: () => api.get<InstanceJudgeView>(JUDGE_PATH) });
 
-export function useChoixJuge() {
+export function useChooseJudge() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (choix: ChoixJuge) => api.put<JugeInstanceVu>(CHEMIN_JUGE, choix),
-    onSuccess: (juge) => client.setQueryData(CLE_JUGE, juge),
+    mutationFn: (choice: JudgeChoice) => api.put<InstanceJudgeView>(JUDGE_PATH, choice),
+    onSuccess: (judge) => client.setQueryData(JUDGE_KEY, judge),
   });
 }
 
-const CLE_ALERTE = ['instance', 'alerte'] as const;
-const CHEMIN_ALERTE = '/api/instance/alerte';
+const ALERT_DESTINATION_KEY = ['instance', 'alert-destination'] as const;
+const ALERT_DESTINATION_PATH = '/api/instance/alert-destination';
 
-export const useDestinationAlerte = () =>
+export const useAlertDestination = () =>
   useQuery({
-    queryKey: CLE_ALERTE,
-    queryFn: () => api.get<{ destination: DestinationAlerteVu | null }>(CHEMIN_ALERTE),
+    queryKey: ALERT_DESTINATION_KEY,
+    queryFn: () => api.get<{ destination: AlertDestinationView | null }>(ALERT_DESTINATION_PATH),
   });
 
-export function useConfigurationAlerte() {
+export function useSaveAlertDestination() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (saisie: DestinationAlerteSaisie) =>
-      api.put<DestinationAlerteAvecSecretsGeneres>(CHEMIN_ALERTE, saisie),
-    onSuccess: ({ destination }) => client.setQueryData(CLE_ALERTE, { destination }),
+    mutationFn: (input: AlertDestinationInput) =>
+      api.put<AlertDestinationWithGeneratedSecrets>(ALERT_DESTINATION_PATH, input),
+    onSuccess: ({ destination }) => client.setQueryData(ALERT_DESTINATION_KEY, { destination }),
   });
 }
 
-export function useRetraitAlerte() {
+export function useRemoveAlertDestination() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete<void>(CHEMIN_ALERTE),
-    onSuccess: () => client.setQueryData(CLE_ALERTE, { destination: null }),
+    mutationFn: () => api.delete<void>(ALERT_DESTINATION_PATH),
+    onSuccess: () => client.setQueryData(ALERT_DESTINATION_KEY, { destination: null }),
   });
 }
 
-export const useTestAlerte = () =>
+export const useTestAlertDestination = () =>
   useMutation({
-    mutationFn: () => api.post<ResultatTestDestination>(`${CHEMIN_ALERTE}/test`),
+    mutationFn: () => api.post<DestinationTestResult>(`${ALERT_DESTINATION_PATH}/test`),
   });
 
-const CLE_RETENTION = ['instance', 'retention'] as const;
-const CHEMIN_RETENTION = '/api/instance/retention';
+const RETENTION_KEY = ['instance', 'retention'] as const;
+const RETENTION_PATH = '/api/instance/retention';
 
 export const useRetention = () =>
-  useQuery({ queryKey: CLE_RETENTION, queryFn: () => api.get<RetentionVu>(CHEMIN_RETENTION) });
+  useQuery({ queryKey: RETENTION_KEY, queryFn: () => api.get<RetentionView>(RETENTION_PATH) });
 
-export function useChangementRetention() {
+export function useChangeRetention() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (retention: RetentionVu) => api.put<RetentionVu>(CHEMIN_RETENTION, retention),
-    onSuccess: (retention) => client.setQueryData(CLE_RETENTION, retention),
+    mutationFn: (retention: RetentionView) => api.put<RetentionView>(RETENTION_PATH, retention),
+    onSuccess: (retention) => client.setQueryData(RETENTION_KEY, retention),
   });
 }

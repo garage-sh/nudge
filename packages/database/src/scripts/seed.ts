@@ -1,18 +1,18 @@
 import { connectDb } from '../client.js';
-import { createProjet } from '../projets.js';
+import { createProject } from '../projects.js';
 
-/** Seed de développement : un Projet et ses clés (la clé secrète ne s'affiche qu'ici). */
+/** Development seed: a Project and its keys (the secret key is shown only here). */
 async function main() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL manquante');
+  if (!url) throw new Error('DATABASE_URL missing');
   const { db, close } = connectDb(url);
   try {
-    const { projet, clePublique, cleSecrete } = await createProjet(db, {
-      nom: 'Projet de démonstration',
+    const { project, publicKey, secretKey } = await createProject(db, {
+      name: 'Demo project',
     });
-    console.log(`Projet « ${projet.nom} » (${projet.id})`);
-    console.log(`  clé publique : ${clePublique}`);
-    console.log(`  clé secrète  : ${cleSecrete}`);
+    console.log(`Project "${project.name}" (${project.id})`);
+    console.log(`  public key: ${publicKey}`);
+    console.log(`  secret key: ${secretKey}`);
   } finally {
     await close();
   }

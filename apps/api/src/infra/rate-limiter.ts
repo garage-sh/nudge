@@ -1,42 +1,42 @@
 /**
- * Limiteur de débit en mémoire du processus, à fenêtre fixe, par clé (IP…).
- * Limite assumée : il compte par réplique d'api (pas de Redis pour ça, D8).
+ * In-process memory rate limiter, fixed window, per key (IP…).
+ * Accepted limit: it counts per api replica (no Redis for this, D8).
  */
-/** `limit` tentatives par fenêtre fixe de `windowMs`. */
+/** `limit` attempts per fixed window of `windowMs`. */
 export interface RateLimit {
   readonly limit: number;
   readonly windowMs: number;
 }
 
 export class RateLimiter {
-  private readonly fenetres = new Map<string, { debut: number; compte: number }>();
+  private readonly windows = new Map<string, { start: number; count: number }>();
 
   constructor(private readonly options: RateLimit) {}
 
-  /** Compte une tentative pour `cle` ; `false` si la limite de la fenêtre est dépassée. */
-  consume(cle: string, maintenant = Date.now()): boolean {
-    this.purge(maintenant);
-    const fenetre = this.fenetres.get(cle);
-    if (!fenetre || maintenant - fenetre.debut >= this.options.windowMs) {
-      this.fenetres.set(cle, { debut: maintenant, compte: 1 });
+  /** Counts an attempt for `key`; `false` if the window's limit is exceeded. */
+  consume(key: string, now = Date.now()): boolean {
+    this.purge(now);
+    const window = this.windows.get(key);
+    if (!window || now - window.start >= this.options.windowMs) {
+      this.windows.set(key, { start: now, count: 1 });
       return true;
     }
-    fenetre.compte += 1;
-    return fenetre.compte <= this.options.limit;
+    window.count += 1;
+    return window.count <= this.options.limit;
   }
 
-  /** Temps restant avant la fin de la fenêtre courante de `cle` (0 si aucune n'est ouverte). */
-  msUntilReset(cle: string, maintenant = Date.now()): number {
-    const fenetre = this.fenetres.get(cle);
-    if (!fenetre) return 0;
-    return Math.max(0, fenetre.debut + this.options.windowMs - maintenant);
+  /** Time left before the end of `key`'s current window (0 if none is open). */
+  msUntilReset(key: string, now = Date.now()): number {
+    const window = this.windows.get(key);
+    if (!window) return 0;
+    return Math.max(0, window.start + this.options.windowMs - now);
   }
 
-  /** Oublie les fenêtres échues, pour que la table ne grossisse pas sans fin. */
-  private purge(maintenant: number): void {
-    if (this.fenetres.size < 1000) return;
-    for (const [cle, fenetre] of this.fenetres) {
-      if (maintenant - fenetre.debut >= this.options.windowMs) this.fenetres.delete(cle);
+  /** Forgets the expired windows, so that the table does not grow without end. */
+  private purge(now: number): void {
+    if (this.windows.size < 1000) return;
+    for (const [key, window] of this.windows) {
+      if (now - window.start >= this.options.windowMs) this.windows.delete(key);
     }
   }
 }

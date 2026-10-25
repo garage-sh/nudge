@@ -5,9 +5,9 @@
     "lib": ["ES2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    // Les packages du monorepo exposent leurs sources sous cette condition :
-    // typecheck et tests lisent `src/` sans build préalable. Les builds
-    // (tsconfig.build.json) la retirent pour viser `dist/`.
+    // Monorepo packages expose their sources under this condition: type checks
+    // and tests read `src/` without a prior build. Builds (tsconfig.build.json)
+    // drop it to target `dist/`.
     "customConditions": ["@nudge/source"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

@@ -1,46 +1,46 @@
 name: Bug
-description: nudge ne se comporte pas comme prévu.
+description: nudge does not behave as expected.
 labels: [needs-triage]
 body:
   - type: markdown
     attributes:
-      value: Une faille de sécurité se signale en privé, pas ici (voir SECURITY.md).
+      value: Report security vulnerabilities privately, not here (see SECURITY.md).
   - type: input
     id: version
     attributes:
       label: Version
-      description: Le tag de l'image (`docker compose images`) ou le commit.
+      description: The image tag (`docker compose images`) or the commit.
       placeholder: 0.1.2
     validations:
       required: true
   - type: dropdown
-    id: deploiement
+    id: deployment
     attributes:
-      label: Déploiement
+      label: Deployment
       options:
-        - docker compose, un seul processus nudge
-        - docker compose, worker séparé (docker-compose.worker.yml)
-        - Autre (Kubernetes, sources…)
+        - docker compose, a single nudge process
+        - docker compose, separate worker (docker-compose.worker.yml)
+        - Other (Kubernetes, from source…)
     validations:
       required: true
   - type: textarea
-    id: etapes
+    id: steps
     attributes:
-      label: Étapes pour reproduire
+      label: Steps to reproduce
       placeholder: |
-        1. Créer un Projet…
-        2. Envoyer un Retour…
+        1. Create a Project…
+        2. Send a Feedback…
     validations:
       required: true
   - type: textarea
-    id: attendu
+    id: expected
     attributes:
-      label: Ce qui était attendu, et ce qui s'est passé
+      label: What was expected, and what happened
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: '`docker compose logs nudge`, sans clé ni jeton.'
+      description: '`docker compose logs nudge`, without any key or token.'
       render: shell

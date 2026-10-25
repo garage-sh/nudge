@@ -1,7 +1,7 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import { resolutionSources, swcNest } from '../../vitest.shared.mts';
+import { sourceResolution, swcNest } from '../../vitest.shared.mts';
 
 export default mergeConfig(
-  resolutionSources,
+  sourceResolution,
   defineConfig({ plugins: [swcNest()], test: { name: '@nudge/worker' } }),
 );

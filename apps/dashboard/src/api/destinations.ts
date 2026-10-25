@@ -1,80 +1,79 @@
 import type {
-  DestinationAvecSecretsGeneres,
-  DestinationVu,
-  ModificationDestination,
-  NouvelleDestination,
-  ResultatTestDestination,
+  DestinationWithGeneratedSecrets,
+  DestinationView,
+  DestinationUpdate,
+  NewDestination,
+  DestinationTestResult,
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
-import { CLE_ACTIVITE_PROJETS } from './projets.js';
+import { PROJECTS_ACTIVITY_KEY } from './projects.js';
 
-const cleDestinations = (projetId: string) => ['projets', projetId, 'destinations'] as const;
-const chemin = (id: string) => `/api/destinations/${encodeURIComponent(id)}`;
+const destinationsKey = (projectId: string) => ['projects', projectId, 'destinations'] as const;
+const projectDestinationsPath = (projectId: string) =>
+  `/api/projects/${encodeURIComponent(projectId)}/destinations`;
+const destinationPath = (id: string) => `/api/destinations/${encodeURIComponent(id)}`;
 
-export const useDestinations = (projetId: string) =>
+export const useDestinations = (projectId: string) =>
   useQuery({
-    queryKey: cleDestinations(projetId),
-    queryFn: () =>
-      api.get<DestinationVu[]>(`/api/projets/${encodeURIComponent(projetId)}/destinations`),
+    queryKey: destinationsKey(projectId),
+    queryFn: () => api.get<DestinationView[]>(projectDestinationsPath(projectId)),
   });
 
-/** Range une Destination à jour dans la liste du Projet (`null` : retirée). */
-function useRangement(projetId: string) {
+/** Stores an updated Destination in the Project's list (`null`: removed). */
+function useStoreDestination(projectId: string) {
   const client = useQueryClient();
-  return (id: string, destination: DestinationVu | null) => {
-    // Le nombre de Destinations du Projet change : son activité est relue.
-    void client.invalidateQueries({ queryKey: CLE_ACTIVITE_PROJETS });
-    client.setQueryData<DestinationVu[]>(cleDestinations(projetId), (liste = []) => {
-      const autres = liste.filter((d) => d.id !== id);
-      if (!destination) return autres;
-      const index = liste.findIndex((d) => d.id === id);
+  return (id: string, destination: DestinationView | null) => {
+    // The Project's number of Destinations changes: its activity is read again.
+    void client.invalidateQueries({ queryKey: PROJECTS_ACTIVITY_KEY });
+    client.setQueryData<DestinationView[]>(destinationsKey(projectId), (list = []) => {
+      const others = list.filter((d) => d.id !== id);
+      if (!destination) return others;
+      const index = list.findIndex((d) => d.id === id);
       return index === -1
-        ? [...liste, destination]
-        : liste.map((d) => (d.id === id ? destination : d));
+        ? [...list, destination]
+        : list.map((d) => (d.id === id ? destination : d));
     });
   };
 }
 
-export function useCreationDestination(projetId: string) {
-  const ranger = useRangement(projetId);
+export function useCreateDestination(projectId: string) {
+  const store = useStoreDestination(projectId);
   return useMutation({
-    mutationFn: (nouvelle: NouvelleDestination) =>
-      api.post<DestinationAvecSecretsGeneres>(
-        `/api/projets/${encodeURIComponent(projetId)}/destinations`,
-        nouvelle,
-      ),
-    onSuccess: ({ destination }) => ranger(destination.id, destination),
+    mutationFn: (destination: NewDestination) =>
+      api.post<DestinationWithGeneratedSecrets>(projectDestinationsPath(projectId), destination),
+    onSuccess: ({ destination }) => store(destination.id, destination),
   });
 }
 
-export function useModificationDestination(projetId: string, id: string) {
-  const ranger = useRangement(projetId);
+export function useUpdateDestination(projectId: string, id: string) {
+  const store = useStoreDestination(projectId);
   return useMutation({
-    mutationFn: (modification: ModificationDestination) =>
-      api.patch<DestinationVu>(chemin(id), modification),
-    onSuccess: (destination) => ranger(id, destination),
+    mutationFn: (update: DestinationUpdate) =>
+      api.patch<DestinationView>(destinationPath(id), update),
+    onSuccess: (destination) => store(id, destination),
   });
 }
 
-export function useSuppressionDestination(projetId: string, id: string) {
-  const ranger = useRangement(projetId);
+export function useDeleteDestination(projectId: string, id: string) {
+  const store = useStoreDestination(projectId);
   return useMutation({
-    mutationFn: () => api.delete<null>(chemin(id)),
-    onSuccess: () => ranger(id, null),
+    mutationFn: () => api.delete<null>(destinationPath(id)),
+    onSuccess: () => store(id, null),
   });
 }
 
-export function useRegenerationSecretsGeneres(projetId: string, id: string) {
-  const ranger = useRangement(projetId);
+export function useRegenerateGeneratedSecrets(projectId: string, id: string) {
+  const store = useStoreDestination(projectId);
   return useMutation({
-    mutationFn: () => api.post<DestinationAvecSecretsGeneres>(`${chemin(id)}/secrets-generes`),
-    onSuccess: ({ destination }) => ranger(id, destination),
+    mutationFn: () =>
+      api.post<DestinationWithGeneratedSecrets>(`${destinationPath(id)}/generated-secrets`),
+    onSuccess: ({ destination }) => store(id, destination),
   });
 }
 
-/** Envoie un Retour d'exemple ; le résultat (livré ou échec) est une réponse 200. */
+/** Sends a sample Feedback; the result (delivered or failed) is a 200 response. */
 export const useTestDestination = (id: string) =>
   useMutation({
-    mutationFn: () => api.post<ResultatTestDestination>(`${chemin(id)}/test`),
+    mutationFn: () => api.post<DestinationTestResult>(`${destinationPath(id)}/test`),
   });

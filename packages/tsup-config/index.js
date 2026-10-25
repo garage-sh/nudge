@@ -1,6 +1,6 @@
 const { defineConfig } = require('tsup');
 
-/** Configuration tsup commune aux packages : CJS (.js) + ESM (.mjs) + types. */
+/** Shared tsup config for the packages: CJS (.js) + ESM (.mjs) + types. */
 module.exports = (options = {}) =>
   defineConfig({
     entry: ['src/index.ts'],

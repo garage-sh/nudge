@@ -1,4 +1,4 @@
-# Construit les images depuis les sources au lieu de les tirer de ghcr.io :
+# Builds the images from source instead of pulling them from ghcr.io:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 

@@ -1,239 +1,238 @@
 import {
-  presenterAlerte,
-  type Alerte,
-  type ClasseEchec,
+  presentAlert,
+  type Alert,
+  type FailureClass,
   type DestinationAdapter,
-  type DestinationConfiguree,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type ConfiguredDestination,
+  type OutgoingDelivery,
+  type DeliveryResult,
 } from '@nudge/core';
 import {
-  LIBELLES_GRAVITE,
-  LIBELLES_TYPE,
-  definitionGitHub,
-  lireDepotGitHub,
-  type SecretsGitHub,
+  SEVERITY_LABELS,
+  FEEDBACK_TYPE_LABELS,
+  gitHubDefinition,
+  parseGitHubRepository,
+  type GitHubSecrets,
 } from '@nudge/shared';
 import {
-  DELAI_HTTP_PAR_DEFAUT_MS,
-  classerStatut,
-  echecHttp,
-  messageErreur,
-  messageEchec,
-  texteReponse,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  classifyStatus,
+  httpFailure,
+  errorMessage,
+  failureMessage,
+  responseText,
 } from './http.js';
-import { alerteEnMarkdown, echapperPonctuation, lienSur } from './markdown.js';
-import { titreAvecType, tronquer } from './texte.js';
+import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
+import { titleWithType, truncate } from './text.js';
 
-export interface OptionsGitHub {
+export interface GitHubOptions {
   readonly fetch?: typeof globalThis.fetch;
-  /** Délai de réponse de GitHub, au-delà duquel l'appel est un échec transitoire. */
-  readonly delaiMs?: number;
+  /** GitHub response timeout, beyond which the call is a transient failure. */
+  readonly timeoutMs?: number;
 }
 
 /** https://docs.github.com/en/rest/about-the-rest-api/api-versions */
-const VERSION_API = '2026-03-10';
+const API_VERSION = '2026-03-10';
 
-/** « Requests without a valid User-Agent header will be rejected. » */
+/** "Requests without a valid User-Agent header will be rejected." */
 const USER_AGENT = 'nudge (https://github.com/garage-sh/nudge)';
 
 /**
- * GitHub Issues : une issue par Envoi, créée par l'API REST avec un jeton d'accès
- * personnel (https://docs.github.com/en/rest/issues/issues#create-an-issue).
+ * GitHub Issues: one issue per Delivery, created through the REST API with a personal
+ * access token (https://docs.github.com/en/rest/issues/issues#create-an-issue).
  */
-export function adaptateurGitHub(
-  destination: DestinationConfiguree,
-  options: OptionsGitHub = {},
+export function gitHubAdapter(
+  destination: ConfiguredDestination,
+  options: GitHubOptions = {},
 ): DestinationAdapter {
-  const config = definitionGitHub.config.parse(destination.config);
-  const depot = lireDepotGitHub(config.depot);
-  if (!depot) throw new Error(`GitHub ${destination.id} sans dépôt valide`);
-  const jeton = (destination.secrets as Partial<SecretsGitHub>).jeton;
-  if (!jeton) throw new Error(`GitHub ${destination.id} sans jeton d'accès`);
+  const config = gitHubDefinition.config.parse(destination.config);
+  const repository = parseGitHubRepository(config.repository);
+  if (!repository) throw new Error(`GitHub ${destination.id} has no valid repository`);
+  const token = (destination.secrets as Partial<GitHubSecrets>).token;
+  if (!token) throw new Error(`GitHub ${destination.id} has no access token`);
   const fetch = options.fetch ?? globalThis.fetch;
-  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
-  const pointDAppel = `https://api.github.com/repos/${encodeURIComponent(depot.proprietaire)}/${encodeURIComponent(depot.nom)}`;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
 
-  const appeler = (url: string, init: RequestInit = {}) =>
+  const call = (url: string, init: RequestInit = {}) =>
     fetch(url, {
       ...init,
       redirect: 'manual',
-      signal: AbortSignal.timeout(delaiMs),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         accept: 'application/vnd.github+json',
-        authorization: `Bearer ${jeton}`,
-        'x-github-api-version': VERSION_API,
+        authorization: `Bearer ${token}`,
+        'x-github-api-version': API_VERSION,
         'user-agent': USER_AGENT,
         ...init.headers,
       },
     });
 
-  /** « Create an issue » : livrée avec son lien, ou l'échec classé. */
-  async function creerIssue(issue: { title: string; body: string }): Promise<ResultatEnvoi> {
-    let reponse: Response;
+  /** "Create an issue": delivered with its link, or the classified failure. */
+  async function createIssue(issue: { title: string; body: string }): Promise<DeliveryResult> {
+    let response: Response;
     try {
-      reponse = await appeler(`${pointDAppel}/issues`, {
+      response = await call(`${endpoint}/issues`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(issue),
       });
-    } catch (erreur) {
-      return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
+    } catch (error) {
+      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
     }
-    if (!reponse.ok) return { statut: 'echec', ...(await echecGitHub(reponse)) };
-    const creee = (await reponse.json().catch(() => ({}))) as { html_url?: unknown };
+    if (!response.ok) return { status: 'failed', ...(await gitHubFailure(response)) };
+    const created = (await response.json().catch(() => ({}))) as { html_url?: unknown };
     return {
-      statut: 'livre',
-      lienExterne: typeof creee.html_url === 'string' ? creee.html_url : null,
+      status: 'delivered',
+      externalUrl: typeof created.html_url === 'string' ? created.html_url : null,
     };
   }
 
   return {
-    send: (envoi) => creerIssue({ title: titre(envoi), body: corps(envoi) }),
-    alerter: (alerte) => creerIssue(issueAlerte(alerte)),
+    send: (delivery) => createIssue({ title: title(delivery), body: body(delivery) }),
+    alert: (alert) => createIssue(alertIssue(alert)),
     /**
-     * « Get a repository » : le jeton voit le dépôt, ses issues sont ouvertes et il
-     * n'est pas archivé (lecture seule). Ne vérifie pas la permission d'écrire des
-     * issues, que seule une création prouverait.
+     * "Get a repository": the token sees the repository, its issues are enabled and it
+     * is not archived (read-only). Does not check the permission to write issues, which
+     * only a creation would prove.
      */
     async healthCheck() {
-      let reponse: Response;
+      let response: Response;
       try {
-        reponse = await appeler(pointDAppel);
-      } catch (erreur) {
-        return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
+        response = await call(endpoint);
+      } catch (error) {
+        return { reachable: false, failureClass: 'transient', message: errorMessage(error) };
       }
-      if (!reponse.ok) return { joignable: false, ...(await echecGitHub(reponse)) };
-      const lu = (await reponse.json().catch(() => ({}))) as {
+      if (!response.ok) return { reachable: false, ...(await gitHubFailure(response)) };
+      const read = (await response.json().catch(() => ({}))) as {
         has_issues?: unknown;
         archived?: unknown;
       };
-      if (lu.has_issues === false) {
+      if (read.has_issues === false) {
         return {
-          joignable: false,
-          classe: 'auth',
-          message: `Issues désactivées sur ${config.depot}`,
+          reachable: false,
+          failureClass: 'auth',
+          message: `Issues are disabled on ${config.repository}`,
         };
       }
-      if (lu.archived === true) {
+      if (read.archived === true) {
         return {
-          joignable: false,
-          classe: 'auth',
-          message: `Dépôt ${config.depot} archivé : il n’accepte plus d’issue`,
+          reachable: false,
+          failureClass: 'auth',
+          message: `Repository ${config.repository} is archived: it no longer accepts issues`,
         };
       }
-      return { joignable: true };
+      return { reachable: true };
     },
   };
 }
 
 /**
- * Classe d'un refus de GitHub :
- * - une limite de débit, primaire (`x-ratelimit-remaining: 0`) ou secondaire
- *   (`retry-after`, message « secondary rate limit »), arrive en 403 ou 429 : passagère
- *   (https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) ;
- * - 401 (jeton invalide), 403 (permission refusée), 404 (dépôt inconnu ou hors de
- *   portée du jeton), 410 (issues désactivées) et une redirection (dépôt renommé ou
- *   transféré) refusent la Destination : chaque Envoi échouerait (D21) ;
- * - 400 et 422 (validation, contenu jugé indésirable) visent cette issue.
+ * Class of a GitHub refusal:
+ * - a rate limit, primary (`x-ratelimit-remaining: 0`) or secondary (`retry-after`,
+ *   "secondary rate limit" message), comes as a 403 or 429: temporary
+ *   (https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api);
+ * - 401 (invalid token), 403 (permission denied), 404 (unknown repository or out of
+ *   the token's reach), 410 (issues disabled) and a redirect (repository renamed or
+ *   transferred) reject the Destination: every Delivery would fail (D21);
+ * - 400 and 422 (validation, content deemed spam) target this issue.
  */
-async function echecGitHub(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
-  if (reponse.status >= 300 && reponse.status < 400) {
-    await reponse.body?.cancel();
+async function gitHubFailure(
+  response: Response,
+): Promise<{ failureClass: FailureClass; message: string }> {
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
     return {
-      classe: 'auth',
-      message: `HTTP ${reponse.status} : dépôt renommé ou transféré, configurez son nom actuel`,
+      failureClass: 'auth',
+      message: `HTTP ${response.status}: repository renamed or transferred, configure its current name`,
     };
   }
-  if ((reponse.status === 403 || reponse.status === 429) && (await limiteDeDebit(reponse))) {
-    return { classe: 'transient', message: await messageEchec(reponse) };
+  if ((response.status === 403 || response.status === 429) && (await isRateLimited(response))) {
+    return { failureClass: 'transient', message: await failureMessage(response) };
   }
-  return echecHttp(reponse, (status) =>
-    status === 404 || status === 410 ? 'auth' : classerStatut(status),
+  return httpFailure(response, (status) =>
+    status === 404 || status === 410 ? 'auth' : classifyStatus(status),
   );
 }
 
-async function limiteDeDebit(reponse: Response): Promise<boolean> {
-  if (reponse.headers.get('x-ratelimit-remaining') === '0') return true;
-  if (reponse.headers.has('retry-after')) return true;
-  return /rate limit/i.test(await texteReponse(reponse));
+async function isRateLimited(response: Response): Promise<boolean> {
+  if (response.headers.get('x-ratelimit-remaining') === '0') return true;
+  if (response.headers.has('retry-after')) return true;
+  return /rate limit/i.test(await responseText(response));
 }
 
-/** Longueur maximale du titre d'une issue, en unités UTF-16. */
-const TITRE_MAX = 120;
+/** Maximum length of an issue title, in UTF-16 units. */
+const TITLE_MAX = 120;
 
 /**
- * Titre (texte brut chez GitHub) : le Type et la première ligne du texte, ses `@`
- * coupés d'un espace sans chasse pour ne mentionner personne.
+ * Title (plain text on GitHub): the Type and the first line of the text, its `@`
+ * broken by a zero-width space so as to mention nobody.
  */
-const titre = (envoi: EnvoiASortir) => sansMention(titreAvecType(envoi, TITRE_MAX));
+const title = (delivery: OutgoingDelivery) => withoutMention(titleWithType(delivery, TITLE_MAX));
 
-/** Corps (markdown GitHub) : le texte de l'Auteur, puis un pied écrit par nudge. */
-function corps({ projet, retour }: EnvoiASortir): string {
-  const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
-  const pied = [
-    `**Projet** : ${echapperMarkdown(projet.nom)}`,
-    `**Type** : ${LIBELLES_TYPE[retour.typeRetenu]} · **Gravité** : ${gravite}`,
-    ...(retour.incertain
-      ? ['**Verdict incertain** : le Juge a hésité, vérifiez-le dans nudge.']
+/** Body (GitHub markdown): the Author's text, then a footer written by nudge. */
+function body({ project, feedback }: OutgoingDelivery): string {
+  const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
+  const footer = [
+    `**Project**: ${escapeMarkdown(project.name)}`,
+    `**Type**: ${FEEDBACK_TYPE_LABELS[feedback.resolvedType]} · **Severity**: ${severity}`,
+    ...(feedback.uncertain
+      ? ['**Uncertain verdict**: the Judge hesitated, check it in nudge.']
       : []),
-    ...(lienSur(retour.lienDashboard)
-      ? [`[Voir le Retour dans nudge](<${retour.lienDashboard}>)`]
+    ...(isSafeLink(feedback.dashboardUrl)
+      ? [`[View the feedback in nudge](<${feedback.dashboardUrl}>)`]
       : []),
   ];
-  return [blocDeCode(retour.texte), '---', ...pied].join('\n\n');
+  return [codeBlock(feedback.text), '---', ...footer].join('\n\n');
 }
 
 /**
- * L'issue d'une alerte : titre en texte brut sans mention ; corps écrit par nudge, où
- * les noms (saisis par un Membre) et le refus (formulé par la cible) sont littéraux.
+ * The issue of an alert: plain-text title without mentions; body written by nudge,
+ * where the names (typed by a Member) and the refusal (worded by the target) are literal.
  */
-function issueAlerte(alerte: Alerte): { title: string; body: string } {
-  const { titre: titreAlerte } = presenterAlerte(alerte);
+function alertIssue(alert: Alert): { title: string; body: string } {
+  const { title: alertTitle } = presentAlert(alert);
   return {
-    title: sansMention(tronquer(titreAlerte, TITRE_MAX)),
-    body: alerteEnMarkdown(alerte, echapperMarkdown),
+    title: withoutMention(truncate(alertTitle, TITLE_MAX)),
+    body: alertToMarkdown(alert, escapeMarkdown),
   };
 }
 
 /**
- * Longueur maximale du corps d'une issue : 65 536 caractères selon le message du 422
- * de GitHub (« body is too long (maximum is 65536 characters) »), que la documentation
- * de l'API REST ne chiffre pas.
+ * Maximum length of an issue body: 65,536 characters according to GitHub's 422
+ * message ("body is too long (maximum is 65536 characters)"), which the REST API
+ * documentation does not quantify.
  */
-const CORPS_MAX = 65_536;
+const BODY_MAX = 65_536;
 
-/** Place laissée au pied écrit par nudge (nom du Projet compris, 100 caractères). */
-const PIED_MAX = 1_000;
+/** Room left for the footer written by nudge (Project name included, 100 characters). */
+const FOOTER_MAX = 1_000;
 
-/** Place du bloc de code du texte de l'Auteur, clôtures comprises. */
-const TEXTE_MAX = CORPS_MAX - PIED_MAX;
+/** Room for the code block of the Author's text, fences included. */
+const TEXT_MAX = BODY_MAX - FOOTER_MAX;
 
 /**
- * Le texte de l'Auteur dans un bloc de code clôturé : son contenu est littéral (GFM,
- * https://github.github.com/gfm/#fenced-code-blocks), sans mise en forme, lien, image,
- * HTML, ni mention ou référence d'issue. La clôture compte un accent grave de plus que
- * la plus longue suite du texte, qui ne peut donc pas la refermer.
+ * The Author's text in a fenced code block: its content is literal (GFM,
+ * https://github.github.com/gfm/#fenced-code-blocks), with no formatting, link, image,
+ * HTML, mention or issue reference. The fence has one more backtick than the text's
+ * longest run, which therefore cannot close it.
  */
-function blocDeCode(texte: string): string {
-  let lignes = texte.replace(/\r\n?/g, '\n');
-  let cloture = '';
-  // La clôture dépend du texte gardé ; tronquer ne fait que la raccourcir : la boucle
-  // s'arrête dès que texte et clôtures tiennent ensemble.
+function codeBlock(text: string): string {
+  let lines = text.replace(/\r\n?/g, '\n');
+  let fence = '';
+  // The fence depends on the text kept; truncating can only shorten it: the loop
+  // stops as soon as text and fences fit together.
   for (;;) {
-    const plusLongue = (lignes.match(/`+/g) ?? []).reduce(
-      (max, suite) => Math.max(max, suite.length),
-      0,
-    );
-    cloture = '`'.repeat(Math.max(3, plusLongue + 1));
-    const place = TEXTE_MAX - 2 * (cloture.length + 1);
-    if (lignes.length <= place) break;
-    lignes = tronquer(lignes, place);
+    const longest = (lines.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0);
+    fence = '`'.repeat(Math.max(3, longest + 1));
+    const room = TEXT_MAX - 2 * (fence.length + 1);
+    if (lines.length <= room) break;
+    lines = truncate(lines, room);
   }
-  return `${cloture}\n${lignes}\n${cloture}`;
+  return `${fence}\n${lines}\n${fence}`;
 }
 
-/** Un texte du Membre (nom du Projet) en markdown : littéral, et sans mention. */
-const echapperMarkdown = (texte: string) => sansMention(echapperPonctuation(texte));
+/** A Member's text (Project name) in markdown: literal, and without mentions. */
+const escapeMarkdown = (text: string) => withoutMention(escapePunctuation(text));
 
-const sansMention = (texte: string) => texte.replaceAll('@', '@\u200b');
+const withoutMention = (text: string) => text.replaceAll('@', '@​');

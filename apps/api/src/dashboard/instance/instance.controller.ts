@@ -1,75 +1,75 @@
 import { Body, Controller, Delete, Get, HttpCode, Post, Put, UseGuards } from '@nestjs/common';
 import {
-  schemaChoixJuge,
-  schemaDestinationAlerte,
-  schemaRetention,
-  type RetentionVu,
-  type DestinationAlerteAvecSecretsGeneres,
-  type DestinationAlerteVu,
-  type JugeInstanceVu,
-  type ResultatTestDestination,
+  judgeChoiceSchema,
+  alertDestinationSchema,
+  retentionSchema,
+  type RetentionView,
+  type AlertDestinationWithGeneratedSecrets,
+  type AlertDestinationView,
+  type InstanceJudgeView,
+  type DestinationTestResult,
 } from '@nudge/shared';
 import { SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
-import { DestinationAlerteService } from './destination-alerte.service.js';
-import { JugeInstanceService } from './juge-instance.service.js';
-import { RetentionInstanceService } from './retention-instance.service.js';
+import { AlertDestinationService } from './alert-destination.service.js';
+import { InstanceJudgeService } from './instance-judge.service.js';
+import { InstanceRetentionService } from './instance-retention.service.js';
 
-/** Paramètres de l'Instance (D6) : Juge, Destination d'alerte, durée de rétention. */
+/** Instance settings (D6): Judge, Alert destination, retention period. */
 @Controller('api/instance')
 @UseGuards(SessionGuard)
 export class InstanceController {
   constructor(
-    private readonly juge: JugeInstanceService,
-    private readonly alerte: DestinationAlerteService,
-    private readonly retention: RetentionInstanceService,
+    private readonly judge: InstanceJudgeService,
+    private readonly alertDestination: AlertDestinationService,
+    private readonly retention: InstanceRetentionService,
   ) {}
 
-  @Get('juge')
-  lireJuge(): Promise<JugeInstanceVu> {
-    return this.juge.lire();
+  @Get('judge')
+  readJudge(): Promise<InstanceJudgeView> {
+    return this.judge.read();
   }
 
-  /** Remplace le choix du Juge ; la clé API n'est jamais rendue. */
-  @Put('juge')
-  choisirJuge(@Body() corps: unknown): Promise<JugeInstanceVu> {
-    return this.juge.choisir(parseBody(schemaChoixJuge, corps));
+  /** Replaces the Judge choice; the API key is never returned. */
+  @Put('judge')
+  chooseJudge(@Body() body: unknown): Promise<InstanceJudgeView> {
+    return this.judge.choose(parseBody(judgeChoiceSchema, body));
   }
 
-  /** `destination: null` : pas de Destination d'alerte. */
-  @Get('alerte')
-  async lireAlerte(): Promise<{ destination: DestinationAlerteVu | null }> {
-    return { destination: await this.alerte.lire() };
+  /** `destination: null`: no Alert destination. */
+  @Get('alert-destination')
+  async readAlertDestination(): Promise<{ destination: AlertDestinationView | null }> {
+    return { destination: await this.alertDestination.read() };
   }
 
-  /** Enregistre la Destination d'alerte ; les secrets générés sont rendus cette seule fois. */
-  @Put('alerte')
-  configurerAlerte(@Body() corps: unknown): Promise<DestinationAlerteAvecSecretsGeneres> {
-    return this.alerte.configurer(parseBody(schemaDestinationAlerte, corps));
+  /** Stores the Alert destination; the generated secrets are returned this one time. */
+  @Put('alert-destination')
+  configureAlertDestination(@Body() body: unknown): Promise<AlertDestinationWithGeneratedSecrets> {
+    return this.alertDestination.configure(parseBody(alertDestinationSchema, body));
   }
 
-  @Delete('alerte')
+  @Delete('alert-destination')
   @HttpCode(204)
-  retirerAlerte(): Promise<void> {
-    return this.alerte.retirer();
+  removeAlertDestination(): Promise<void> {
+    return this.alertDestination.remove();
   }
 
-  /** Envoie une alerte d'exemple ; 200 avec le résultat, livré ou en échec. */
-  @Post('alerte/test')
+  /** Sends a sample alert; 200 with the result, delivered or failed. */
+  @Post('alert-destination/test')
   @HttpCode(200)
-  testerAlerte(): Promise<ResultatTestDestination> {
-    return this.alerte.tester();
+  testAlertDestination(): Promise<DestinationTestResult> {
+    return this.alertDestination.test();
   }
 
-  /** `jours: null` : rétention illimitée (par défaut). */
+  /** `days: null`: unlimited retention (the default). */
   @Get('retention')
-  lireRetention(): Promise<RetentionVu> {
-    return this.retention.lire();
+  readRetention(): Promise<RetentionView> {
+    return this.retention.read();
   }
 
-  /** La purge planifiée du worker relit la durée à chaque passage. */
+  /** The worker's scheduled purge reads the period again on every run. */
   @Put('retention')
-  changerRetention(@Body() corps: unknown): Promise<RetentionVu> {
-    return this.retention.changer(parseBody(schemaRetention, corps));
+  changeRetention(@Body() body: unknown): Promise<RetentionView> {
+    return this.retention.change(parseBody(retentionSchema, body));
   }
 }

@@ -1,27 +1,29 @@
 import { Navigate } from 'react-router';
-import { useEtatSetup, useSetup } from '../api/session.js';
+import { useSetupState, useSetup } from '../api/session.js';
+import { useT } from '../i18n/index.js';
 import { PublicPage } from '../layout/Layout.js';
 import { Loading, ErrorMessage } from '../layout/ui.js';
 import { AccountForm } from './AccountForm.js';
 
-/** Premier lancement : le premier Membre crée son compte. Fermé ensuite. */
+/** First launch: the first Member creates their account. Closed afterwards. */
 export function Setup() {
-  const etat = useEtatSetup();
+  const t = useT();
+  const state = useSetupState();
   const setup = useSetup();
 
-  if (setup.isSuccess) return <Navigate to="/projets" replace />;
-  if (etat.isPending) return <Loading />;
-  if (etat.isError) return <ErrorMessage erreur={etat.error} />;
-  if (!etat.data.requis) return <Navigate to="/connexion" replace />;
+  if (setup.isSuccess) return <Navigate to="/projects" replace />;
+  if (state.isPending) return <Loading />;
+  if (state.isError) return <ErrorMessage error={state.error} />;
+  if (!state.data.required) return <Navigate to="/sign-in" replace />;
   return (
-    <PublicPage titre="Créer le premier compte">
-      <p>Cette Instance n’a encore aucun Membre. Le compte créé ici pourra inviter les autres.</p>
+    <PublicPage title={t.setup.title}>
+      <p>{t.setup.intro}</p>
       <AccountForm
-        action="Créer le compte"
-        nouveauCompte
-        enCours={setup.isPending}
-        erreur={setup.error}
-        onSubmit={(identifiants) => setup.mutate(identifiants)}
+        action={t.setup.submit}
+        newAccount
+        pending={setup.isPending}
+        error={setup.error}
+        onSubmit={(credentials) => setup.mutate(credentials)}
       />
     </PublicPage>
   );

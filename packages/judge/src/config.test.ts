@@ -1,97 +1,97 @@
 import { describe, expect, it } from 'vitest';
-import { configJugeFromEnv, createJuge, type ConfigJuge } from './config.js';
+import { judgeConfigFromEnv, createJudge, type JudgeConfig } from './config.js';
 import { noul } from './port.js';
-import { TYPESAFE } from './test/enregistrements.js';
+import { TYPESAFE } from './test/recordings.js';
 
-/** Un fetch qui note l'URL appelée et rend une réponse Noul valide. */
-function fetchEspion() {
+/** A fetch that records the URL called and returns a valid Noul response. */
+function spyFetch() {
   const urls: string[] = [];
-  const entetes: Headers[] = [];
+  const headers: Headers[] = [];
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
     urls.push(String(url));
-    entetes.push(new Headers(init.headers));
-    return new Response(JSON.stringify(TYPESAFE.noul.corps), { status: 200 });
+    headers.push(new Headers(init.headers));
+    return new Response(JSON.stringify(TYPESAFE.noul.body), { status: 200 });
   }) as typeof globalThis.fetch;
-  return { fetch, urls, entetes };
+  return { fetch, urls, headers };
 }
 
-const requete = { state: { texte: 'Bonjour' }, questions: { billing: noul('Facturation ?') } };
+const request = { state: { text: 'Hello' }, questions: { billing: noul('Billing?') } };
 
-describe('Juge choisi par configuration', () => {
+describe('Judge chosen by configuration', () => {
   it.each([
     ['typesafe', 'https://api.typesafe.ai/v1/systemone'],
     ['openrouter', 'https://openrouter.ai/api/alpha/decisions'],
-  ] as const)('%s : appelle l’API du fournisseur avec la clé', async (fournisseur, url) => {
-    const espion = fetchEspion();
-    const config: ConfigJuge = { fournisseur, cleApi: 'cle-factice', modele: null, urlBase: null };
+  ] as const)("%s: calls the provider's API with the key", async (provider, url) => {
+    const spy = spyFetch();
+    const config: JudgeConfig = { provider, apiKey: 'fake-key', model: null, baseUrl: null };
 
-    await createJuge(config, { fetch: espion.fetch }).juger(requete);
+    await createJudge(config, { fetch: spy.fetch }).judge(request);
 
-    expect(espion.urls).toEqual([url]);
-    expect(espion.entetes[0]!.get('authorization')).toBe('Bearer cle-factice');
+    expect(spy.urls).toEqual([url]);
+    expect(spy.headers[0]!.get('authorization')).toBe('Bearer fake-key');
   });
 
-  it('auto_heberge : appelle le serveur configuré, sans clé', async () => {
-    const espion = fetchEspion();
-    await createJuge(
-      { fournisseur: 'auto_heberge', cleApi: null, modele: null, urlBase: 'http://decider:8080' },
-      { fetch: espion.fetch },
-    ).juger(requete);
+  it('self_hosted: calls the configured server, without a key', async () => {
+    const spy = spyFetch();
+    await createJudge(
+      { provider: 'self_hosted', apiKey: null, model: null, baseUrl: 'http://decider:8080' },
+      { fetch: spy.fetch },
+    ).judge(request);
 
-    expect(espion.urls).toEqual(['http://decider:8080/v1/decisions']);
-    expect(espion.entetes[0]!.has('authorization')).toBe(false);
+    expect(spy.urls).toEqual(['http://decider:8080/v1/decisions']);
+    expect(spy.headers[0]!.has('authorization')).toBe(false);
   });
 
-  it('refuse une configuration incomplète', () => {
+  it('rejects an incomplete configuration', () => {
     expect(() =>
-      createJuge({ fournisseur: 'typesafe', cleApi: null, modele: null, urlBase: null }),
-    ).toThrow(/clé/);
+      createJudge({ provider: 'typesafe', apiKey: null, model: null, baseUrl: null }),
+    ).toThrow(/key/);
     expect(() =>
-      createJuge({ fournisseur: 'auto_heberge', cleApi: null, modele: null, urlBase: null }),
+      createJudge({ provider: 'self_hosted', apiKey: null, model: null, baseUrl: null }),
     ).toThrow(/URL/);
   });
 });
 
-describe('Juge par variables d’environnement (repli)', () => {
-  it('lit NUDGE_JUDGE_PROVIDER, _API_KEY, _MODEL et _BASE_URL', () => {
+describe('Judge from environment variables (fallback)', () => {
+  it('reads NUDGE_JUDGE_PROVIDER, _API_KEY, _MODEL and _BASE_URL', () => {
     expect(
-      configJugeFromEnv({
+      judgeConfigFromEnv({
         NUDGE_JUDGE_PROVIDER: 'openrouter',
-        NUDGE_JUDGE_API_KEY: 'sk-or-factice',
+        NUDGE_JUDGE_API_KEY: 'sk-or-fake',
         NUDGE_JUDGE_MODEL: 'typesafe/jev-1.14',
       }),
     ).toEqual({
-      fournisseur: 'openrouter',
-      cleApi: 'sk-or-factice',
-      modele: 'typesafe/jev-1.14',
-      urlBase: null,
+      provider: 'openrouter',
+      apiKey: 'sk-or-fake',
+      model: 'typesafe/jev-1.14',
+      baseUrl: null,
     });
     expect(
-      configJugeFromEnv({
-        NUDGE_JUDGE_PROVIDER: 'auto_heberge',
+      judgeConfigFromEnv({
+        NUDGE_JUDGE_PROVIDER: 'self_hosted',
         NUDGE_JUDGE_BASE_URL: 'http://decider:8080',
       }),
     ).toEqual({
-      fournisseur: 'auto_heberge',
-      cleApi: null,
-      modele: null,
-      urlBase: 'http://decider:8080',
+      provider: 'self_hosted',
+      apiKey: null,
+      model: null,
+      baseUrl: 'http://decider:8080',
     });
   });
 
-  it('sans NUDGE_JUDGE_PROVIDER, pas de Juge (mode dégradé)', () => {
-    expect(configJugeFromEnv({})).toBeNull();
-    expect(configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: '' })).toBeNull();
+  it('without NUDGE_JUDGE_PROVIDER, no Judge (degraded mode)', () => {
+    expect(judgeConfigFromEnv({})).toBeNull();
+    expect(judgeConfigFromEnv({ NUDGE_JUDGE_PROVIDER: '' })).toBeNull();
   });
 
-  it('refuse au démarrage un fournisseur inconnu ou une configuration incomplète', () => {
-    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'gpt' })).toThrow(
+  it('rejects at startup an unknown provider or an incomplete configuration', () => {
+    expect(() => judgeConfigFromEnv({ NUDGE_JUDGE_PROVIDER: 'gpt' })).toThrow(
       /NUDGE_JUDGE_PROVIDER/,
     );
-    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'typesafe' })).toThrow(
+    expect(() => judgeConfigFromEnv({ NUDGE_JUDGE_PROVIDER: 'typesafe' })).toThrow(
       /NUDGE_JUDGE_API_KEY/,
     );
-    expect(() => configJugeFromEnv({ NUDGE_JUDGE_PROVIDER: 'auto_heberge' })).toThrow(
+    expect(() => judgeConfigFromEnv({ NUDGE_JUDGE_PROVIDER: 'self_hosted' })).toThrow(
       /NUDGE_JUDGE_BASE_URL/,
     );
   });

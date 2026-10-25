@@ -1,2 +1,0 @@
-ALTER TABLE "parametres_instance" ADD COLUMN "retention_jours" integer;--> statement-breakpoint
-ALTER TABLE "parametres_instance" ADD CONSTRAINT "parametres_instance_retention_positive" CHECK ("parametres_instance"."retention_jours" > 0);

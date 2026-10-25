@@ -1,0 +1,480 @@
+import type { Messages } from './en.js';
+
+/** Plural for French: 0 and 1 take the singular. */
+const s = (count: number) => (count > 1 ? 's' : '');
+
+/** The dashboard's copy in French. The only file of the dashboard written in French. */
+export const fr: Messages = {
+  localeName: 'Français',
+
+  labels: {
+    feedbackType: {
+      bug: 'Bug',
+      suggestion: 'Suggestion',
+      opinion: 'Avis',
+      question: 'Question',
+    },
+    severity: {
+      cosmetic: 'Cosmétique',
+      minor: 'Mineure',
+      major: 'Majeure',
+      blocking: 'Bloquante',
+    },
+    feedbackState: {
+      received: 'Reçu',
+      triaged: 'Trié',
+      dispatched: 'Dispatché',
+      discarded: 'Écarté',
+      in_review: 'En revue',
+    },
+    source: {
+      widget: 'Widget',
+      api: 'API',
+      extension: 'Extension',
+    },
+    authorTrust: {
+      declared: 'Déclarée',
+      attested: 'Attestée',
+    },
+    deliveryStatus: {
+      pending: 'En attente',
+      delivered: 'Livré',
+      failed: 'Échec',
+      held: 'Retenu',
+    },
+    destinationState: {
+      active: 'Active',
+      suspended: 'Suspendue',
+    },
+    failureClass: {
+      transient: 'indisponibilité passagère',
+      auth: 'identifiants refusés',
+      permanent: 'refusé par la Destination',
+    },
+    judgeProvider: {
+      typesafe: 'TypeSafe',
+      openrouter: 'OpenRouter',
+      self_hosted: 'Votre serveur (API Decisions)',
+    },
+    judgeProviderDescription: {
+      typesafe: 'Les modèles de décision de TypeSafe, avec votre clé API TypeSafe.',
+      openrouter:
+        'Les modèles de décision proposés par OpenRouter, par son API Decisions, avec votre clé API OpenRouter.',
+      self_hosted:
+        'Le modèle de décision de votre choix, servi par votre propre serveur : tout serveur qui expose l’API Decisions convient. La clé est facultative.',
+    },
+  },
+
+  apiErrors: {
+    invalid_credentials: 'Email ou mot de passe incorrect.',
+    setup_completed: 'Le premier compte existe déjà : connectez-vous.',
+    email_already_used: 'Un Membre utilise déjà cet email.',
+    invalid_invitation: 'Ce lien d’invitation est invalide, expiré ou déjà utilisé.',
+    project_not_found: 'Ce Projet n’existe pas.',
+    feedback_not_found: 'Ce Retour n’existe pas.',
+    transition_refused: 'Ce Retour a changé entre-temps : voici son état actuel.',
+    storage_unavailable:
+      'La Capture n’a pas pu être effacée du stockage : le Retour est gardé. Réessayez plus tard.',
+    feedback_not_triaged: 'Ce Retour n’est pas encore trié : il n’a pas de Verdict à corriger.',
+    delivery_not_found: 'Cet Envoi n’existe plus.',
+    delivery_not_replayable:
+      'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
+    feedback_not_redispatchable:
+      'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
+    destination_not_found: 'Cette Destination n’existe plus.',
+    unknown_destination_type: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
+    session_required: 'Votre session a expiré : reconnectez-vous.',
+  },
+  unreachable: 'L’Instance est injoignable. Réessayez.',
+  unexpectedError: (code) => `Erreur inattendue (${code}).`,
+
+  common: {
+    retry: 'Réessayer',
+    saved: 'Enregistré.',
+    loading: 'Chargement…',
+    save: 'Enregistrer',
+    cancel: 'Annuler',
+    confirm: 'Confirmer',
+    close: 'Fermer',
+    test: 'Tester',
+    edit: 'Modifier',
+    delete: 'Supprimer',
+    copy: 'Copier',
+    copied: 'Copié',
+    copiedToClipboard: 'Copié dans le presse-papier.',
+    copyManually:
+      'Copie automatique impossible : le texte est sélectionné, copiez-le avec ⌘C ou Ctrl+C.',
+    language: 'Langue',
+  },
+
+  time: {
+    justNow: 'à l’instant',
+    minutesAgo: (minutes) => `il y a ${minutes} min`,
+    hoursAgo: (hours) => `il y a ${hours} h`,
+    yesterdayAt: (time) => `hier, ${time}`,
+    today: 'Aujourd’hui',
+    yesterday: 'Hier',
+  },
+
+  units: { bytes: 'o', kibibytes: 'Kio', mebibytes: 'Mio' },
+
+  layout: {
+    menu: 'Menu',
+    closeMenu: 'Fermer le menu',
+    mainNavigation: 'Navigation principale',
+    instanceNavigation: 'Instance',
+    inbox: 'Boîte de réception',
+    projects: 'Projets',
+    members: 'Membres',
+    settings: 'Paramètres',
+    signOut: 'Se déconnecter',
+    inReviewTitle: 'Retours En revue',
+    inReviewHidden: ', Retours En revue : ',
+    thisWeekTitle: 'Retours reçus ces sept derniers jours',
+    thisWeekHidden: ', Retours cette semaine : ',
+  },
+
+  alerts: {
+    region: 'Alertes',
+    inReview: (count) => `${count} Retour${s(count)} en revue`,
+    suspended: (destination, project) => `Destination suspendue : ${destination} (${project})`,
+  },
+
+  badges: {
+    uncertain: 'Incertain',
+    uncertainTitle: 'Le Juge a hésité : à vérifier',
+    noSeverity: 'Sans Gravité',
+    severity: (label) => `Gravité ${label}`,
+  },
+
+  account: {
+    email: 'Email',
+    password: 'Mot de passe',
+    passwordHelp: (min) => `${min} caractères au moins.`,
+  },
+
+  signIn: {
+    title: 'Connexion',
+    submit: 'Se connecter',
+  },
+
+  setup: {
+    title: 'Créer le premier compte',
+    intro: 'Cette Instance n’a encore aucun Membre. Le compte créé ici pourra inviter les autres.',
+    submit: 'Créer le compte',
+  },
+
+  invitation: {
+    title: 'Invitation',
+    askAgainBefore: 'Demandez un nouveau lien à un Membre, ou ',
+    signInLink: 'connectez-vous',
+    askAgainAfter: '.',
+    joinTitle: 'Rejoindre l’Instance',
+    intro: 'Vous êtes invité à rejoindre cette Instance nudge. Créez votre compte de Membre.',
+    submit: 'Créer mon compte',
+  },
+
+  notFound: {
+    title: 'Page introuvable',
+    empty: 'Cette adresse ne mène à aucun écran.',
+    back: 'Revenir à la Boîte de réception',
+    help: 'Le lien est peut-être incomplet, ou l’élément a été supprimé.',
+  },
+
+  members: {
+    title: 'Membres',
+    description:
+      'Tous les Membres voient tous les Projets. Pour inviter quelqu’un, générez un lien et transmettez-le lui : il sert une seule fois.',
+    generate: 'Générer un lien d’invitation',
+    invitationLink: 'Lien d’invitation',
+    validUntil: (date) =>
+      `Valable jusqu’au ${date}, pour un seul compte. Un nouveau lien ne révoque pas les précédents.`,
+    list: 'Membres de l’Instance',
+    you: ' (vous)',
+    since: (date) => `Membre depuis le ${date}`,
+  },
+
+  inbox: {
+    title: 'Boîte de réception',
+    views: 'Vues',
+    view: {
+      all: 'Tous',
+      in_review: 'En revue',
+      received: 'Reçus',
+      triaged: 'Triés',
+      dispatched: 'Dispatchés',
+      discarded: 'Écartés',
+    },
+    filters: 'Filtres',
+    filter: {
+      project: 'Projet',
+      type: 'Type',
+      severity: 'Gravité',
+      source: 'Source',
+      uncertain: 'Verdict',
+    },
+    anyProject: 'Tous',
+    anyType: 'Tous',
+    anySeverity: 'Toutes',
+    anySource: 'Toutes',
+    anyVerdict: 'Tous',
+    uncertainOnly: 'Incertains seulement',
+    withoutUncertain: 'Sans les Incertains',
+    shown: (count, more) =>
+      `${count} Retour${s(count)} affiché${s(count)}${more ? ', d’autres à charger' : ''}.`,
+    noMatch: 'Aucun Retour ne correspond à ces filtres.',
+    clearFilters: 'Effacer les filtres',
+    emptyTitle: 'Aucun Retour pour l’instant.',
+    emptyHelp:
+      'Les Retours arrivent ici dès qu’un Projet en reçoit, par le Widget ou par l’API. La page d’un Projet donne ses clés.',
+    showMore: 'Afficher plus',
+    shortcutsNextPrevious: 'Retour suivant ou précédent,',
+    shortcutsEscape: 'Échap',
+    shortcutsClose: 'fermer',
+    openFeedback: 'Retour ouvert',
+    notTriaged: 'Non trié',
+  },
+
+  feedback: {
+    heading: (text) => `Retour : ${text}`,
+    text: 'Texte du Retour',
+    declaredType: (type) => `Type déclaré par l’Auteur : ${type}`,
+    trail: 'Fil',
+    backToInbox: '← Boîte de réception',
+    position: (position, total) => `${position} sur ${total}`,
+    previous: 'Précédent',
+    next: 'Suivant',
+    properties: 'Propriétés du Retour',
+    sections: {
+      review: 'Revue',
+      capture: 'Capture',
+      deliveries: 'Envois',
+      verdict: 'Verdict',
+      author: 'Auteur',
+      context: 'Contexte',
+      deletion: 'Suppression',
+    },
+    review: {
+      inReview:
+        'Le Juge soupçonne une tentative de Manipulation du Triage : ce Retour n’a été envoyé nulle part. Validez-le pour le dispatcher, ou rejetez-le.',
+      junk: 'Écarté comme Indésirable. S’il s’agit d’un vrai Retour, réhabilitez-le : il sera dispatché normalement.',
+      approve: 'Valider',
+      reject: 'Rejeter',
+      rejectQuestion: 'Rejeté, le Retour est Écarté et ne pourra plus être réhabilité. Rejeter ?',
+      reinstate: 'Réhabiliter',
+    },
+    deletion: {
+      help: (withCapture) =>
+        `Efface définitivement ce Retour${withCapture ? ' et sa Capture' : ''}, par exemple pour une demande d’effacement de l’Auteur. Ce qui a déjà été créé chez les Destinations (issues, messages) n’est pas touché.`,
+      question: 'Le Retour sera effacé définitivement. Supprimer ?',
+    },
+    capture: {
+      alt: 'Capture de la page jointe par l’Auteur',
+      open: 'Ouvrir l’image',
+    },
+    verdict: {
+      notTriaged: 'Ce Retour n’est pas encore trié.',
+      resolvedType: 'Type retenu',
+      severity: 'Gravité',
+      notAssessed: 'Non évaluée',
+      junk: 'Indésirable',
+      manipulation: 'Manipulation',
+      correct: 'Corriger',
+      correctionHelp:
+        'La correction ne change rien chez les Destinations déjà servies : rejouez un Envoi pour la leur propager, ou redispatchez le Retour pour l’envoyer aux Destinations qui le retiennent désormais.',
+    },
+    author: {
+      anonymous: 'Anonyme',
+      name: 'Nom',
+      email: 'Email',
+      id: 'Identifiant',
+      trust: 'Identité',
+    },
+    context: {
+      page: 'Page',
+      browser: 'Navigateur',
+      screen: 'Écran',
+      none: 'Aucun contexte transmis.',
+      metadata: 'Métadonnées',
+    },
+    deliveries: {
+      none: 'Aucun Envoi.',
+      attempts: (count) => `${count} tentative${s(count)}`,
+      replay: 'Rejouer',
+      lastError: (error) => `Dernière erreur : ${error}`,
+    },
+    redispatch: {
+      help: 'Redispatcher envoie le Retour, selon son Verdict actuel, aux Destinations dont le Filtre le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
+      action: 'Redispatcher',
+      noneCreated: 'Aucune autre Destination ne retient ce Retour.',
+      created: (count) => `${count} Envoi${s(count)} créé${s(count)}.`,
+    },
+  },
+
+  projects: {
+    title: 'Projets',
+    description:
+      'Chaque Projet est une application dont nudge collecte les Retours, avec ses propres clés et Destinations.',
+    new: 'Nouveau Projet',
+    emptyTitle: 'Aucun Projet pour l’instant.',
+    emptyHelp:
+      'Créez le premier ci-dessus : vous obtiendrez ses clés pour brancher le Widget ou l’API.',
+    list: 'Projets de l’Instance',
+    thisWeek: (count) => `${count} Retour${s(count)} cette semaine`,
+    inReview: (count) => `${count} En revue`,
+    noDestination: 'Aucune Destination',
+    destinations: (count) => `${count} Destination${s(count)}`,
+    destinationsSuspended: (count, suspended) =>
+      `${count} Destination${s(count)}, dont ${suspended} Suspendue${s(suspended)}`,
+    name: 'Nom du Projet',
+    create: 'Créer le Projet',
+  },
+
+  project: {
+    fallbackTitle: 'Projet',
+    sections: 'Sections du Projet',
+    destinationsTab: 'Destinations',
+    settingsTab: 'Réglages',
+    keys: 'Clés',
+    publicKey: 'Clé publique',
+    publicKeyHelp: 'Pour le Widget ; acceptée seulement depuis les origines autorisées.',
+    regeneratePublicKey: 'Régénérer la clé publique',
+    regeneratePublicKeyQuestion: 'L’ancienne clé publique cessera de fonctionner. Régénérer ?',
+    secretKey: 'Clé secrète',
+    secretKeyHelp: 'Pour envoyer des Retours depuis un serveur. Ne la publiez jamais.',
+    copySecretKeyNow: 'Copiez la clé secrète maintenant : elle ne sera plus jamais affichée.',
+    secretKeyShownOnce: 'Affichée une seule fois, à sa création. Perdue ? Régénérez-la.',
+    regenerateSecretKey: 'Régénérer la clé secrète',
+    regenerateSecretKeyQuestion:
+      'L’ancienne clé secrète cessera immédiatement de fonctionner. Régénérer ?',
+    details: 'Informations',
+    description: 'Description du Projet',
+    descriptionHelp:
+      'Facultative. Dites au Juge ce qu’est le Projet et ce qui y est critique, pour qu’il évalue mieux la Gravité.',
+    allowedOrigins: 'Origines autorisées',
+    originsLabel: 'Une origine par ligne',
+    originsHelp:
+      'Le Widget n’est accepté que depuis ces origines (schéma://hôte[:port], sans chemin).',
+  },
+
+  destinations: {
+    add: 'Ajouter une Destination',
+    intro: 'Chaque Retour Trié part vers toutes les Destinations dont le Filtre le retient.',
+    emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
+    emptyHelp:
+      'Ajoutez-en une ci-dessus : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
+    copySecretNow: (name) =>
+      `Copiez maintenant le secret de « ${name} » : il ne sera plus jamais affiché.`,
+    anySeverity: 'toute Gravité',
+    severityOrMore: (severity) => `${severity} ou plus`,
+    suspendedProblem:
+      'Ses Envois échouent de façon répétée : ils sont retenus et repartiront dès qu’elle redeviendra joignable. Vérifiez sa configuration, puis testez-la.',
+    regenerate: (secrets) => `Régénérer le ${secrets}`,
+    regenerateQuestion: 'L’ancien secret cessera de valoir pour les prochains appels. Régénérer ?',
+    deleteQuestion: 'La Destination et l’historique de ses Envois seront supprimés. Supprimer ?',
+    editTitle: (name) => `Modifier ${name}`,
+    testDelivered: 'Retour d’exemple livré.',
+    testFailed: (failureClass, message) => `Échec (${failureClass}) : ${message}`,
+    form: {
+      type: 'Type',
+      name: 'Nom',
+      acceptedTypes: 'Types retenus',
+      minimumSeverity: 'Gravité minimale',
+      noMinimum: 'Aucune',
+      minimumSeverityHelp:
+        'Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.',
+      add: 'Ajouter',
+    },
+  },
+
+  destinationTypes: {
+    savedUrl: 'Une URL est enregistrée (chiffrée) : laissez vide pour la garder.',
+    savedToken: 'Un jeton est enregistré (chiffré) : laissez vide pour le garder.',
+    savedKey: 'Une clé est enregistrée (chiffrée) : laissez vide pour la garder.',
+    webhookUrl: 'URL du webhook',
+    webhook: {
+      url: 'URL',
+      urlHelp:
+        'nudge y POSTe chaque Retour en JSON : event, isTest, delivery, project et feedback (alert à la place, pour la Destination d’alerte). En-têtes : X-Nudge-Event (feedback, alert ou ping), X-Nudge-Delivery ou X-Nudge-Alert, X-Nudge-Timestamp, et X-Nudge-Signature : sha256=HMAC(secret, X-Nudge-Timestamp + « . » + corps brut).',
+      signingSecret: 'Secret de signature',
+      signingSecretHelp:
+        'Votre récepteur vérifie avec lui que les appels viennent de cette Instance.',
+    },
+    discord: {
+      urlHelp:
+        'Paramètres du salon › Intégrations › Webhooks › Copier l’URL. Stockée chiffrée, jamais réaffichée.',
+      summary: 'Webhook de salon',
+    },
+    slack: {
+      urlHelp:
+        'Votre app Slack › Incoming Webhooks › Add New Webhook, puis choisir le canal. Stockée chiffrée, jamais réaffichée.',
+      summary: 'Webhook entrant',
+    },
+    github: {
+      token: 'Jeton d’accès',
+      tokenHelp:
+        'GitHub › Settings › Developer settings › Fine-grained tokens : limité à ce dépôt, permission Issues en lecture et écriture. Stocké chiffré, jamais réaffiché.',
+      repository: 'Dépôt',
+      repositoryPlaceholder: 'organisation/depot',
+      repositoryHelp:
+        'Le propriétaire et le nom du dépôt, comme dans son URL : github.com/organisation/depot.',
+      summary: (repository) => `Dépôt ${repository}`,
+    },
+    linear: {
+      apiKey: 'Clé d’API',
+      apiKeyHelp:
+        'Linear › Paramètres › Sécurité et accès › Clés d’API personnelles. Stockée chiffrée, jamais réaffichée.',
+      team: 'Équipe',
+      teamHelp: 'La clé de l’équipe : les lettres avant le numéro des issues (ENG dans ENG-123).',
+      typeLabels: 'Labels posés selon le Type',
+      typeLabel: (type) => `Label du Type ${type}`,
+      severityLabels: 'Labels posés selon la Gravité',
+      severityLabel: (severity) => `Label de la Gravité ${severity}`,
+      labelsHelp:
+        'Le nom du label tel qu’il s’affiche dans Linear, de l’équipe ou de l’espace de travail. Laissé vide : aucun label. Un label introuvable suspend la Destination.',
+      summary: (team) => `Équipe ${team}`,
+    },
+  },
+
+  settings: {
+    title: 'Paramètres de l’Instance',
+    description: 'Ces réglages valent pour tous les Projets et tous les Membres.',
+    retention: {
+      title: 'Rétention des Retours',
+      unlimited: 'Rétention illimitée : aucun Retour n’est effacé automatiquement.',
+      limited: (days) =>
+        `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures.`,
+      label: 'Durée de rétention (jours)',
+      help: 'Vide : rétention illimitée. L’effacement est définitif.',
+      save: 'Enregistrer la rétention',
+      confirm: (days) =>
+        `Les Retours de plus de ${days} jours et leurs Captures seront effacés définitivement à la prochaine purge. Enregistrer ?`,
+    },
+    alertDestination: {
+      title: 'Destination d’alerte',
+      save: 'Enregistrer l’alerte',
+      remove: 'Retirer',
+      removeQuestion: 'Plus aucune alerte ne partira. Retirer la Destination d’alerte ?',
+      help: 'Prévient les Membres quand un Retour passe En revue ou qu’une Destination est Suspendue, par l’un des types de Destination. Le dashboard les signale de toute façon.',
+      saved: (type) => `Enregistrée : ${type}.`,
+      none: 'Aucune Destination d’alerte : les alertes ne partent nulle part.',
+      secretName: 'la Destination d’alerte',
+      testDelivered: 'Alerte d’exemple livrée.',
+    },
+    judge: {
+      title: 'Juge',
+      help: 'Le modèle de décision qui trie les Retours : il répond aux questions du Triage par des probabilités, là où un modèle de chat rédigerait du texte. Choisissez où il tourne, puis lequel. Sans Juge, nudge tourne en mode dégradé : le Type déclaré est retenu, sans Gravité ni détection d’Indésirable.',
+      provider: 'Fournisseur',
+      none: 'Aucun (mode dégradé)',
+      model: 'Modèle',
+      modelHelp: (fallback) => `Le nom du modèle chez ce fournisseur. Vide : ${fallback}.`,
+      serverUrl: 'URL du serveur',
+      baseUrl: 'URL de base (facultative)',
+      serverUrlHelp: 'L’adresse de votre serveur : nudge y appelle <URL>/v1/decisions.',
+      baseUrlHelp: 'Seulement pour passer par un proxy ; vide : l’API du fournisseur.',
+      apiKey: 'Clé API',
+      keySaved: 'Une clé est enregistrée (chiffrée) : laissez vide pour la garder.',
+      keyHelp: 'Stockée chiffrée, jamais réaffichée.',
+    },
+  },
+};

@@ -1,23 +1,23 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  echecDException,
-  lienDashboard,
-  type CaptureADispatcher,
+  failureFromException,
+  buildDashboardUrl,
+  type CaptureToDispatch,
   type DestinationAdapterResolver,
   type DispatchJob,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type OutgoingDelivery,
+  type DeliveryResult,
   type SecretCipher,
 } from '@nudge/core';
 import {
-  envois,
-  toDestinationConfiguree,
+  deliveries,
+  toConfiguredDestination,
   type captures,
   type Db,
   type DestinationRow,
 } from '@nudge/database';
 import { eq } from 'drizzle-orm';
-import { EchecTransitoire } from './echec-transitoire.js';
+import { TransientFailure } from './transient-failure.js';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
@@ -36,115 +36,115 @@ export class DispatchProcessor {
   ) {}
 
   /**
-   * `derniereTentative` : BullMQ ne relancera plus ce job ; un échec transient y met
-   * l'Envoi en échec au lieu de le laisser en attente sans job.
+   * `lastAttempt`: BullMQ will not run this job again; a transient failure then marks
+   * the Delivery failed instead of leaving it pending without a job.
    */
-  async handle({ envoiId }: DispatchJob, { derniereTentative = false } = {}): Promise<void> {
-    const envoi = await this.db.query.envois.findFirst({
-      where: eq(envois.id, envoiId),
+  async handle({ deliveryId }: DispatchJob, { lastAttempt = false } = {}): Promise<void> {
+    const delivery = await this.db.query.deliveries.findFirst({
+      where: eq(deliveries.id, deliveryId),
       with: {
         destination: true,
-        retour: { with: { projet: true, verdict: true, capture: true } },
+        feedback: { with: { project: true, verdict: true, capture: true } },
       },
     });
-    if (!envoi) return;
-    const { destination, retour } = envoi;
-    if (envoi.statut === 'retenu') {
-      // Job de libération : l'Envoi repart si sa Destination est active.
-      if (destination.etat === 'suspendue') {
-        await this.suspension.prolongerRetenue(envoiId);
+    if (!delivery) return;
+    const { destination, feedback } = delivery;
+    if (delivery.status === 'held') {
+      // Release job: the Delivery goes again if its Destination is active.
+      if (destination.state === 'suspended') {
+        await this.suspension.extendHold(deliveryId);
         return;
       }
-      if (!(await this.suspension.reprendre(envoiId))) return;
-    } else if (envoi.statut !== 'en_attente') {
+      if (!(await this.suspension.resume(deliveryId))) return;
+    } else if (delivery.status !== 'pending') {
       return;
-    } else if (destination.etat === 'suspendue') {
-      // Destination Suspendue : l'Envoi est retenu sans appel sortant.
-      await this.suspension.retenir(envoiId);
+    } else if (destination.state === 'suspended') {
+      // Suspended Destination: the Delivery is held without an outgoing call.
+      await this.suspension.hold(deliveryId);
       return;
     }
-    if (!retour.verdict) {
-      this.logger.error(`Envoi ${envoiId} sans Verdict, ignoré`);
+    if (!feedback.verdict) {
+      this.logger.error(`Delivery ${deliveryId} without a Verdict, ignored`);
       return;
     }
 
-    let captureIllisible = false;
-    const aSortir: EnvoiASortir = {
-      envoiId,
-      essai: false,
-      projet: { id: retour.projet.id, nom: retour.projet.nom },
-      retour: {
-        id: retour.id,
-        texte: retour.texte,
-        source: retour.source,
-        typeRetenu: retour.verdict.typeRetenu,
-        gravite: retour.verdict.gravite,
-        incertain: retour.verdict.incertain,
-        auteur:
-          retour.auteur && retour.confianceAuteur
-            ? { ...retour.auteur, confiance: retour.confianceAuteur }
+    let captureUnreadable = false;
+    const outgoing: OutgoingDelivery = {
+      deliveryId,
+      isTest: false,
+      project: { id: feedback.project.id, name: feedback.project.name },
+      feedback: {
+        id: feedback.id,
+        text: feedback.text,
+        source: feedback.source,
+        resolvedType: feedback.verdict.resolvedType,
+        severity: feedback.verdict.severity,
+        uncertain: feedback.verdict.uncertain,
+        author:
+          feedback.author && feedback.authorTrust
+            ? { ...feedback.author, trust: feedback.authorTrust }
             : null,
-        contexte: retour.contexte,
-        capture: retour.capture
-          ? this.captureADispatcher(retour.capture, () => {
-              captureIllisible = true;
+        context: feedback.context,
+        capture: feedback.capture
+          ? this.captureToDispatch(feedback.capture, () => {
+              captureUnreadable = true;
             })
           : null,
-        recuLe: retour.createdAt,
-        lienDashboard: lienDashboard(this.options.dashboardUrl, `/retours/${retour.id}`),
+        receivedAt: feedback.createdAt,
+        dashboardUrl: buildDashboardUrl(this.options.dashboardUrl, `/feedbacks/${feedback.id}`),
       },
     };
 
-    const { resultat, exception } = await this.sortir(destination, aSortir);
+    const { result, exception } = await this.send(destination, outgoing);
 
-    if (resultat.statut === 'livre') {
-      await this.suspension.apresLivraison(envoi, resultat.lienExterne);
+    if (result.status === 'delivered') {
+      await this.suspension.afterDelivery(delivery, result.externalUrl);
       return;
     }
-    const issue = await this.suspension.apresEchec(envoi, resultat, {
-      derniereTentative,
-      interne: exception || captureIllisible,
+    const outcome = await this.suspension.afterFailure(delivery, result, {
+      lastAttempt,
+      internal: exception || captureUnreadable,
     });
-    if (issue === 'a_retenter') throw new EchecTransitoire(resultat.message);
+    if (outcome === 'retry') throw new TransientFailure(result.message);
   }
 
   /**
-   * Envoie par l'adaptateur de la Destination. Une exception est un échec transitoire
-   * qui vient de nudge et non de la cible (D25) : secrets indéchiffrables, type
-   * d'adaptateur inconnu, défaut de l'adaptateur — chaque adaptateur rend en résultat
-   * classé les réponses et les erreurs réseau de sa cible.
+   * Sends through the Destination's adapter. An exception is a transient failure that
+   * comes from nudge and not from the target (D25): undecryptable secrets, unknown
+   * adapter type, adapter defect — each adapter returns its target's responses and
+   * network errors as a classified result.
    */
-  private async sortir(
+  private async send(
     destination: DestinationRow,
-    aSortir: EnvoiASortir,
-  ): Promise<{ resultat: ResultatEnvoi; exception: boolean }> {
+    outgoing: OutgoingDelivery,
+  ): Promise<{ result: DeliveryResult; exception: boolean }> {
     try {
-      const adaptateur = this.resolveDestinationAdapter(
-        toDestinationConfiguree(destination, this.cipher),
+      const adapter = this.resolveDestinationAdapter(
+        toConfiguredDestination(destination, this.cipher),
       );
-      return { resultat: await adaptateur.send(aSortir), exception: false };
-    } catch (erreur) {
-      return { resultat: echecDException(erreur), exception: true };
+      return { result: await adapter.send(outgoing), exception: false };
+    } catch (error) {
+      return { result: failureFromException(error), exception: true };
     }
   }
 
   /**
-   * La Capture d'un Retour, lue dans le stockage seulement si l'adaptateur la joint.
-   * `surEchec` signale un stockage qui ne la rend pas : un échec interne à nudge.
+   * A Feedback's Capture, read from storage only if the adapter attaches it.
+   * `onFailure` reports a storage that does not return it: a failure internal to nudge.
    */
-  private captureADispatcher(
-    { cle, contentType, octets }: typeof captures.$inferSelect,
-    surEchec: () => void,
-  ): CaptureADispatcher {
+  private captureToDispatch(
+    { key, contentType, bytes }: typeof captures.$inferSelect,
+    onFailure: () => void,
+  ): CaptureToDispatch {
     return {
       contentType,
-      octets,
-      lire: async () => {
+      bytes,
+      read: async () => {
         try {
-          return await this.options.stockageCaptures.lire(cle);
-        } catch (erreur) {
-          surEchec();
-          throw erreur;
+          return await this.options.captureStorage.read(key);
+        } catch (error) {
+          onFailure();
+          throw error;
         }
       },
     };

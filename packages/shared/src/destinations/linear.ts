@@ -1,45 +1,45 @@
 import { z } from 'zod';
-import { GRAVITES, TYPES_RETOUR } from '../domaine.js';
-import type { DefinitionDestination } from './definition.js';
+import { SEVERITIES, FEEDBACK_TYPES } from '../domain.js';
+import type { DestinationDefinition } from './definition.js';
 
-/** Longueur maximale d'un nom de label saisi. */
-const NOM_LABEL_MAX = 80;
+/** Maximum length of an entered label name. */
+const LABEL_NAME_MAX = 80;
 
 /**
- * Le label Linear posé pour un Type ou une Gravité, par son nom tel qu'il s'affiche
- * dans Linear (sans tenir compte de la casse). Champ laissé vide : aucun label.
+ * The Linear label applied for a Type or a Severity, by its name as displayed in
+ * Linear (case-insensitive). Field left empty: no label.
  */
-const nomLabel = z.string().trim().min(1).max(NOM_LABEL_MAX);
+const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
 
 /**
- * Linear : une issue créée dans l'équipe configurée, par l'API GraphQL avec une clé
- * d'API personnelle (secret, chiffrée en base, jamais rendue).
+ * Linear: an issue created in the configured team, through the GraphQL API with a
+ * personal API key (secret, encrypted in the database, never returned).
  *
- * L'équipe est désignée par sa clé (« ENG » dans ENG-123) et les labels par leur nom :
- * l'adaptateur les retrouve dans Linear. Un label inconnu, ou une équipe hors de
- * portée de la clé, refuse la Destination entière.
+ * The team is designated by its key ("ENG" in ENG-123) and labels by their name: the
+ * adapter looks them up in Linear. An unknown label, or a team out of the key's reach,
+ * refuses the whole Destination.
  */
-export const definitionLinear = {
+export const linearDefinition = {
   config: z.strictObject({
-    equipe: z
+    team: z
       .string()
       .trim()
       .regex(/^[A-Za-z0-9_]{1,20}$/, {
-        message: 'Clé d’équipe Linear attendue (les lettres avant le numéro : ENG dans ENG-123)',
+        message: 'Expected a Linear team key (the letters before the number: ENG in ENG-123)',
       })
-      .transform((cle) => cle.toUpperCase()),
+      .transform((key) => key.toUpperCase()),
     labels: z
       .strictObject({
-        types: z.partialRecord(z.enum(TYPES_RETOUR), nomLabel).default({}),
-        gravites: z.partialRecord(z.enum(GRAVITES), nomLabel).default({}),
+        types: z.partialRecord(z.enum(FEEDBACK_TYPES), labelName).default({}),
+        severities: z.partialRecord(z.enum(SEVERITIES), labelName).default({}),
       })
-      .default({ types: {}, gravites: {} }),
+      .default({ types: {}, severities: {} }),
   }),
   secrets: z.strictObject({
-    cleApi: z.string().trim().min(1, { message: 'Clé d’API Linear attendue' }),
+    apiKey: z.string().trim().min(1, { message: 'Expected a Linear API key' }),
   }),
-  secretsGeneres: [],
-} as const satisfies DefinitionDestination;
+  generatedSecrets: [],
+} as const satisfies DestinationDefinition;
 
-export type ConfigLinear = z.output<typeof definitionLinear.config>;
-export type SecretsLinear = z.output<typeof definitionLinear.secrets>;
+export type LinearConfig = z.output<typeof linearDefinition.config>;
+export type LinearSecrets = z.output<typeof linearDefinition.secrets>;

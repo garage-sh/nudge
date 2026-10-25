@@ -4,26 +4,26 @@ import type { z } from 'zod';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Un identifiant de ligne bien formé : un autre ne désigne rien (404), sans requête en base. */
-export const isUuid = (valeur: string): boolean => UUID.test(valeur);
+/** A well-formed row id: any other designates nothing (404), without a database query. */
+export const isUuid = (value: string): boolean => UUID.test(value);
 
 /**
- * Valide un corps de requête ; un refus rend 400 avec un code stable
- * (`requete_invalide` par défaut) et le détail des champs refusés.
+ * Validates a request body; a refusal returns 400 with a stable code
+ * (`invalid_request` by default) and the detail of the refused fields.
  */
 export function parseBody<S extends z.ZodType>(
   schema: S,
-  corps: unknown,
-  erreur = 'requete_invalide',
+  body: unknown,
+  error = 'invalid_request',
 ): z.output<S> {
-  const resultat = schema.safeParse(corps ?? {});
-  if (resultat.success) return resultat.data;
-  const refus: ApiErrorBody = {
-    erreur,
-    details: resultat.error.issues.map((issue) => ({
-      chemin: issue.path.join('.'),
+  const result = schema.safeParse(body ?? {});
+  if (result.success) return result.data;
+  const refusal: ApiErrorBody = {
+    error,
+    details: result.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
       message: issue.message,
     })),
   };
-  throw new BadRequestException(refus);
+  throw new BadRequestException(refusal);
 }

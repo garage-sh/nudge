@@ -4,97 +4,100 @@ import {
   integerEnv,
   numberEnv,
   requireEnv,
-  SEUILS_TRIAGE_PAR_DEFAUT,
+  DEFAULT_TRIAGE_THRESHOLDS,
   type Env,
 } from '@nudge/core';
-import { configJugeFromEnv } from '@nudge/judge';
-import { configStockageFromEnv, type ConfigStockage } from '@nudge/stockage';
+import { judgeConfigFromEnv } from '@nudge/judge';
+import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import {
-  DELAI_JUGE_PAR_DEFAUT_MS,
-  PURGE_PAR_DEFAUT,
-  SUSPENSION_PAR_DEFAUT,
+  DEFAULT_JUDGE_TIMEOUT_MS,
+  DEFAULT_PURGE,
+  DEFAULT_SUSPENSION,
   type WorkerOptions,
 } from './options.js';
 
-/** Ce que l'environnement fixe du worker ; l'api y branche les adaptateurs (`apps/api/src/main.ts`). */
-export type ConfigWorker = Required<
+/** What the environment sets for the worker; the api plugs the adapters in (`apps/api/src/main.ts`). */
+export type WorkerConfig = Required<
   Pick<
     WorkerOptions,
     | 'databaseUrl'
     | 'redisUrl'
-    | 'cleChiffrement'
-    | 'jugeParDefaut'
+    | 'encryptionKey'
+    | 'defaultJudge'
     | 'dashboardUrl'
-    | 'seuilsTriage'
-    | 'delaiJugeMs'
+    | 'triageThresholds'
+    | 'judgeTimeoutMs'
     | 'suspension'
     | 'purge'
   >
-> & { readonly stockage: ConfigStockage };
+> & { readonly storage: StorageConfig };
 
-const bornesProbabilite = { min: 0, max: 1 };
-const bornesDuree = { min: 1 };
+const probabilityBounds = { min: 0, max: 1 };
+const durationBounds = { min: 1 };
 
 /**
- * La configuration du worker, lue dans l'environnement (voir `.env.example`). Une
- * valeur invalide lève, pour échouer au démarrage plutôt qu'au premier Triage.
+ * The worker configuration, read from the environment (see `.env.example`). An
+ * invalid value throws, to fail at startup rather than on the first Triage.
  */
-export function configWorkerFromEnv(env: Env): ConfigWorker {
-  const seuils = SEUILS_TRIAGE_PAR_DEFAUT;
-  const suspension = SUSPENSION_PAR_DEFAUT;
+export function workerConfigFromEnv(env: Env): WorkerConfig {
+  const thresholds = DEFAULT_TRIAGE_THRESHOLDS;
+  const suspension = DEFAULT_SUSPENSION;
   return {
     databaseUrl: requireEnv(env, 'DATABASE_URL'),
     redisUrl: requireEnv(env, 'REDIS_URL'),
-    cleChiffrement: requireEnv(env, ENCRYPTION_KEY_VARIABLE),
-    // Repli quand l'Instance n'a pas choisi de Juge dans le dashboard.
-    jugeParDefaut: configJugeFromEnv(env),
-    // Le même stockage que celui de l'api : un volume partagé, ou un bucket S3.
-    stockage: configStockageFromEnv(env),
+    encryptionKey: requireEnv(env, ENCRYPTION_KEY_VARIABLE),
+    // Fallback when the Instance has not chosen a Judge in the dashboard.
+    defaultJudge: judgeConfigFromEnv(env),
+    // The same storage as the api's: a shared volume, or an S3 bucket.
+    storage: storageConfigFromEnv(env),
     dashboardUrl: httpUrlEnv(env, 'NUDGE_DASHBOARD_URL'),
-    seuilsTriage: {
-      indesirable: numberEnv(
-        env,
-        'NUDGE_TRIAGE_SEUIL_INDESIRABLE',
-        seuils.indesirable,
-        bornesProbabilite,
-      ),
+    triageThresholds: {
+      junk: numberEnv(env, 'NUDGE_TRIAGE_JUNK_THRESHOLD', thresholds.junk, probabilityBounds),
       manipulation: numberEnv(
         env,
-        'NUDGE_TRIAGE_SEUIL_MANIPULATION',
-        seuils.manipulation,
-        bornesProbabilite,
+        'NUDGE_TRIAGE_MANIPULATION_THRESHOLD',
+        thresholds.manipulation,
+        probabilityBounds,
       ),
-      confiance: numberEnv(
+      confidence: numberEnv(
         env,
-        'NUDGE_TRIAGE_SEUIL_CONFIANCE',
-        seuils.confiance,
-        bornesProbabilite,
+        'NUDGE_TRIAGE_CONFIDENCE_THRESHOLD',
+        thresholds.confidence,
+        probabilityBounds,
       ),
     },
-    delaiJugeMs: integerEnv(env, 'NUDGE_JUDGE_TIMEOUT_MS', DELAI_JUGE_PAR_DEFAUT_MS, bornesDuree),
+    judgeTimeoutMs: integerEnv(
+      env,
+      'NUDGE_JUDGE_TIMEOUT_MS',
+      DEFAULT_JUDGE_TIMEOUT_MS,
+      durationBounds,
+    ),
     suspension: {
-      seuilEchecs: integerEnv(env, 'NUDGE_SUSPENSION_SEUIL_ECHECS', suspension.seuilEchecs, {
-        min: 1,
-      }),
-      refroidissementMs: integerEnv(
+      failureThreshold: integerEnv(
         env,
-        'NUDGE_SUSPENSION_REFROIDISSEMENT_MS',
-        suspension.refroidissementMs,
-        bornesDuree,
+        'NUDGE_SUSPENSION_FAILURE_THRESHOLD',
+        suspension.failureThreshold,
+        { min: 1 },
       ),
-      intervalleSondeMs: integerEnv(
+      cooldownMs: integerEnv(
         env,
-        'NUDGE_SUSPENSION_INTERVALLE_SONDE_MS',
-        suspension.intervalleSondeMs,
-        bornesDuree,
+        'NUDGE_SUSPENSION_COOLDOWN_MS',
+        suspension.cooldownMs,
+        durationBounds,
+      ),
+      probeIntervalMs: integerEnv(
+        env,
+        'NUDGE_SUSPENSION_PROBE_INTERVAL_MS',
+        suspension.probeIntervalMs,
+        durationBounds,
       ),
     },
     purge: {
-      intervalleMs: integerEnv(
+      intervalMs: integerEnv(
         env,
-        'NUDGE_PURGE_INTERVALLE_MS',
-        PURGE_PAR_DEFAUT.intervalleMs,
-        bornesDuree,
+        'NUDGE_PURGE_INTERVAL_MS',
+        DEFAULT_PURGE.intervalMs,
+        durationBounds,
       ),
     },
   };

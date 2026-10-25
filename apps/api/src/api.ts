@@ -2,36 +2,36 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { LogLevel } from '@nestjs/common';
 import type { DestinationAdapterResolver } from '@nudge/core';
-import { LONGUEUR_BASE64_CAPTURE_MAX } from '@nudge/shared';
+import { CAPTURE_MAX_BASE64_LENGTH } from '@nudge/shared';
 import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
 import type { InfraOptions } from './infra/infra.module.js';
 
-/** Réglage `trust proxy` d'Express : booléen, nombre de proxys, ou adresses de confiance. */
+/** Express `trust proxy` setting: boolean, number of proxies, or trusted addresses. */
 export type TrustProxy = boolean | number | string;
 
 export interface ApiOptions extends InfraOptions, IngestionOptions {
-  /** `false` coupe les logs Nest (tests). */
+  /** `false` turns off Nest logs (tests). */
   readonly logger?: false | LogLevel[];
   /**
-   * Cookie de session `Secure` (HTTPS seulement). Vrai par défaut ; à couper
-   * seulement pour un dashboard servi en HTTP (développement local, tests).
+   * `Secure` session cookie (HTTPS only). True by default; turn off only for a
+   * dashboard served over HTTP (local development, tests).
    */
   readonly sessionCookieSecure?: boolean;
   /**
-   * Réglage `trust proxy` d'Express : derrière un reverse proxy, l'IP du client (rate
-   * limit du Widget, anti force brute de la connexion) se lit dans `X-Forwarded-For`.
-   * Absent ou `false` : l'IP de la connexion, que le client ne peut pas falsifier.
+   * Express `trust proxy` setting: behind a reverse proxy, the client IP (Widget rate
+   * limit, sign-in brute-force protection) is read from `X-Forwarded-For`.
+   * Absent or `false`: the IP of the connection, which the client cannot forge.
    */
   readonly trustProxy?: TrustProxy;
-  /** Adaptateurs de Destination (bouton « tester ») : ceux de `@nudge/destinations` en production. */
+  /** Destination adapters ("test" button): those of `@nudge/destinations` in production. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
 
-/** Un Retour et sa Capture encodée en base64, plus le reste du corps. */
-const LIMITE_CORPS_RETOUR = LONGUEUR_BASE64_CAPTURE_MAX + 200 * 1024;
+/** A Feedback and its base64-encoded Capture, plus the rest of the body. */
+const FEEDBACK_BODY_LIMIT = CAPTURE_MAX_BASE64_LENGTH + 200 * 1024;
 
-/** Construit l'api sans l'écouter : `main.ts` et le harnais de tests appellent `listen` eux-mêmes. */
+/** Builds the api without listening: `main.ts` and the test harness call `listen` themselves. */
 export async function createApi(options: ApiOptions): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(
     ApiModule.forRoot({
@@ -44,8 +44,8 @@ export async function createApi(options: ApiOptions): Promise<NestExpressApplica
     },
   );
   app.set('trust proxy', options.trustProxy ?? false);
-  // Un Retour peut porter une Capture (base64) : sa route seule accepte un corps lourd.
-  app.use('/v1/retours', json({ limit: LIMITE_CORPS_RETOUR }));
+  // A Feedback can carry a Capture (base64): its route alone accepts a heavy body.
+  app.use('/v1/feedbacks', json({ limit: FEEDBACK_BODY_LIMIT }));
   app.useBodyParser('json', { limit: '100kb' });
   return app;
 }

@@ -1,6 +1,6 @@
 export * from './port.js';
-export { jugeTypeSafe, URL_TYPESAFE } from './typesafe.js';
-export { jugeOpenRouter, URL_OPENROUTER } from './openrouter.js';
-export { jugeAutoHeberge } from './auto-heberge.js';
-export { configJugeFromEnv, createJuge, type ConfigJuge } from './config.js';
-export type { OptionsAdaptateur } from './url.js';
+export { typeSafeJudge, TYPESAFE_URL } from './typesafe.js';
+export { openRouterJudge, OPENROUTER_URL } from './openrouter.js';
+export { selfHostedJudge } from './self-hosted.js';
+export { judgeConfigFromEnv, createJudge, type JudgeConfig } from './config.js';
+export type { AdapterOptions } from './url.js';

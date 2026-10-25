@@ -1,170 +1,170 @@
 import { createHmac } from 'node:crypto';
 import {
-  presenterAlerte,
-  type Alerte,
+  presentAlert,
+  type Alert,
   type DestinationAdapter,
-  type DestinationConfiguree,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type ConfiguredDestination,
+  type OutgoingDelivery,
+  type DeliveryResult,
 } from '@nudge/core';
-import { definitionWebhook, type SecretsWebhook } from '@nudge/shared';
-import { lireCapture, type ImageCapture } from './capture.js';
-import { DELAI_HTTP_PAR_DEFAUT_MS, echecHttp, messageErreur } from './http.js';
+import { webhookDefinition, type WebhookSecrets } from '@nudge/shared';
+import { readCapture, type CaptureImage } from './capture.js';
+import { DEFAULT_HTTP_TIMEOUT_MS, httpFailure, errorMessage } from './http.js';
 
-export interface OptionsWebhook {
+export interface WebhookOptions {
   readonly fetch?: typeof globalThis.fetch;
-  /** Horloge de l'horodatage signé (tests). */
-  readonly maintenant?: () => Date;
-  /** Délai de réponse du récepteur, au-delà duquel l'appel est un échec transitoire. */
-  readonly delaiMs?: number;
+  /** Clock of the signed timestamp (tests). */
+  readonly now?: () => Date;
+  /** Receiver response timeout, beyond which the call is a transient failure. */
+  readonly timeoutMs?: number;
 }
 
 /**
- * Webhook générique (D10) : un POST JSON vers l'URL configurée, par événement :
- * - `retour` : un Retour dispatché (`essai: true` pour le bouton « tester ») ;
- * - `alerte` : une alerte des Membres, quand le webhook est la Destination d'alerte ;
- * - `ping` : la sonde `healthCheck()`, à laquelle le récepteur répond en 2xx.
+ * Generic webhook (D10): a JSON POST to the configured URL, per event:
+ * - `feedback`: a dispatched piece of Feedback (`isTest: true` for the "test" button);
+ * - `alert`: an alert for the Members, when the webhook is the Alert destination;
+ * - `ping`: the `healthCheck()` probe, which the receiver answers with a 2xx.
  *
- * En-têtes : `X-Nudge-Evenement`, `X-Nudge-Envoi` ou `X-Nudge-Alerte` (id stable
- * d'un Envoi ou d'une alerte : un récepteur s'en sert pour ignorer une livraison
- * retentée), `X-Nudge-Timestamp`
- * (secondes Unix) et `X-Nudge-Signature: sha256=<hex>`, HMAC-SHA256 de
- * `<timestamp>.<corps brut>` par le secret de signature de la Destination.
+ * Headers: `X-Nudge-Event`, `X-Nudge-Delivery` or `X-Nudge-Alert` (stable id of a
+ * Delivery or an alert: a receiver uses it to ignore a retried delivery),
+ * `X-Nudge-Timestamp` (Unix seconds) and `X-Nudge-Signature: sha256=<hex>`,
+ * HMAC-SHA256 of `<timestamp>.<raw body>` with the Destination's signing secret.
  *
- * Le texte du Retour part brut, tel que l'Auteur l'a écrit : c'est au récepteur de
- * l'encoder pour sa cible. La Capture, s'il y en a une, est jointe en base64
- * (`retour.capture: { contentType, data }`, `null` sinon). Les redirections ne sont
- * pas suivies.
+ * The Feedback text is sent raw, as the Author wrote it: it is up to the receiver to
+ * encode it for its target. The Capture, if any, is attached in base64
+ * (`feedback.capture: { contentType, data }`, `null` otherwise). Redirects are not
+ * followed.
  */
-export function adaptateurWebhook(
-  destination: DestinationConfiguree,
-  options: OptionsWebhook = {},
+export function webhookAdapter(
+  destination: ConfiguredDestination,
+  options: WebhookOptions = {},
 ): DestinationAdapter {
-  const { url } = definitionWebhook.config.parse(destination.config);
-  const { secretSignature } = destination.secrets as Partial<SecretsWebhook>;
-  if (!secretSignature) throw new Error(`Webhook ${destination.id} sans secret de signature`);
+  const { url } = webhookDefinition.config.parse(destination.config);
+  const { signingSecret } = destination.secrets as Partial<WebhookSecrets>;
+  if (!signingSecret) throw new Error(`Webhook ${destination.id} has no signing secret`);
   const fetch = options.fetch ?? globalThis.fetch;
-  const maintenant = options.maintenant ?? (() => new Date());
-  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
+  const now = options.now ?? (() => new Date());
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
 
-  async function poster(
-    evenement: 'retour' | 'alerte' | 'ping',
-    corps: unknown,
-    entetesId: Readonly<Record<string, string>> = {},
-  ): Promise<ResultatEnvoi> {
-    const brut = JSON.stringify(corps);
-    const horodatage = String(Math.floor(maintenant().getTime() / 1000));
-    const signature = createHmac('sha256', secretSignature!)
-      .update(`${horodatage}.${brut}`)
+  async function post(
+    event: 'feedback' | 'alert' | 'ping',
+    body: unknown,
+    idHeaders: Readonly<Record<string, string>> = {},
+  ): Promise<DeliveryResult> {
+    const raw = JSON.stringify(body);
+    const timestamp = String(Math.floor(now().getTime() / 1000));
+    const signature = createHmac('sha256', signingSecret!)
+      .update(`${timestamp}.${raw}`)
       .digest('hex');
-    let reponse: Response;
+    let response: Response;
     try {
-      reponse = await fetch(url, {
+      response = await fetch(url, {
         method: 'POST',
         redirect: 'manual',
-        signal: AbortSignal.timeout(delaiMs),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           'content-type': 'application/json',
           'user-agent': 'nudge-webhook',
-          'x-nudge-evenement': evenement,
-          ...entetesId,
-          'x-nudge-timestamp': horodatage,
+          'x-nudge-event': event,
+          ...idHeaders,
+          'x-nudge-timestamp': timestamp,
           'x-nudge-signature': `sha256=${signature}`,
         },
-        body: brut,
+        body: raw,
       });
-    } catch (erreur) {
-      return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
+    } catch (error) {
+      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
     }
-    if (reponse.ok) {
-      await reponse.body?.cancel();
-      return { statut: 'livre', lienExterne: null };
+    if (response.ok) {
+      await response.body?.cancel();
+      return { status: 'delivered', externalUrl: null };
     }
-    return { statut: 'echec', ...(await echecHttp(reponse)) };
+    return { status: 'failed', ...(await httpFailure(response)) };
   }
 
   return {
-    async send(envoi) {
-      const capture = await lireCapture(envoi.retour.capture);
-      if (!capture.ok) return { statut: 'echec', classe: capture.classe, message: capture.message };
-      return poster('retour', corpsRetour(envoi, capture.image), {
-        'x-nudge-envoi': envoi.envoiId,
+    async send(delivery) {
+      const capture = await readCapture(delivery.feedback.capture);
+      if (!capture.ok)
+        return { status: 'failed', failureClass: capture.failureClass, message: capture.message };
+      return post('feedback', feedbackBody(delivery, capture.image), {
+        'x-nudge-delivery': delivery.deliveryId,
       });
     },
-    alerter(alerte) {
-      return poster('alerte', corpsAlerte(alerte), { 'x-nudge-alerte': alerte.id });
+    alert(alert) {
+      return post('alert', alertBody(alert), { 'x-nudge-alert': alert.id });
     },
     async healthCheck() {
-      const resultat = await poster('ping', { evenement: 'ping' });
-      return resultat.statut === 'livre'
-        ? { joignable: true }
-        : { joignable: false, classe: resultat.classe, message: resultat.message };
+      const result = await post('ping', { event: 'ping' });
+      return result.status === 'delivered'
+        ? { reachable: true }
+        : { reachable: false, failureClass: result.failureClass, message: result.message };
     },
   };
 }
 
-function corpsRetour(
-  { envoiId, essai, projet, retour }: EnvoiASortir,
-  capture: ImageCapture | null,
+function feedbackBody(
+  { deliveryId, isTest, project, feedback }: OutgoingDelivery,
+  capture: CaptureImage | null,
 ) {
   return {
-    evenement: 'retour',
-    essai,
-    envoi: { id: envoiId },
-    projet: { id: projet.id, nom: projet.nom },
-    retour: {
-      id: retour.id,
-      texte: retour.texte,
-      source: retour.source,
-      type: retour.typeRetenu,
-      gravite: retour.gravite,
-      incertain: retour.incertain,
-      auteur: retour.auteur
+    event: 'feedback',
+    isTest,
+    delivery: { id: deliveryId },
+    project: { id: project.id, name: project.name },
+    feedback: {
+      id: feedback.id,
+      text: feedback.text,
+      source: feedback.source,
+      type: feedback.resolvedType,
+      severity: feedback.severity,
+      uncertain: feedback.uncertain,
+      author: feedback.author
         ? {
-            id: retour.auteur.id ?? null,
-            email: retour.auteur.email ?? null,
-            nom: retour.auteur.nom ?? null,
-            confiance: retour.auteur.confiance,
+            id: feedback.author.id ?? null,
+            email: feedback.author.email ?? null,
+            name: feedback.author.name ?? null,
+            trust: feedback.author.trust,
           }
         : null,
-      contexte: retour.contexte,
+      context: feedback.context,
       capture: capture
         ? {
             contentType: capture.contentType,
-            data: Buffer.from(capture.octets).toString('base64'),
+            data: Buffer.from(capture.bytes).toString('base64'),
           }
         : null,
-      recuLe: retour.recuLe.toISOString(),
-      lien: retour.lienDashboard,
+      receivedAt: feedback.receivedAt.toISOString(),
+      dashboardUrl: feedback.dashboardUrl,
     },
   };
 }
 
-/** L'alerte structurée, et son texte (`titre`, `resume`) pour qui la relaie telle quelle. */
-function corpsAlerte(alerte: Alerte) {
-  const { titre, resume } = presenterAlerte(alerte);
-  const commun = {
-    id: alerte.id,
-    type: alerte.evenement,
-    le: alerte.le.toISOString(),
-    titre,
-    resume,
-    projet: { id: alerte.projet.id, nom: alerte.projet.nom },
-    lien: alerte.lienDashboard,
+/** The structured alert, and its text (`title`, `summary`) for whoever relays it as is. */
+function alertBody(alert: Alert) {
+  const { title, summary } = presentAlert(alert);
+  const common = {
+    id: alert.id,
+    type: alert.event,
+    at: alert.at.toISOString(),
+    title,
+    summary,
+    project: { id: alert.project.id, name: alert.project.name },
+    dashboardUrl: alert.dashboardUrl,
   };
   return {
-    evenement: 'alerte',
-    essai: alerte.essai,
-    alerte:
-      alerte.evenement === 'retour_en_revue'
-        ? { ...commun, retour: { id: alerte.retour.id } }
+    event: 'alert',
+    isTest: alert.isTest,
+    alert:
+      alert.event === 'feedback_in_review'
+        ? { ...common, feedback: { id: alert.feedback.id } }
         : {
-            ...commun,
+            ...common,
             destination: {
-              id: alerte.destination.id,
-              nom: alerte.destination.nom,
-              classe: alerte.destination.classe,
-              message: alerte.destination.message,
+              id: alert.destination.id,
+              name: alert.destination.name,
+              failureClass: alert.destination.failureClass,
+              message: alert.destination.message,
             },
           },
   };

@@ -1,130 +1,135 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { DestinationAvecSecretsGeneres } from '@nudge/shared';
+import type { DestinationWithGeneratedSecrets } from '@nudge/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  RecepteurWebhook,
+  WebhookReceiver,
   startPipeline,
   type DashboardClient,
   type Pipeline,
-  type RequeteWebhook,
+  type WebhookRequest,
 } from './harness/index.js';
 
-/** Ce que ferait un récepteur : recalculer la signature avec le secret montré à la création. */
-function signatureValide(requete: RequeteWebhook, secret: string): boolean {
-  const horodatage = requete.entetes['x-nudge-timestamp'];
-  const recue = String(requete.entetes['x-nudge-signature'] ?? '');
-  const attendue = `sha256=${createHmac('sha256', secret).update(`${horodatage}.${requete.corps}`).digest('hex')}`;
+/** What a receiver would do: recompute the signature with the secret shown at creation. */
+function validSignature(request: WebhookRequest, secret: string): boolean {
+  const timestamp = request.headers['x-nudge-timestamp'];
+  const received = String(request.headers['x-nudge-signature'] ?? '');
+  const expected = `sha256=${createHmac('sha256', secret).update(`${timestamp}.${request.body}`).digest('hex')}`;
   return (
-    recue.length === attendue.length && timingSafeEqual(Buffer.from(recue), Buffer.from(attendue))
+    received.length === expected.length &&
+    timingSafeEqual(Buffer.from(received), Buffer.from(expected))
   );
 }
 
-/** Les vrais adaptateurs de `@nudge/destinations`, contre un récepteur HTTP local. */
-describe('Destination webhook de bout en bout', () => {
+/** The real adapters of `@nudge/destinations`, against a local HTTP receiver. */
+describe('Webhook Destination end to end', () => {
   let pipeline: Pipeline;
-  let recepteur: RecepteurWebhook;
-  let membre: DashboardClient;
+  let receiver: WebhookReceiver;
+  let member: DashboardClient;
 
   beforeAll(async () => {
-    [pipeline, recepteur] = await Promise.all([
-      startPipeline({ destinations: 'reelles' }),
-      RecepteurWebhook.demarrer(),
+    [pipeline, receiver] = await Promise.all([
+      startPipeline({ destinations: 'real' }),
+      WebhookReceiver.start(),
     ]);
-    membre = await pipeline.signIn();
+    member = await pipeline.signIn();
   });
 
   afterAll(async () => {
-    await Promise.all([pipeline?.stop(), recepteur?.arreter()]);
+    await Promise.all([pipeline?.stop(), receiver?.stop()]);
   });
 
-  async function destinationWebhook(nom: string) {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom });
-    const chemin = `/${encodeURIComponent(nom)}`;
-    const creation = await membre.post<DestinationAvecSecretsGeneres>(
-      `/api/projets/${projet.id}/destinations`,
+  async function webhookDestination(name: string) {
+    const { project, secretKey } = await pipeline.createProject({ name });
+    const path = `/${encodeURIComponent(name)}`;
+    const creation = await member.post<DestinationWithGeneratedSecrets>(
+      `/api/projects/${project.id}/destinations`,
       {
         type: 'webhook',
-        nom: 'Récepteur local',
-        config: { url: `${recepteur.url}${chemin}` },
-        filtre: { types: ['bug'], graviteMinimale: null },
+        name: 'Local receiver',
+        config: { url: `${receiver.url}${path}` },
+        filter: { types: ['bug'], minimumSeverity: null },
       },
     );
     expect(creation.status).toBe(201);
-    return { projet, cleSecrete, chemin, ...creation.body };
+    return { project, secretKey, path, ...creation.body };
   }
 
-  it('un Retour Trié arrive signé chez le récepteur, et l’Envoi est livré', async () => {
-    const { projet, cleSecrete, chemin, destination, secretsGeneres } =
-      await destinationWebhook('Signé');
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+  it('a Triaged Feedback reaches the receiver signed, and the Delivery is delivered', async () => {
+    const { project, secretKey, path, destination, generatedSecrets } =
+      await webhookDestination('Signed');
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
 
-    const reponse = await pipeline.postRetour(cleSecrete, { texte: '@everyone le panier plante' });
-    const { id } = (await reponse.json()) as { id: string };
-
-    const retour = await pipeline.waitForRetour(id, (r) =>
-      r.envois.some((e) => e.statut === 'livre'),
-    );
-    const recues = recepteur.requetes.filter((r) => r.chemin === chemin);
-    expect(recues).toHaveLength(1);
-    expect(signatureValide(recues[0]!, secretsGeneres.secretSignature!)).toBe(true);
-    expect(JSON.parse(recues[0]!.corps)).toMatchObject({
-      evenement: 'retour',
-      essai: false,
-      envoi: { id: retour.envois[0]!.id },
-      projet: { id: projet.id },
-      retour: { id, texte: '@everyone le panier plante', type: 'bug', gravite: 'majeure' },
+    const response = await pipeline.postFeedback(secretKey, {
+      text: '@everyone the cart crashes',
     });
-    expect(retour.envois).toMatchObject([{ destinationId: destination.id, statut: 'livre' }]);
+    const { id } = (await response.json()) as { id: string };
+
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((e) => e.status === 'delivered'),
+    );
+    const received = receiver.requests.filter((r) => r.path === path);
+    expect(received).toHaveLength(1);
+    expect(validSignature(received[0]!, generatedSecrets.signingSecret!)).toBe(true);
+    expect(JSON.parse(received[0]!.body)).toMatchObject({
+      event: 'feedback',
+      isTest: false,
+      delivery: { id: feedback.deliveries[0]!.id },
+      project: { id: project.id },
+      feedback: { id, text: '@everyone the cart crashes', type: 'bug', severity: 'major' },
+    });
+    expect(feedback.deliveries).toMatchObject([
+      { destinationId: destination.id, status: 'delivered' },
+    ]);
   });
 
-  it('la Capture du Retour part en base64 dans le corps signé', async () => {
-    const { cleSecrete, chemin, secretsGeneres } = await destinationWebhook('Avec Capture');
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
+  it('the Feedback’s Capture goes as base64 in the signed body', async () => {
+    const { secretKey, path, generatedSecrets } = await webhookDestination('With Capture');
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a, 0x2a]);
 
-    const reponse = await pipeline.postRetour(cleSecrete, {
-      texte: 'Voir la capture',
+    const response = await pipeline.postFeedback(secretKey, {
+      text: 'See the capture',
       capture: { contentType: 'image/png', data: png.toString('base64') },
     });
-    const { id } = (await reponse.json()) as { id: string };
+    const { id } = (await response.json()) as { id: string };
 
-    await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'livre'));
-    const [recue] = recepteur.requetes.filter((r) => r.chemin === chemin);
-    expect(signatureValide(recue!, secretsGeneres.secretSignature!)).toBe(true);
-    expect(JSON.parse(recue!.corps).retour.capture).toEqual({
+    await pipeline.waitForFeedback(id, (r) => r.deliveries.some((e) => e.status === 'delivered'));
+    const [received] = receiver.requests.filter((r) => r.path === path);
+    expect(validSignature(received!, generatedSecrets.signingSecret!)).toBe(true);
+    expect(JSON.parse(received!.body).feedback.capture).toEqual({
       contentType: 'image/png',
       data: png.toString('base64'),
     });
   });
 
-  it('« tester » envoie un Retour d’exemple signé, et rend le refus du récepteur', async () => {
-    const { chemin, destination, secretsGeneres } = await destinationWebhook('Essai');
+  it('"test" sends a signed sample Feedback, and returns the receiver’s refusal', async () => {
+    const { path, destination, generatedSecrets } = await webhookDestination('Trial');
 
-    const livre = await membre.post(`/api/destinations/${destination.id}/test`);
+    const delivered = await member.post(`/api/destinations/${destination.id}/test`);
 
-    expect(livre.body).toEqual({ statut: 'livre', lienExterne: null });
-    const [essai] = recepteur.requetes.filter((r) => r.chemin === chemin);
-    expect(JSON.parse(essai!.corps)).toMatchObject({ evenement: 'retour', essai: true });
-    expect(signatureValide(essai!, secretsGeneres.secretSignature!)).toBe(true);
+    expect(delivered.body).toEqual({ status: 'delivered', externalUrl: null });
+    const [trial] = receiver.requests.filter((r) => r.path === path);
+    expect(JSON.parse(trial!.body)).toMatchObject({ event: 'feedback', isTest: true });
+    expect(validSignature(trial!, generatedSecrets.signingSecret!)).toBe(true);
 
-    recepteur.repondre(chemin, 401, 'signature inconnue');
-    expect((await membre.post(`/api/destinations/${destination.id}/test`)).body).toEqual({
-      statut: 'echec',
-      classe: 'auth',
-      message: 'HTTP 401 : signature inconnue',
+    receiver.respondWith(path, 401, 'unknown signature');
+    expect((await member.post(`/api/destinations/${destination.id}/test`)).body).toEqual({
+      status: 'failed',
+      failureClass: 'auth',
+      message: 'HTTP 401: unknown signature',
     });
   });
 
-  it('après régénération, seul le nouveau secret vérifie la signature', async () => {
-    const { chemin, destination, secretsGeneres } = await destinationWebhook('Rotation');
-    const regeneration = await membre.post<DestinationAvecSecretsGeneres>(
-      `/api/destinations/${destination.id}/secrets-generes`,
+  it('after regeneration, only the new secret verifies the signature', async () => {
+    const { path, destination, generatedSecrets } = await webhookDestination('Rotation');
+    const regeneration = await member.post<DestinationWithGeneratedSecrets>(
+      `/api/destinations/${destination.id}/generated-secrets`,
     );
 
-    await membre.post(`/api/destinations/${destination.id}/test`);
+    await member.post(`/api/destinations/${destination.id}/test`);
 
-    const [essai] = recepteur.requetes.filter((r) => r.chemin === chemin);
-    expect(signatureValide(essai!, regeneration.body.secretsGeneres.secretSignature!)).toBe(true);
-    expect(signatureValide(essai!, secretsGeneres.secretSignature!)).toBe(false);
+    const [trial] = receiver.requests.filter((r) => r.path === path);
+    expect(validSignature(trial!, regeneration.body.generatedSecrets.signingSecret!)).toBe(true);
+    expect(validSignature(trial!, generatedSecrets.signingSecret!)).toBe(false);
   });
 });

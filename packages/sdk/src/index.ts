@@ -1,113 +1,112 @@
 /**
- * Client JS de l'API publique de nudge, pour un backend (serveur, mobile via son
- * serveur, outil de support) : il poste des Retours avec la **clé secrète** du Projet.
- * Les Retours envoyés ainsi ont la Source `api`, et l'Auteur fourni est **attesté** :
- * l'Instance fait confiance à l'identité transmise, contrairement à celle que le
- * Widget déclare depuis le navigateur. La clé secrète ne doit donc jamais quitter le
- * serveur.
+ * JS client for nudge's public API, for a backend (server, mobile app through its
+ * server, support tool): it posts Feedback with the Project's **secret key**.
+ * Feedback sent this way has the `api` Source, and the Author provided is **attested**:
+ * the Instance trusts the identity passed along, unlike the one the Widget declares
+ * from the browser. The secret key must therefore never leave the server.
  *
- * Les types viennent des schémas partagés (`@nudge/shared`) ; la validation reste
- * celle de l'Instance, qui renvoie le détail des champs refusés. À l'exécution, le
- * client n'importe rien : ni zod ni les schémas ne sont chargés chez l'Intégrateur.
+ * Types come from the shared schemas (`@nudge/shared`); validation stays the
+ * Instance's, which returns the detail of the rejected fields. At runtime the client
+ * imports nothing: neither zod nor the schemas are loaded in the integrator's code.
  */
 import type {
   ApiErrorBody,
-  PREFIXE_CLE_PUBLIQUE as PREFIXE_PUBLIQUE_INSTANCE,
-  PREFIXE_CLE_SECRETE as PREFIXE_SECRETE_INSTANCE,
-  RetourEntrant,
-  RetourRecu,
+  PUBLIC_KEY_PREFIX as INSTANCE_PUBLIC_KEY_PREFIX,
+  SECRET_KEY_PREFIX as INSTANCE_SECRET_KEY_PREFIX,
+  FeedbackInput,
+  ReceivedFeedback,
 } from '@nudge/shared';
 
 export type {
-  Auteur,
-  CaptureEntrante,
-  Contexte,
-  RetourEntrant,
-  RetourRecu,
-  TypeRetour,
+  Author,
+  CaptureInput,
+  Context,
+  FeedbackInput,
+  ReceivedFeedback,
+  FeedbackType,
 } from '@nudge/shared';
 
-// Préfixes des clés recopiés plutôt qu'importés (aucune dépendance d'exécution) ; le
-// compilateur les tient alignés sur `@nudge/shared`.
-const PREFIXE_CLE_PUBLIQUE = 'nk_pub_' satisfies typeof PREFIXE_PUBLIQUE_INSTANCE;
-const PREFIXE_CLE_SECRETE = 'nk_sec_' satisfies typeof PREFIXE_SECRETE_INSTANCE;
+// Key prefixes copied rather than imported (no runtime dependency); the compiler
+// keeps them aligned with `@nudge/shared`.
+const PUBLIC_KEY_PREFIX = 'nk_pub_' satisfies typeof INSTANCE_PUBLIC_KEY_PREFIX;
+const SECRET_KEY_PREFIX = 'nk_sec_' satisfies typeof INSTANCE_SECRET_KEY_PREFIX;
 
-export interface OptionsClient {
-  /** URL de base de l'Instance, par exemple `https://nudge.exemple.com`. */
+export interface ClientOptions {
+  /** Base URL of the Instance, for example `https://nudge.example.com`. */
   readonly url: string;
-  /** Clé secrète du Projet (`nk_sec_…`), affichée une fois dans le dashboard. */
-  readonly cleSecrete: string;
-  /** Implémentation de `fetch` à utiliser ; celle du runtime par défaut. */
+  /** The Project's secret key (`nk_sec_…`), shown once in the dashboard. */
+  readonly secretKey: string;
+  /** `fetch` implementation to use; the runtime's by default. */
   readonly fetch?: typeof fetch;
 }
 
-export interface OptionsAppel {
-  /** Annule l'appel (délai, arrêt du processus…). */
+export interface CallOptions {
+  /** Aborts the call (timeout, process shutdown…). */
   readonly signal?: AbortSignal;
 }
 
-export interface ClientNudge {
-  /** Poste un Retour ; résout quand l'Instance l'a conservé (il attend alors son Triage). */
-  envoyerRetour(retour: RetourEntrant, options?: OptionsAppel): Promise<RetourRecu>;
+export interface NudgeClient {
+  /** Posts a piece of Feedback; resolves once the Instance has stored it (it then awaits Triage). */
+  sendFeedback(feedback: FeedbackInput, options?: CallOptions): Promise<ReceivedFeedback>;
 }
 
 /**
- * Refus de l'Instance : `statut` HTTP, `code` stable de l'API (`retour_invalide`,
- * `cle_invalide`…) et, pour un Retour refusé, le détail des champs.
+ * Rejection by the Instance: HTTP `status`, the API's stable error `code` and, for
+ * rejected Feedback, the detail of the fields.
  */
-export class ErreurNudge extends Error {
-  override readonly name = 'ErreurNudge';
+export class NudgeError extends Error {
+  override readonly name = 'NudgeError';
 
   constructor(
-    readonly statut: number,
+    readonly status: number,
     readonly code: string | null,
     readonly details: ApiErrorBody['details'] = [],
   ) {
-    super(`nudge a refusé le Retour (HTTP ${statut}${code ? `, ${code}` : ''})`);
+    super(`nudge rejected the feedback (HTTP ${status}${code ? `, ${code}` : ''})`);
   }
 }
 
-export function creerClient(options: OptionsClient): ClientNudge {
-  verifierCle(options.cleSecrete);
+export function createClient(options: ClientOptions): NudgeClient {
+  checkKey(options.secretKey);
   const fetcher = options.fetch ?? globalThis.fetch;
-  const point = `${options.url.replace(/\/+$/, '')}/v1/retours`;
+  const endpoint = `${options.url.replace(/\/+$/, '')}/v1/feedbacks`;
   return {
-    async envoyerRetour(retour, { signal } = {}) {
-      const reponse = await fetcher(point, {
+    async sendFeedback(feedback, { signal } = {}) {
+      const response = await fetcher(endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${options.cleSecrete}`,
+          authorization: `Bearer ${options.secretKey}`,
         },
-        body: JSON.stringify(retour),
+        body: JSON.stringify(feedback),
         ...(signal ? { signal } : {}),
       });
-      if (!reponse.ok) throw await erreurDe(reponse);
-      return (await reponse.json()) as RetourRecu;
+      if (!response.ok) throw await errorFrom(response);
+      return (await response.json()) as ReceivedFeedback;
     },
   };
 }
 
 /**
- * Seule la clé secrète atteste l'identité de l'Auteur : une clé publique passée ici
- * serait refusée par l'Instance (pas d'Origine), et l'erreur dirait mal pourquoi.
+ * Only the secret key attests the Author's identity: a public key passed here would
+ * be rejected by the Instance (no Origin), and the error would explain it poorly.
  */
-function verifierCle(cle: string): void {
-  if (cle.startsWith(PREFIXE_CLE_PUBLIQUE)) {
+function checkKey(key: string): void {
+  if (key.startsWith(PUBLIC_KEY_PREFIX)) {
     throw new TypeError(
-      'Clé publique reçue : le SDK utilise la clé secrète du Projet (la clé publique est celle du Widget).',
+      "Public key received: the SDK uses the Project's secret key (the public key is the Widget's).",
     );
   }
-  if (!cle.startsWith(PREFIXE_CLE_SECRETE)) {
-    throw new TypeError(`Clé secrète attendue (préfixe ${PREFIXE_CLE_SECRETE}).`);
+  if (!key.startsWith(SECRET_KEY_PREFIX)) {
+    throw new TypeError(`Secret key expected (prefix ${SECRET_KEY_PREFIX}).`);
   }
 }
 
-async function erreurDe(reponse: Response): Promise<ErreurNudge> {
-  const corps = (await reponse.json().catch(() => null)) as Partial<ApiErrorBody> | null;
-  return new ErreurNudge(
-    reponse.status,
-    typeof corps?.erreur === 'string' ? corps.erreur : null,
-    Array.isArray(corps?.details) ? corps.details : [],
+async function errorFrom(response: Response): Promise<NudgeError> {
+  const body = (await response.json().catch(() => null)) as Partial<ApiErrorBody> | null;
+  return new NudgeError(
+    response.status,
+    typeof body?.error === 'string' ? body.error : null,
+    Array.isArray(body?.details) ? body.details : [],
   );
 }

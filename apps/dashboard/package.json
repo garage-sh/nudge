@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Dashboard des Membres (React + Vite).",
+  "description": "The Members' dashboard (React + Vite).",
   "type": "module",
   "scripts": {
     "build": "vite build",

@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildTriageState,
   DISPATCH_JOB,
-  idJobDispatch,
-  etatApresTriage,
+  dispatchJobId,
+  stateAfterTriage,
   triageQuestions,
   renderVerdict,
   TRIAGE_INSTRUCTIONS,
@@ -11,24 +11,24 @@ import {
   type TriageAnswers,
   type TriageJob,
 } from '@nudge/core';
-import { creerEnvoisManquants, envois, retours, verdicts, type Db } from '@nudge/database';
+import { createMissingDeliveries, deliveries, feedbacks, verdicts, type Db } from '@nudge/database';
 import {
-  ErreurJugeRefusee,
-  ErreurJugeTransitoire,
-  type Juge,
-  type RequeteJuge,
+  JudgeRefusedError,
+  JudgeTransientError,
+  type Judge,
+  type JudgeRequest,
 } from '@nudge/judge';
 import type { Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
-import { AlertesService } from './alertes.service.js';
-import { avecDelai } from './delai.js';
-import { DELAI_JUGE_PAR_DEFAUT_MS, type WorkerOptions } from './options.js';
-import { JugeResolver } from './juge-resolver.js';
+import { AlertsService } from './alerts.service.js';
+import { withTimeout } from './timeout.js';
+import { DEFAULT_JUDGE_TIMEOUT_MS, type WorkerOptions } from './options.js';
+import { JudgeResolver } from './judge-resolver.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
 
 /**
- * Triage puis création des Envois. Chaque transition est persistée et
- * conditionnelle sur l'état courant : un job rejoué reprend là où il s'était arrêté.
+ * Triage then creation of the Deliveries. Every transition is persisted and
+ * conditional on the current state: a replayed job resumes where it stopped.
  */
 @Injectable()
 export class TriageProcessor {
@@ -36,135 +36,136 @@ export class TriageProcessor {
 
   constructor(
     @Inject(DB) private readonly db: Db,
-    private readonly jugeResolver: JugeResolver,
+    private readonly judgeResolver: JudgeResolver,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
-    private readonly alertes: AlertesService,
+    private readonly alerts: AlertsService,
   ) {}
 
-  async handle({ retourId }: TriageJob): Promise<void> {
-    const retour = await this.db.query.retours.findFirst({
-      where: eq(retours.id, retourId),
-      with: { projet: true },
+  async handle({ feedbackId }: TriageJob): Promise<void> {
+    const feedback = await this.db.query.feedbacks.findFirst({
+      where: eq(feedbacks.id, feedbackId),
+      with: { project: true },
     });
-    if (!retour) {
-      this.logger.warn(`Retour ${retourId} introuvable, job ignoré`);
+    if (!feedback) {
+      this.logger.warn(`Feedback ${feedbackId} not found, job ignored`);
       return;
     }
 
-    if (retour.etat === 'recu') {
-      await this.trier(retour);
+    if (feedback.state === 'received') {
+      await this.triage(feedback);
     }
-    const etat = (await this.readEtat(retourId)) ?? retour.etat;
-    if (etat === 'trie' || etat === 'dispatche') {
-      await this.dispatcher(retourId, retour.projetId, etat);
+    const state = (await this.readState(feedbackId)) ?? feedback.state;
+    if (state === 'triaged' || state === 'dispatched') {
+      await this.dispatch(feedbackId, feedback.projectId, state);
     }
-    // Après le commit du passage En revue (décidé par `etatApresTriage`). Si la mise en
-    // queue échoue, le job de Triage retenté la refait : l'alerte est unique par Retour.
-    if (etat === 'en_revue') {
-      await this.alertes.signaler({ evenement: 'retour_en_revue', retourId });
+    // After the commit of the move to In review (decided by `stateAfterTriage`). If the
+    // queueing fails, the retried Triage job does it again: the alert is unique per Feedback.
+    if (state === 'in_review') {
+      await this.alerts.raise({ event: 'feedback_in_review', feedbackId });
     }
   }
 
-  private async trier(retour: {
+  private async triage(feedback: {
     id: string;
-    texte: string;
-    typeDeclare: (typeof retours.$inferSelect)['typeDeclare'];
-    contexte: (typeof retours.$inferSelect)['contexte'];
-    projet: { description: string | null };
+    text: string;
+    declaredType: (typeof feedbacks.$inferSelect)['declaredType'];
+    context: (typeof feedbacks.$inferSelect)['context'];
+    project: { description: string | null };
   }): Promise<void> {
-    // Une erreur du Juge remonte : BullMQ retente avec backoff, le Retour reste Reçu.
-    const juge = await this.jugeResolver.courant();
-    const reponses = juge
-      ? await this.jugerAvecDelai(juge, retour.id, {
+    // A Judge error propagates: BullMQ retries with backoff, the Feedback stays Received.
+    const judge = await this.judgeResolver.current();
+    const answers = judge
+      ? await this.judgeWithTimeout(judge, feedback.id, {
           instructions: TRIAGE_INSTRUCTIONS,
           state: buildTriageState({
-            texte: retour.texte,
-            typeDeclare: retour.typeDeclare,
-            contexte: retour.contexte,
-            descriptionProjet: retour.projet.description,
+            text: feedback.text,
+            declaredType: feedback.declaredType,
+            context: feedback.context,
+            projectDescription: feedback.project.description,
           }),
           questions: triageQuestions,
         })
       : null;
-    const verdict = renderVerdict(reponses, retour.typeDeclare, this.options.seuilsTriage);
+    const verdict = renderVerdict(answers, feedback.declaredType, this.options.triageThresholds);
 
     await this.db.transaction(async (tx) => {
       await tx
         .insert(verdicts)
-        .values({ retourId: retour.id, ...verdict })
-        .onConflictDoNothing({ target: verdicts.retourId });
+        .values({ feedbackId: feedback.id, ...verdict })
+        .onConflictDoNothing({ target: verdicts.feedbackId });
       await tx
-        .update(retours)
-        .set({ etat: etatApresTriage(verdict) })
-        .where(and(eq(retours.id, retour.id), eq(retours.etat, 'recu')));
+        .update(feedbacks)
+        .set({ state: stateAfterTriage(verdict) })
+        .where(and(eq(feedbacks.id, feedback.id), eq(feedbacks.state, 'received')));
     });
   }
 
   /**
-   * Un Juge qui ne répond pas dans le délai est traité comme indisponible : erreur
-   * transitoire, et l'appel en cours est annulé plutôt que laissé courir.
+   * A Judge that does not answer within the timeout is treated as unavailable: transient
+   * error, and the call in flight is aborted rather than left running.
    */
-  private async jugerAvecDelai(
-    juge: Juge,
-    retourId: string,
-    requete: RequeteJuge<typeof triageQuestions>,
+  private async judgeWithTimeout(
+    judge: Judge,
+    feedbackId: string,
+    request: JudgeRequest<typeof triageQuestions>,
   ): Promise<TriageAnswers> {
-    const delaiMs = this.options.delaiJugeMs ?? DELAI_JUGE_PAR_DEFAUT_MS;
+    const timeoutMs = this.options.judgeTimeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS;
     try {
-      return await avecDelai(
-        delaiMs,
-        () => new ErreurJugeTransitoire(`Juge sans réponse après ${delaiMs} ms`),
-        (signal) => juge.juger(requete, { signal }),
+      return await withTimeout(
+        timeoutMs,
+        () => new JudgeTransientError(`Judge gave no response after ${timeoutMs} ms`),
+        (signal) => judge.judge(request, { signal }),
       );
-    } catch (erreur) {
-      // Un refus durable (clé refusée, requête rejetée) ne se résout pas seul : il est
-      // retenté comme le reste, mais signalé pour qu'un Membre corrige la configuration.
-      if (erreur instanceof ErreurJugeRefusee) {
+    } catch (error) {
+      // A lasting refusal (key refused, request rejected) does not resolve on its own: it
+      // is retried like the rest, but reported so that a Member fixes the configuration.
+      if (error instanceof JudgeRefusedError) {
         this.logger.error(
-          `Juge : refus « ${erreur.motif} » pour le Retour ${retourId} : ${erreur.message}`,
+          `Judge: "${error.reason}" refusal for Feedback ${feedbackId}: ${error.message}`,
         );
       }
-      throw erreur;
+      throw error;
     }
   }
 
   /**
-   * Un Envoi par Destination du Projet dont le Filtre retient le Verdict ; le Retour
-   * passe Dispatché dès qu'il en a un, et reste Trié si aucun Filtre ne le retient.
-   * L'Envoi est unique par (Retour, Destination) : un job rejoué n'en crée pas d'autre.
-   * Un Retour déjà Dispatché ne reçoit plus de nouvel Envoi (pas d'effet rétroactif
-   * d'une Destination ajoutée ou d'un Filtre modifié depuis, sauf redispatch manuel
-   * d'un Membre, D22) : le job rejoué remet seulement en queue ses Envois en attente.
+   * One Delivery per Destination of the Project whose Filter accepts the Verdict; the
+   * Feedback becomes Dispatched as soon as it has one, and stays Triaged if no Filter
+   * accepts it. The Delivery is unique per (Feedback, Destination): a replayed job
+   * creates no other. A Feedback already Dispatched gets no new Delivery (no
+   * retroactive effect of a Destination added or a Filter changed since, except a
+   * Member's manual redispatch, D22): the replayed job only queues again its pending
+   * Deliveries.
    */
-  private async dispatcher(
-    retourId: string,
-    projetId: string,
-    etat: 'trie' | 'dispatche',
+  private async dispatch(
+    feedbackId: string,
+    projectId: string,
+    state: 'triaged' | 'dispatched',
   ): Promise<void> {
-    const aEnvoyer = await this.db.transaction(async (tx) => {
-      if (etat === 'trie') await creerEnvoisManquants(tx, retourId, projetId);
+    const toSend = await this.db.transaction(async (tx) => {
+      if (state === 'triaged') await createMissingDeliveries(tx, feedbackId, projectId);
       return tx
-        .select({ id: envois.id })
-        .from(envois)
-        .where(and(eq(envois.retourId, retourId), eq(envois.statut, 'en_attente')));
+        .select({ id: deliveries.id })
+        .from(deliveries)
+        .where(and(eq(deliveries.feedbackId, feedbackId), eq(deliveries.status, 'pending')));
     });
 
-    // Après le commit : le job de dispatch lit un Envoi qui existe.
+    // After the commit: the dispatch job reads a Delivery that exists.
     await this.dispatchQueue.addBulk(
-      aEnvoyer.map(({ id }) => ({
+      toSend.map(({ id }) => ({
         name: DISPATCH_JOB,
-        data: { envoiId: id },
-        opts: { jobId: idJobDispatch(id) },
+        data: { deliveryId: id },
+        opts: { jobId: dispatchJobId(id) },
       })),
     );
   }
 
-  private async readEtat(retourId: string) {
-    const [ligne] = await this.db
-      .select({ etat: retours.etat })
-      .from(retours)
-      .where(eq(retours.id, retourId));
-    return ligne?.etat;
+  private async readState(feedbackId: string) {
+    const [row] = await this.db
+      .select({ state: feedbacks.state })
+      .from(feedbacks)
+      .where(eq(feedbacks.id, feedbackId));
+    return row?.state;
   }
 }

@@ -1,9 +1,9 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import { resolutionSources } from '../../vitest.shared.mts';
+import { sourceResolution } from '../../vitest.shared.mts';
 
-// Le wrapper React en jsdom ; le Widget lui-même est testé en navigateur (`yarn test:e2e`).
+// The React wrapper and the locales in jsdom; the Widget itself is tested in a browser (`yarn test:e2e`).
 export default mergeConfig(
-  resolutionSources,
+  sourceResolution,
   defineConfig({
     test: {
       name: '@nudge/widget',

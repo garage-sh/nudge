@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Port Juge (questions System One Noul / Choice / Score) et ses adaptateurs.",
+  "description": "Judge port (System One Noul / Choice / Score questions) and its adapters.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

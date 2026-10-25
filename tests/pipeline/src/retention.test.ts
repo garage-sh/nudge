@@ -1,11 +1,11 @@
-import { urlCapture, type ApiErrorBody, type PageRetours } from '@nudge/shared';
-import type { StockageCaptures } from '@nudge/stockage';
+import { captureUrl, type ApiErrorBody, type FeedbackPage } from '@nudge/shared';
+import type { CaptureStorage } from '@nudge/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
 
-const ORIGINE = 'https://boutique.exemple';
+const ORIGIN = 'https://shop.example';
 
-/** Une image PNG de 1 × 1 pixel. */
+/** A 1 × 1 pixel PNG image. */
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64',
@@ -13,295 +13,295 @@ const PNG = Buffer.from(
 const capturePng = { contentType: 'image/png', data: PNG.toString('base64') } as const;
 
 /**
- * Stockage des Captures en mémoire : le test voit les objets qu'il garde, comme un
- * Self-hoster verrait les fichiers de son volume.
+ * In-memory Capture storage: the test sees the objects it keeps, as a
+ * self-hoster would see the files of their volume.
  */
-function stockageMemoire() {
-  const objets = new Map<string, Uint8Array>();
-  const stockage: StockageCaptures = {
-    enregistrer: async (cle, contenu) => {
-      objets.set(cle, contenu);
+function memoryStorage() {
+  const objects = new Map<string, Uint8Array>();
+  const storage: CaptureStorage = {
+    save: async (key, content) => {
+      objects.set(key, content);
     },
-    lire: async (cle) => objets.get(cle) ?? null,
-    supprimer: async (cle) => {
-      objets.delete(cle);
+    read: async (key) => objects.get(key) ?? null,
+    delete: async (key) => {
+      objects.delete(key);
     },
   };
-  /** Les objets du stockage qui appartiennent au Retour `id` (sa clé le nomme). */
-  const objetsDe = (id: string) => [...objets.keys()].filter((cle) => cle.includes(id));
-  return { stockage, objetsDe };
+  /** The storage objects that belong to Feedback `id` (its key names it). */
+  const objectsOf = (id: string) => [...objects.keys()].filter((key) => key.includes(id));
+  return { storage, objectsOf };
 }
 
-/** La Capture du Retour telle que le Membre la télécharge : 200 tant qu'elle existe. */
-const statutCapture = (membre: DashboardClient, id: string) =>
-  membre.telecharger(urlCapture(id)).then((reponse) => reponse.status);
+/** The Feedback's Capture as the Member downloads it: 200 as long as it exists. */
+const captureStatus = (member: DashboardClient, id: string) =>
+  member.download(captureUrl(id)).then((response) => response.status);
 
-describe('Suppression d’un Retour', () => {
+describe('Deletion of a Feedback', () => {
   let pipeline: Pipeline;
-  let membre: DashboardClient;
-  let clePublique: string;
-  let projetId: string;
-  const { stockage, objetsDe } = stockageMemoire();
+  let member: DashboardClient;
+  let publicKey: string;
+  let projectId: string;
+  const { storage, objectsOf } = memoryStorage();
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage });
-    const cree = await pipeline.createProjet({ nom: 'Effacement', originesAutorisees: [ORIGINE] });
-    ({ clePublique } = cree);
-    projetId = cree.projet.id;
-    membre = await pipeline.signIn();
+    pipeline = await startPipeline({ storage });
+    const created = await pipeline.createProject({ name: 'Erasure', allowedOrigins: [ORIGIN] });
+    ({ publicKey } = created);
+    projectId = created.project.id;
+    member = await pipeline.signIn();
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  async function posterAvecCapture(texte: string) {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte,
+  async function postWithCapture(text: string) {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text,
       capture: capturePng,
     });
-    expect(reponse.status).toBe(202);
-    return ((await reponse.json()) as { id: string }).id;
+    expect(response.status).toBe(202);
+    return ((await response.json()) as { id: string }).id;
   }
 
-  it('supprime le Retour et sa Capture, du dashboard comme du stockage', async () => {
-    const texte = 'Effacez mon Retour, s’il vous plaît';
-    const id = await posterAvecCapture(texte);
-    await pipeline.waitForRetour(id, (retour) => retour.etat !== 'recu');
-    expect(await statutCapture(membre, id)).toBe(200);
-    expect(objetsDe(id)).toHaveLength(1);
+  it('deletes the Feedback and its Capture, from the dashboard and from storage', async () => {
+    const text = 'Please erase my Feedback';
+    const id = await postWithCapture(text);
+    await pipeline.waitForFeedback(id, (feedback) => feedback.state !== 'received');
+    expect(await captureStatus(member, id)).toBe(200);
+    expect(objectsOf(id)).toHaveLength(1);
 
-    const suppression = await membre.delete(`/api/retours/${id}`);
+    const deletion = await member.delete(`/api/feedbacks/${id}`);
 
-    expect(suppression.status).toBe(204);
-    expect((await membre.get<ApiErrorBody>(`/api/retours/${id}`)).status).toBe(404);
-    expect(await statutCapture(membre, id)).toBe(404);
-    const page = await membre.get<PageRetours>(`/api/retours?projet=${projetId}`);
-    expect(page.body.retours.some((retour) => retour.apercu === texte)).toBe(false);
-    // L'image elle-même a quitté le stockage, pas seulement sa référence en base.
-    expect(objetsDe(id)).toEqual([]);
+    expect(deletion.status).toBe(204);
+    expect((await member.get<ApiErrorBody>(`/api/feedbacks/${id}`)).status).toBe(404);
+    expect(await captureStatus(member, id)).toBe(404);
+    const page = await member.get<FeedbackPage>(`/api/feedbacks?project=${projectId}`);
+    expect(page.body.feedbacks.some((feedback) => feedback.preview === text)).toBe(false);
+    // The image itself has left the storage, not only its reference in the database.
+    expect(objectsOf(id)).toEqual([]);
   });
 
-  it('supprime aussi un Retour sans Capture, et ses Envois', async () => {
-    const { fake } = await pipeline.createDestination(projetId);
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, { texte: 'Sans image' });
-    const { id } = (await reponse.json()) as { id: string };
-    await pipeline.waitForRetour(id, (retour) => retour.envois.some((e) => e.statut === 'livre'));
+  it('also deletes a Feedback without a Capture, and its Deliveries', async () => {
+    const { fake } = await pipeline.createDestination(projectId);
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, { text: 'No image' });
+    const { id } = (await response.json()) as { id: string };
+    await pipeline.waitForFeedback(id, (feedback) =>
+      feedback.deliveries.some((d) => d.status === 'delivered'),
+    );
 
-    expect((await membre.delete(`/api/retours/${id}`)).status).toBe(204);
+    expect((await member.delete(`/api/feedbacks/${id}`)).status).toBe(204);
 
-    expect(await pipeline.readRetour(id)).toBeNull();
-    expect(fake.envois.filter((envoi) => envoi.retour.id === id)).toHaveLength(1);
+    expect(await pipeline.readFeedback(id)).toBeNull();
+    expect(fake.deliveries.filter((delivery) => delivery.feedback.id === id)).toHaveLength(1);
   });
 
-  it('rend 404 pour un Retour inconnu ou déjà supprimé', async () => {
-    const id = await posterAvecCapture('Supprimé deux fois');
-    expect((await membre.delete(`/api/retours/${id}`)).status).toBe(204);
+  it('returns 404 for an unknown or already deleted Feedback', async () => {
+    const id = await postWithCapture('Deleted twice');
+    expect((await member.delete(`/api/feedbacks/${id}`)).status).toBe(204);
 
-    const deuxieme = await membre.delete<ApiErrorBody>(`/api/retours/${id}`);
-    expect(deuxieme).toEqual({ status: 404, body: { erreur: 'retour_introuvable' } });
-    expect((await membre.delete('/api/retours/pas-un-uuid')).status).toBe(404);
+    const second = await member.delete<ApiErrorBody>(`/api/feedbacks/${id}`);
+    expect(second).toEqual({ status: 404, body: { error: 'feedback_not_found' } });
+    expect((await member.delete('/api/feedbacks/not-a-uuid')).status).toBe(404);
   });
 
-  it('réservé à un Membre connecté', async () => {
-    const id = await posterAvecCapture('Pas touche');
+  it('is reserved for a signed-in Member', async () => {
+    const id = await postWithCapture('Hands off');
 
-    expect((await pipeline.dashboard().delete(`/api/retours/${id}`)).status).toBe(401);
-    expect((await membre.get(`/api/retours/${id}`)).status).toBe(200);
-    expect(objetsDe(id)).toHaveLength(1);
+    expect((await pipeline.dashboard().delete(`/api/feedbacks/${id}`)).status).toBe(401);
+    expect((await member.get(`/api/feedbacks/${id}`)).status).toBe(200);
+    expect(objectsOf(id)).toHaveLength(1);
   });
 });
 
-describe('Suppression d’un Retour, stockage indisponible', () => {
+describe('Deletion of a Feedback, storage unavailable', () => {
   let pipeline: Pipeline;
-  let enPanne = false;
-  const memoire = stockageMemoire();
-  const stockage: StockageCaptures = {
-    ...memoire.stockage,
-    supprimer: (cle) =>
-      enPanne ? Promise.reject(new Error('stockage injoignable')) : memoire.stockage.supprimer(cle),
+  let down = false;
+  const memory = memoryStorage();
+  const storage: CaptureStorage = {
+    ...memory.storage,
+    delete: (key) =>
+      down ? Promise.reject(new Error('storage unreachable')) : memory.storage.delete(key),
   };
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage });
+    pipeline = await startPipeline({ storage });
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  it('garde le Retour tant que sa Capture n’est pas effacée, et la suppression se retente', async () => {
-    const { clePublique } = await pipeline.createProjet({
-      nom: 'Stockage capricieux',
-      originesAutorisees: [ORIGINE],
+  it('keeps the Feedback until its Capture is erased, and the deletion can be retried', async () => {
+    const { publicKey } = await pipeline.createProject({
+      name: 'Flaky storage',
+      allowedOrigins: [ORIGIN],
     });
-    const membre = await pipeline.signIn();
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte: 'Effacement à retenter',
+    const member = await pipeline.signIn();
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'Erasure to retry',
       capture: capturePng,
     });
-    const { id } = (await reponse.json()) as { id: string };
-    enPanne = true;
+    const { id } = (await response.json()) as { id: string };
+    down = true;
 
-    const refus = await membre.delete<ApiErrorBody>(`/api/retours/${id}`);
+    const refusal = await member.delete<ApiErrorBody>(`/api/feedbacks/${id}`);
 
-    expect(refus).toEqual({ status: 503, body: { erreur: 'stockage_indisponible' } });
-    expect((await membre.get(`/api/retours/${id}`)).status).toBe(200);
-    expect(await statutCapture(membre, id)).toBe(200);
+    expect(refusal).toEqual({ status: 503, body: { error: 'storage_unavailable' } });
+    expect((await member.get(`/api/feedbacks/${id}`)).status).toBe(200);
+    expect(await captureStatus(member, id)).toBe(200);
 
-    enPanne = false;
-    expect((await membre.delete(`/api/retours/${id}`)).status).toBe(204);
-    expect(memoire.objetsDe(id)).toEqual([]);
+    down = false;
+    expect((await member.delete(`/api/feedbacks/${id}`)).status).toBe(204);
+    expect(memory.objectsOf(id)).toEqual([]);
   });
 });
 
-describe('Rétention des Retours', () => {
+describe('Feedback Retention', () => {
   let pipeline: Pipeline;
-  let membre: DashboardClient;
-  const { stockage, objetsDe } = stockageMemoire();
+  let member: DashboardClient;
+  const { storage, objectsOf } = memoryStorage();
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage, purge: { intervalleMs: 100 } });
-    membre = await pipeline.signIn();
+    pipeline = await startPipeline({ storage, purge: { intervalMs: 100 } });
+    member = await pipeline.signIn();
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  it('illimitée par défaut : un Retour ancien reste', async () => {
-    expect(await membre.get('/api/instance/retention')).toEqual({
+  it('unlimited by default: an old Feedback stays', async () => {
+    expect(await member.get('/api/instance/retention')).toEqual({
       status: 200,
-      body: { jours: null },
+      body: { days: null },
     });
-    const { clePublique } = await pipeline.createProjet({
-      nom: 'Sans rétention',
-      originesAutorisees: [ORIGINE],
+    const { publicKey } = await pipeline.createProject({
+      name: 'No retention',
+      allowedOrigins: [ORIGIN],
     });
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte: 'Vieux mais gardé',
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'Old but kept',
       capture: capturePng,
     });
-    const { id } = (await reponse.json()) as { id: string };
-    await pipeline.vieillirRetour(id, 3650);
+    const { id } = (await response.json()) as { id: string };
+    await pipeline.ageFeedback(id, 3650);
 
-    // Plusieurs passages de la purge : rien ne bouge.
+    // Several purge passes: nothing moves.
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect((await membre.get(`/api/retours/${id}`)).status).toBe(200);
-    expect(objetsDe(id)).toHaveLength(1);
+    expect((await member.get(`/api/feedbacks/${id}`)).status).toBe(200);
+    expect(objectsOf(id)).toHaveLength(1);
   });
 
-  it('purge les Retours plus anciens que la durée choisie, avec leurs Captures', async () => {
-    const { projet, clePublique } = await pipeline.createProjet({
-      nom: 'Rétention de 30 jours',
-      originesAutorisees: [ORIGINE],
+  it('purges Feedback older than the chosen duration, with their Captures', async () => {
+    const { project, publicKey } = await pipeline.createProject({
+      name: '30-day retention',
+      allowedOrigins: [ORIGIN],
     });
-    await pipeline.createDestination(projet.id);
-    const poster = async (texte: string) => {
-      const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-        texte,
+    await pipeline.createDestination(project.id);
+    const post = async (text: string) => {
+      const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+        text,
         capture: capturePng,
       });
-      const { id } = (await reponse.json()) as { id: string };
-      await pipeline.waitForRetour(id, (r) => r.envois.some((e) => e.statut === 'livre'));
+      const { id } = (await response.json()) as { id: string };
+      await pipeline.waitForFeedback(id, (r) => r.deliveries.some((d) => d.status === 'delivered'));
       return id;
     };
-    const perime = await poster('Trente et un jours');
-    const recent = await poster('Vingt-neuf jours');
-    const neuf = await poster('Du jour');
-    await pipeline.vieillirRetour(perime, 31);
-    await pipeline.vieillirRetour(recent, 29);
+    const expired = await post('Thirty-one days');
+    const recent = await post('Twenty-nine days');
+    const fresh = await post('Today');
+    await pipeline.ageFeedback(expired, 31);
+    await pipeline.ageFeedback(recent, 29);
 
-    const reglage = await membre.put('/api/instance/retention', { jours: 30 });
-    expect(reglage).toEqual({ status: 200, body: { jours: 30 } });
-    expect((await membre.get('/api/instance/retention')).body).toEqual({ jours: 30 });
+    const setting = await member.put('/api/instance/retention', { days: 30 });
+    expect(setting).toEqual({ status: 200, body: { days: 30 } });
+    expect((await member.get('/api/instance/retention')).body).toEqual({ days: 30 });
 
     await expect
-      .poll(async () => (await membre.get(`/api/retours/${perime}`)).status, { timeout: 5000 })
+      .poll(async () => (await member.get(`/api/feedbacks/${expired}`)).status, { timeout: 5000 })
       .toBe(404);
-    expect(objetsDe(perime)).toEqual([]);
-    for (const garde of [recent, neuf]) {
-      expect((await membre.get(`/api/retours/${garde}`)).status).toBe(200);
-      expect(objetsDe(garde)).toHaveLength(1);
+    expect(objectsOf(expired)).toEqual([]);
+    for (const kept of [recent, fresh]) {
+      expect((await member.get(`/api/feedbacks/${kept}`)).status).toBe(200);
+      expect(objectsOf(kept)).toHaveLength(1);
     }
   });
 
-  it('refuse une durée qui n’est pas un nombre de jours entier et positif', async () => {
-    for (const jours of [0, -1, 1.5, '30', 36_501]) {
-      const refus = await membre.put<ApiErrorBody>('/api/instance/retention', { jours });
-      expect(refus.status).toBe(400);
-      expect(refus.body.erreur).toBe('requete_invalide');
+  it('refuses a duration that is not a positive whole number of days', async () => {
+    for (const days of [0, -1, 1.5, '30', 36_501]) {
+      const refusal = await member.put<ApiErrorBody>('/api/instance/retention', { days });
+      expect(refusal.status).toBe(400);
+      expect(refusal.body.error).toBe('invalid_request');
     }
-    expect((await pipeline.dashboard().put('/api/instance/retention', { jours: 1 })).status).toBe(
+    expect((await pipeline.dashboard().put('/api/instance/retention', { days: 1 })).status).toBe(
       401,
     );
   });
 
-  it('revient à une rétention illimitée', async () => {
-    expect(await membre.put('/api/instance/retention', { jours: null })).toEqual({
+  it('goes back to unlimited retention', async () => {
+    expect(await member.put('/api/instance/retention', { days: null })).toEqual({
       status: 200,
-      body: { jours: null },
+      body: { days: null },
     });
-    expect((await membre.get('/api/instance/retention')).body).toEqual({ jours: null });
+    expect((await member.get('/api/instance/retention')).body).toEqual({ days: null });
   });
 });
 
-describe('Rétention des Retours, stockage capricieux', () => {
+describe('Feedback Retention, flaky storage', () => {
   let pipeline: Pipeline;
-  const memoire = stockageMemoire();
-  /** Clés que le stockage refuse d'effacer. */
-  const refusees = new Set<string>();
-  const stockage: StockageCaptures = {
-    ...memoire.stockage,
-    supprimer: (cle) =>
-      refusees.has(cle)
-        ? Promise.reject(new Error('objet verrouillé'))
-        : memoire.stockage.supprimer(cle),
+  const memory = memoryStorage();
+  /** Keys the storage refuses to erase. */
+  const refused = new Set<string>();
+  const storage: CaptureStorage = {
+    ...memory.storage,
+    delete: (key) =>
+      refused.has(key) ? Promise.reject(new Error('object locked')) : memory.storage.delete(key),
   };
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage, purge: { intervalleMs: 100 } });
+    pipeline = await startPipeline({ storage, purge: { intervalMs: 100 } });
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  it('garde le Retour dont la Capture résiste, purge les autres, et le purge quand elle cède', async () => {
-    const membre = await pipeline.signIn();
-    const { clePublique } = await pipeline.createProjet({
-      nom: 'Purge partielle',
-      originesAutorisees: [ORIGINE],
+  it('keeps the Feedback whose Capture resists, purges the others, and purges it once it gives way', async () => {
+    const member = await pipeline.signIn();
+    const { publicKey } = await pipeline.createProject({
+      name: 'Partial purge',
+      allowedOrigins: [ORIGIN],
     });
-    const poster = async (texte: string) => {
-      const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-        texte,
+    const post = async (text: string) => {
+      const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+        text,
         capture: capturePng,
       });
-      const { id } = (await reponse.json()) as { id: string };
-      await pipeline.waitForRetour(id, (r) => r.etat !== 'recu');
+      const { id } = (await response.json()) as { id: string };
+      await pipeline.waitForFeedback(id, (r) => r.state !== 'received');
       return id;
     };
-    // Le plus ancien résiste : il ne doit pas bloquer la purge des suivants.
-    const resistant = await poster('Capture verrouillée');
-    const purgeable = await poster('Capture effaçable');
-    await pipeline.vieillirRetour(resistant, 40);
-    await pipeline.vieillirRetour(purgeable, 35);
-    for (const cle of memoire.objetsDe(resistant)) refusees.add(cle);
+    // The oldest resists: it must not block the purge of the next ones.
+    const resistant = await post('Locked Capture');
+    const purgeable = await post('Erasable Capture');
+    await pipeline.ageFeedback(resistant, 40);
+    await pipeline.ageFeedback(purgeable, 35);
+    for (const key of memory.objectsOf(resistant)) refused.add(key);
 
-    await membre.put('/api/instance/retention', { jours: 30 });
+    await member.put('/api/instance/retention', { days: 30 });
 
     await expect
-      .poll(async () => (await membre.get(`/api/retours/${purgeable}`)).status, { timeout: 5000 })
+      .poll(async () => (await member.get(`/api/feedbacks/${purgeable}`)).status, { timeout: 5000 })
       .toBe(404);
-    expect(memoire.objetsDe(purgeable)).toEqual([]);
-    expect((await membre.get(`/api/retours/${resistant}`)).status).toBe(200);
-    expect(await statutCapture(membre, resistant)).toBe(200);
+    expect(memory.objectsOf(purgeable)).toEqual([]);
+    expect((await member.get(`/api/feedbacks/${resistant}`)).status).toBe(200);
+    expect(await captureStatus(member, resistant)).toBe(200);
 
-    refusees.clear();
+    refused.clear();
     await expect
-      .poll(async () => (await membre.get(`/api/retours/${resistant}`)).status, { timeout: 5000 })
+      .poll(async () => (await member.get(`/api/feedbacks/${resistant}`)).status, { timeout: 5000 })
       .toBe(404);
-    expect(memoire.objetsDe(resistant)).toEqual([]);
+    expect(memory.objectsOf(resistant)).toEqual([]);
   });
 });

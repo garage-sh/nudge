@@ -2,26 +2,26 @@ import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 
 /**
- * CORS de l'API publique, pour le Widget servi depuis la page d'un Projet.
+ * CORS of the public API, for the Widget served from a Project's page.
  *
- * L'origine est renvoyée telle quelle : la lecture de la réponse n'est pas ce qui
- * protège l'ingestion. C'est l'écriture qui est refusée (403 `origine_refusee`) quand
- * l'origine n'est pas autorisée pour la clé publique, et le Widget peut alors lire
- * pourquoi. Pas de cookie (`credentials`) : la clé est dans l'en-tête Authorization.
- * Un preflight ne porte pas la clé : il ne peut pas être vérifié contre le Projet.
+ * The origin is echoed as is: reading the response is not what protects the ingestion.
+ * It is the write that is refused (403 `origin_refused`) when the origin is not allowed
+ * for the public key, and the Widget can then read why. No cookie (`credentials`): the
+ * key is in the Authorization header. A preflight does not carry the key: it cannot be
+ * checked against the Project.
  */
 @Injectable()
 export class CorsIngestionMiddleware implements NestMiddleware {
-  use(requete: Request, reponse: Response, suite: NextFunction): void {
-    const origine = requete.headers.origin;
-    reponse.vary('Origin');
-    if (origine) reponse.setHeader('Access-Control-Allow-Origin', origine);
-    // Le Widget dit à l'Auteur quand réessayer après un 429.
-    reponse.setHeader('Access-Control-Expose-Headers', 'Retry-After');
-    if (requete.method !== 'OPTIONS') return suite();
-    reponse.setHeader('Access-Control-Allow-Methods', 'POST');
-    reponse.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-    reponse.setHeader('Access-Control-Max-Age', '600');
-    reponse.status(204).end();
+  use(request: Request, response: Response, next: NextFunction): void {
+    const origin = request.headers.origin;
+    response.vary('Origin');
+    if (origin) response.setHeader('Access-Control-Allow-Origin', origin);
+    // The Widget tells the Author when to try again after a 429.
+    response.setHeader('Access-Control-Expose-Headers', 'Retry-After');
+    if (request.method !== 'OPTIONS') return next();
+    response.setHeader('Access-Control-Allow-Methods', 'POST');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    response.setHeader('Access-Control-Max-Age', '600');
+    response.status(204).end();
   }
 }

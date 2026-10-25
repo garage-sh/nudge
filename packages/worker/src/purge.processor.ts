@@ -1,18 +1,18 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { readRetentionInstance, retours, supprimerRetours, type Db } from '@nudge/database';
+import { readInstanceRetention, feedbacks, deleteFeedbacks, type Db } from '@nudge/database';
 import { and, asc, lt, notInArray } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { DB, OPTIONS } from './tokens.js';
 
-/** Retours effacés par lot : une purge enchaîne les lots jusqu'à épuisement. */
-const LOT = 100;
+/** Feedbacks deleted per batch: a purge chains batches until none is left. */
+const BATCH = 100;
 
-const JOUR_MS = 24 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
 
 /**
- * Purge de rétention : efface les Retours plus anciens que la durée de rétention de
- * l'Instance, avec leurs Captures. Sans durée (par défaut), rien n'est purgé. La
- * durée est relue à chaque passage : la changer au dashboard suffit.
+ * Retention purge: deletes the Feedbacks older than the Instance retention period,
+ * with their Captures. Without a period (the default), nothing is purged. The period
+ * is read again on every run: changing it in the dashboard is enough.
  */
 @Injectable()
 export class PurgeProcessor {
@@ -24,38 +24,38 @@ export class PurgeProcessor {
   ) {}
 
   async handle(): Promise<void> {
-    const jours = await readRetentionInstance(this.db);
-    if (jours === null) return;
-    const avant = new Date(Date.now() - jours * JOUR_MS);
+    const days = await readInstanceRetention(this.db);
+    if (days === null) return;
+    const before = new Date(Date.now() - days * DAY_MS);
     let total = 0;
-    // Retours gardés pendant ce passage (Capture non effacée) : les lots suivants les
-    // sautent, pour qu'une Capture qui résiste ne bloque pas la purge des autres.
-    const gardes: string[] = [];
+    // Feedbacks kept during this run (Capture not deleted): the next batches skip them,
+    // so that a Capture that resists does not block the purge of the others.
+    const kept: string[] = [];
     for (;;) {
-      const lot = await this.db
-        .select({ id: retours.id })
-        .from(retours)
+      const batch = await this.db
+        .select({ id: feedbacks.id })
+        .from(feedbacks)
         .where(
           and(
-            lt(retours.createdAt, avant),
-            gardes.length > 0 ? notInArray(retours.id, gardes) : undefined,
+            lt(feedbacks.createdAt, before),
+            kept.length > 0 ? notInArray(feedbacks.id, kept) : undefined,
           ),
         )
-        .orderBy(asc(retours.createdAt))
-        .limit(LOT);
-      const { supprimes, echecs } = await supprimerRetours(
+        .orderBy(asc(feedbacks.createdAt))
+        .limit(BATCH);
+      const { deleted, failures } = await deleteFeedbacks(
         this.db,
-        lot.map(({ id }) => id),
-        (cle) => this.options.stockageCaptures.supprimer(cle),
+        batch.map(({ id }) => id),
+        (key) => this.options.captureStorage.delete(key),
       );
-      total += supprimes.length;
-      for (const { retourId, erreur } of echecs) {
-        this.logger.error(`Capture du Retour ${retourId} non effacée : purge retentée`, erreur);
-        gardes.push(retourId);
+      total += deleted.length;
+      for (const { feedbackId, error } of failures) {
+        this.logger.error(`Capture of Feedback ${feedbackId} not deleted: purge retried`, error);
+        kept.push(feedbackId);
       }
-      // Lot incomplet : plus rien d'expiré ce passage ; le suivant retentera les gardés.
-      if (lot.length < LOT) break;
+      // Incomplete batch: nothing else expired this run; the next one retries the kept ones.
+      if (batch.length < BATCH) break;
     }
-    if (total > 0) this.logger.log(`Rétention de ${jours} j : ${total} Retour(s) purgé(s)`);
+    if (total > 0) this.logger.log(`Retention of ${days} d: ${total} Feedback(s) purged`);
   }
 }

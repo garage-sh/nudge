@@ -1,6 +1,6 @@
-# Mises à jour groupées, une fois par semaine. Les images de base du Dockerfile sont
-# épinglées par digest : Dependabot propose aussi le nouveau digest d'un même tag, ce
-# qui reconstruit les images de nudge avec les correctifs d'Alpine et de Node.
+# Grouped updates, once a week. The Dockerfile's base images are pinned by digest:
+# Dependabot also proposes the new digest of the same tag, which rebuilds the nudge
+# images with Alpine and Node fixes.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,7 +11,7 @@ updates:
       production:
         dependency-type: production
         update-types: [minor, patch]
-      developpement:
+      development:
         dependency-type: development
         update-types: [minor, patch]
 

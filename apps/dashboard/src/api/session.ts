@@ -1,67 +1,73 @@
-import type { Connexion, EtatSetup, MembreVu, NouveauMembre, SessionVue } from '@nudge/shared';
+import type {
+  SignInCredentials,
+  SetupState,
+  MemberView,
+  NewMember,
+  SessionView,
+} from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isSessionLost } from './client.js';
 
-export const CLE_SESSION = ['session'] as const;
-const CLE_SETUP = ['setup'] as const;
+export const SESSION_KEY = ['session'] as const;
+const SETUP_KEY = ['setup'] as const;
 
-/** Le Membre connecté, `null` sans session ; `undefined` pendant le premier chargement. */
+/** The signed-in Member, `null` without a session; `undefined` during the first load. */
 export function useSession() {
   return useQuery({
-    queryKey: CLE_SESSION,
-    queryFn: async (): Promise<MembreVu | null> => {
+    queryKey: SESSION_KEY,
+    queryFn: async (): Promise<MemberView | null> => {
       try {
-        return (await api.get<SessionVue>('/api/session')).membre;
-      } catch (erreur) {
-        if (isSessionLost(erreur)) return null;
-        throw erreur;
+        return (await api.get<SessionView>('/api/session')).member;
+      } catch (error) {
+        if (isSessionLost(error)) return null;
+        throw error;
       }
     },
     staleTime: Infinity,
   });
 }
 
-export function useEtatSetup(options: { enabled?: boolean } = {}) {
+export function useSetupState(options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: CLE_SETUP,
-    queryFn: () => api.get<EtatSetup>('/api/setup'),
+    queryKey: SETUP_KEY,
+    queryFn: () => api.get<SetupState>('/api/setup'),
     enabled: options.enabled ?? true,
   });
 }
 
-/** Mutation qui ouvre une session (setup, connexion, invitation) et la met en cache. */
-function useOuvertureSession<V>(appel: (variables: V) => Promise<SessionVue>) {
+/** A mutation that opens a session (setup, sign in, invitation) and caches it. */
+function useOpenSession<V>(call: (variables: V) => Promise<SessionView>) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: appel,
-    onSuccess: ({ membre }) => {
-      client.setQueryData(CLE_SESSION, membre);
-      client.setQueryData(CLE_SETUP, { requis: false } satisfies EtatSetup);
+    mutationFn: call,
+    onSuccess: ({ member }) => {
+      client.setQueryData(SESSION_KEY, member);
+      client.setQueryData(SETUP_KEY, { required: false } satisfies SetupState);
     },
   });
 }
 
 export const useSetup = () =>
-  useOuvertureSession((membre: NouveauMembre) => api.post<SessionVue>('/api/setup', membre));
+  useOpenSession((member: NewMember) => api.post<SessionView>('/api/setup', member));
 
-export const useConnexion = () =>
-  useOuvertureSession((identifiants: Connexion) =>
-    api.post<SessionVue>('/api/session', identifiants),
+export const useSignIn = () =>
+  useOpenSession((credentials: SignInCredentials) =>
+    api.post<SessionView>('/api/session', credentials),
   );
 
-export const useAcceptationInvitation = (jeton: string) =>
-  useOuvertureSession((membre: NouveauMembre) =>
-    api.post<SessionVue>(`/api/invitations/${encodeURIComponent(jeton)}/acceptation`, membre),
+export const useAcceptInvitation = (token: string) =>
+  useOpenSession((member: NewMember) =>
+    api.post<SessionView>(`/api/invitations/${encodeURIComponent(token)}/accept`, member),
   );
 
-export function useDeconnexion() {
+export function useSignOut() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => api.delete<null>('/api/session'),
     onSuccess: () => {
-      client.setQueryData(CLE_SESSION, null);
-      // Plus rien de ce qui a été lu sous cette session ne doit rester en mémoire.
-      client.removeQueries({ predicate: (query) => query.queryKey[0] !== CLE_SESSION[0] });
+      client.setQueryData(SESSION_KEY, null);
+      // Nothing read under this session may stay in memory.
+      client.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
     },
   });
 }

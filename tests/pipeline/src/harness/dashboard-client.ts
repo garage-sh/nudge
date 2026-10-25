@@ -1,37 +1,37 @@
-/** Réponse de l'API du dashboard : statut et corps JSON (ou `null` sans corps). */
-export interface ReponseDashboard<T> {
+/** Response of the dashboard API: status and JSON body (or `null` without a body). */
+export interface DashboardResponse<T> {
   readonly status: number;
   readonly body: T;
 }
 
-/** Réponse binaire (image d'une Capture) : statut, en-têtes et octets. */
-export interface TelechargementDashboard {
+/** Binary response (a Capture's image): status, headers and bytes. */
+export interface DashboardDownload {
   readonly status: number;
-  readonly enTetes: Headers;
-  readonly octets: Uint8Array;
-  /** Le corps lu comme du JSON (réponse d'erreur). */
+  readonly headers: Headers;
+  readonly bytes: Uint8Array;
+  /** The body read as JSON (error response). */
   json<T>(): T;
 }
 
-const COOKIE_SESSION = 'nudge_session';
+const SESSION_COOKIE = 'nudge_session';
 
 /**
- * Client HTTP de l'API du dashboard, tel que le navigateur d'un Membre :
- * il garde le cookie de session posé par l'api et le renvoie à chaque appel.
+ * HTTP client of the dashboard API, like a Member's browser: it keeps the
+ * session cookie set by the api and sends it back on every call.
  */
 export class DashboardClient {
   private session: string | null = null;
 
   constructor(private readonly baseUrl: string) {}
 
-  /** Le cookie de session courant (pour vérifier qu'il est révoqué). */
+  /** The current session cookie (to check that it is revoked). */
   get sessionCookie(): string | null {
     return this.session;
   }
 
-  /** Rejoue un cookie de session tel quel (session volée, session révoquée…). */
-  withSessionCookie(valeur: string | null): this {
-    this.session = valeur;
+  /** Replays a session cookie as is (stolen session, revoked session…). */
+  withSessionCookie(value: string | null): this {
+    this.session = value;
     return this;
   }
 
@@ -55,43 +55,43 @@ export class DashboardClient {
     return this.request<T>('DELETE', path);
   }
 
-  /** GET d'une ressource binaire, telle qu'une balise `<img>` du dashboard la charge. */
-  async telecharger(path: string): Promise<TelechargementDashboard> {
-    const reponse = await fetch(`${this.baseUrl}${path}`, {
-      headers: this.session ? { cookie: `${COOKIE_SESSION}=${this.session}` } : {},
+  /** GET of a binary resource, as an `<img>` tag of the dashboard loads it. */
+  async download(path: string): Promise<DashboardDownload> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      headers: this.session ? { cookie: `${SESSION_COOKIE}=${this.session}` } : {},
     });
-    const octets = new Uint8Array(await reponse.arrayBuffer());
+    const bytes = new Uint8Array(await response.arrayBuffer());
     return {
-      status: reponse.status,
-      enTetes: reponse.headers,
-      octets,
-      json: <T>() => JSON.parse(new TextDecoder().decode(octets)) as T,
+      status: response.status,
+      headers: response.headers,
+      bytes,
+      json: <T>() => JSON.parse(new TextDecoder().decode(bytes)) as T,
     };
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<ReponseDashboard<T>> {
-    // Le dashboard signe chacune de ses requêtes : l'api refuse une écriture sans cet en-tête.
+  async request<T>(method: string, path: string, body?: unknown): Promise<DashboardResponse<T>> {
+    // The dashboard tags each of its requests: the api refuses a write without this header.
     const headers: Record<string, string> = { 'x-nudge-client': 'dashboard' };
     if (body !== undefined) headers['content-type'] = 'application/json';
-    if (this.session) headers.cookie = `${COOKIE_SESSION}=${this.session}`;
-    const reponse = await fetch(`${this.baseUrl}${path}`, {
+    if (this.session) headers.cookie = `${SESSION_COOKIE}=${this.session}`;
+    const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    this.retainSession(reponse.headers.getSetCookie());
-    const texte = await reponse.text();
-    return { status: reponse.status, body: (texte ? JSON.parse(texte) : null) as T };
+    this.retainSession(response.headers.getSetCookie());
+    const text = await response.text();
+    return { status: response.status, body: (text ? JSON.parse(text) : null) as T };
   }
 
   private retainSession(setCookies: string[]): void {
-    for (const ligne of setCookies) {
-      const [paire = ''] = ligne.split(';');
-      const separateur = paire.indexOf('=');
-      if (paire.slice(0, separateur).trim() !== COOKIE_SESSION) continue;
-      const valeur = decodeURIComponent(paire.slice(separateur + 1).trim());
-      const expire = /max-age=0\b/i.test(ligne) || /expires=Thu, 01 Jan 1970/i.test(ligne);
-      this.session = valeur && !expire ? valeur : null;
+    for (const line of setCookies) {
+      const [pair = ''] = line.split(';');
+      const separator = pair.indexOf('=');
+      if (pair.slice(0, separator).trim() !== SESSION_COOKIE) continue;
+      const value = decodeURIComponent(pair.slice(separator + 1).trim());
+      const expired = /max-age=0\b/i.test(line) || /expires=Thu, 01 Jan 1970/i.test(line);
+      this.session = value && !expired ? value : null;
     }
   }
 }

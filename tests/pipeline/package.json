@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Seam 1 : tests du pipeline (api + worker réels, Postgres et Redis via testcontainers, FakeJuge, FakeDestination).",
+  "description": "Seam 1: pipeline tests (real api + worker, Postgres and Redis via testcontainers, FakeJudge, FakeDestination).",
   "exports": {
     ".": "./src/harness/index.ts"
   },
@@ -20,7 +20,7 @@
     "@nudge/judge": "workspace:*",
     "@nudge/sdk": "workspace:*",
     "@nudge/shared": "workspace:*",
-    "@nudge/stockage": "workspace:*",
+    "@nudge/storage": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
     "@nudge/worker": "workspace:*",
     "@testcontainers/postgresql": "^11.14.0",

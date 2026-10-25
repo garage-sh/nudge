@@ -1,5 +1,5 @@
-# Vérifie chaque PR et chaque push sur main : format, lint, types, build, tests (dont
-# les tests de pipeline, sur Postgres et Redis en conteneurs), et l'absence de secrets.
+# Checks every PR and every push to main: format, lint, types, build, tests (including
+# the pipeline tests, on Postgres and Redis in containers), and the absence of secrets.
 name: CI
 
 on:
@@ -15,14 +15,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verifier:
-    name: Format, lint, types, build et tests
+  verify:
+    name: Format, lint, types, build and tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Yarn 4 vient du dépôt (`yarnPath`) : un `yarn` qui le lance suffit.
-      - name: Yarn du dépôt
+      # Yarn 4 comes from the repository (`yarnPath`): a `yarn` that runs it is enough.
+      - name: Repository Yarn
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           printf '#!/bin/sh\nexec node "%s"/.yarn/releases/yarn-*.cjs "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/yarn"
@@ -40,13 +40,13 @@ jobs:
       - run: yarn test
 
   secrets:
-    name: Secrets dans l'historique
+    name: Secrets in the history
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # Faux positifs connus : .gitleaksignore.
+      # Known false positives: .gitleaksignore.
       - name: gitleaks
         run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 git /repo --redact --verbose

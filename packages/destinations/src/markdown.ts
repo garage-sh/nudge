@@ -1,26 +1,25 @@
-import { presenterAlerte, type Alerte } from '@nudge/core';
+import { presentAlert, type Alert } from '@nudge/core';
 
 /**
- * Échappement CommonMark commun aux Destinations qui rendent du markdown (Linear,
- * GitHub) : chaque caractère de ponctuation ASCII peut être précédé d'une barre oblique
- * inverse, qui le rend littéral (https://spec.commonmark.org/0.31.2/#backslash-escapes).
+ * CommonMark escaping shared by the Destinations that render markdown (Linear,
+ * GitHub): every ASCII punctuation character may be preceded by a backslash, which
+ * makes it literal (https://spec.commonmark.org/0.31.2/#backslash-escapes).
  */
-export const echapperPonctuation = (texte: string): string =>
-  texte.replace(/[!-/:-@[-`{-~]/g, '\\$&');
+export const escapePunctuation = (text: string): string => text.replace(/[!-/:-@[-`{-~]/g, '\\$&');
 
-/** Un lien du dashboard qu'on peut écrire tel quel entre chevrons : `[texte](<lien>)`. */
-export const lienSur = (lien: string | null): lien is string =>
-  lien !== null && /^https?:\/\/[^\s<>]+$/.test(lien);
+/** A dashboard link that can be written as is between angle brackets: `[text](<link>)`. */
+export const isSafeLink = (link: string | null): link is string =>
+  link !== null && /^https?:\/\/[^\s<>]+$/.test(link);
 
 /**
- * Le corps markdown d'une alerte (issue Linear, GitHub) : le résumé, chaque détail
- * en paragraphe, sa valeur passée par `echapper`, puis le lien vers le dashboard.
+ * The markdown body of an alert (Linear, GitHub issue): the summary, each detail as a
+ * paragraph, its value passed through `escape`, then the link to the dashboard.
  */
-export function alerteEnMarkdown(alerte: Alerte, echapper: (texte: string) => string): string {
-  const { resume, details } = presenterAlerte(alerte);
+export function alertToMarkdown(alert: Alert, escape: (text: string) => string): string {
+  const { summary, details } = presentAlert(alert);
   return [
-    resume,
-    ...details.map(({ libelle, valeur }) => `**${libelle}** : ${echapper(valeur)}`),
-    ...(lienSur(alerte.lienDashboard) ? [`[Ouvrir dans nudge](<${alerte.lienDashboard}>)`] : []),
+    summary,
+    ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
+    ...(isSafeLink(alert.dashboardUrl) ? [`[Open in nudge](<${alert.dashboardUrl}>)`] : []),
   ].join('\n\n');
 }

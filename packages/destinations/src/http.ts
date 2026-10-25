@@ -1,57 +1,57 @@
-import type { ClasseEchec } from '@nudge/core';
-import { tronquer } from './texte.js';
+import type { FailureClass } from '@nudge/core';
+import { truncate } from './text.js';
 
-/** Longueur maximale de la réponse d'un service externe reprise dans un message d'échec. */
-export const EXTRAIT_MAX = 300;
+/** Maximum length of an external service's response carried over into a failure message. */
+export const EXCERPT_MAX = 300;
 
-/** Délai de réponse d'un service externe, au-delà duquel l'appel est un échec transitoire. */
-export const DELAI_HTTP_PAR_DEFAUT_MS = 10_000;
+/** External service response timeout, beyond which the call is a transient failure. */
+export const DEFAULT_HTTP_TIMEOUT_MS = 10_000;
 
 /**
- * Classe d'un statut HTTP d'échec, commune aux Destinations appelées en HTTP :
- * 408, 425, 429 et 5xx sont passagers ; 401 et 403 refusent les identifiants ;
- * tout autre refus vise cette requête précise.
+ * Failure class of an HTTP status, shared by the Destinations called over HTTP:
+ * 408, 425, 429 and 5xx are temporary; 401 and 403 reject the credentials;
+ * any other refusal targets this specific request.
  */
-export function classerStatut(status: number): ClasseEchec {
+export function classifyStatus(status: number): FailureClass {
   if (status === 408 || status === 425 || status === 429 || status >= 500) return 'transient';
   if (status === 401 || status === 403) return 'auth';
   return 'permanent';
 }
 
 /**
- * Classe et message d'une réponse HTTP d'échec. Les redirections ne sont jamais
- * suivies (`redirect: 'manual'`) : un 3xx est permanent, il faut configurer l'URL finale.
+ * Class and message of a failed HTTP response. Redirects are never followed
+ * (`redirect: 'manual'`): a 3xx is permanent, the final URL must be configured.
  */
-export async function echecHttp(
-  reponse: Response,
-  classer: (status: number) => ClasseEchec = classerStatut,
-): Promise<{ classe: ClasseEchec; message: string }> {
-  if (reponse.status >= 300 && reponse.status < 400) {
-    await reponse.body?.cancel();
+export async function httpFailure(
+  response: Response,
+  classify: (status: number) => FailureClass = classifyStatus,
+): Promise<{ failureClass: FailureClass; message: string }> {
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
     return {
-      classe: 'permanent',
-      message: `HTTP ${reponse.status} : redirection refusée, configurez l'URL finale`,
+      failureClass: 'permanent',
+      message: `HTTP ${response.status}: redirect refused, configure the final URL`,
     };
   }
-  return { classe: classer(reponse.status), message: await messageEchec(reponse) };
+  return { failureClass: classify(response.status), message: await failureMessage(response) };
 }
 
-/** « 422 : <début de la réponse> », borné. */
-export async function messageEchec(reponse: Response): Promise<string> {
-  const texte = (await reponse.text().catch(() => '')).trim();
-  const extrait = tronquer(texte, EXTRAIT_MAX);
-  return extrait ? `HTTP ${reponse.status} : ${extrait}` : `HTTP ${reponse.status}`;
+/** "422: <start of the response>", bounded. */
+export async function failureMessage(response: Response): Promise<string> {
+  const text = (await response.text().catch(() => '')).trim();
+  const excerpt = truncate(text, EXCERPT_MAX);
+  return excerpt ? `HTTP ${response.status}: ${excerpt}` : `HTTP ${response.status}`;
 }
 
-/** Le corps d'une réponse en texte, lu sur une copie (le corps reste lisible), ou `''`. */
-export async function texteReponse(reponse: Response): Promise<string> {
+/** A response body as text, read from a clone (the body stays readable), or `''`. */
+export async function responseText(response: Response): Promise<string> {
   return (
-    await reponse
+    await response
       .clone()
       .text()
       .catch(() => '')
   ).trim();
 }
 
-/** Message d'une exception de `fetch` (réseau, délai dépassé). */
-export { messageErreur } from '@nudge/shared';
+/** Message of a `fetch` exception (network, timeout). */
+export { errorMessage } from '@nudge/shared';

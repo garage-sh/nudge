@@ -1,49 +1,49 @@
 import { z } from 'zod';
-import type { DefinitionDestination } from './definition.js';
+import type { DestinationDefinition } from './definition.js';
 
-/** Hôtes d'où Discord délivre une URL de webhook (« Copier l'URL du webhook »). */
-const HOTES_DISCORD = ['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com'];
+/** Hosts from which Discord issues a webhook URL ("Copy Webhook URL"). */
+const DISCORD_HOSTS = ['discord.com', 'discordapp.com', 'canary.discord.com', 'ptb.discord.com'];
 
-/** `/api[/v<n>]/webhooks/<id>/<jeton>` : l'id est un snowflake, le jeton un secret. */
-const CHEMIN_WEBHOOK = /^\/api(?:\/v\d+)?\/webhooks\/(\d{1,20})\/([\w-]{1,200})\/?$/;
+/** `/api[/v<n>]/webhooks/<id>/<token>`: the id is a snowflake, the token a secret. */
+const WEBHOOK_PATH = /^\/api(?:\/v\d+)?\/webhooks\/(\d{1,20})\/([\w-]{1,200})\/?$/;
 
-export interface WebhookDiscord {
+export interface DiscordWebhook {
   readonly id: string;
-  readonly jeton: string;
+  readonly token: string;
 }
 
 /**
- * L'id et le jeton d'une URL de webhook de salon Discord, ou `null` si l'URL n'en est
- * pas une (https, hôte Discord, sans paramètres : un `thread_id` n'est pas géré).
+ * The id and token of a Discord channel webhook URL, or `null` if the URL is not one
+ * (https, Discord host, no parameters: a `thread_id` is not supported).
  */
-export function lireWebhookDiscord(valeur: string): WebhookDiscord | null {
+export function parseDiscordWebhook(value: string): DiscordWebhook | null {
   let url: URL;
   try {
-    url = new URL(valeur.trim());
+    url = new URL(value.trim());
   } catch {
     return null;
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
-  if (!HOTES_DISCORD.includes(url.hostname) || url.search || url.hash) return null;
-  const morceaux = CHEMIN_WEBHOOK.exec(url.pathname);
-  return morceaux ? { id: morceaux[1]!, jeton: morceaux[2]! } : null;
+  if (!DISCORD_HOSTS.includes(url.hostname) || url.search || url.hash) return null;
+  const parts = WEBHOOK_PATH.exec(url.pathname);
+  return parts ? { id: parts[1]!, token: parts[2]! } : null;
 }
 
 /**
- * Discord : un webhook de salon. Son URL porte le jeton qui autorise à poster : c'est
- * un secret, chiffré en base et jamais rendu. Aucune configuration en clair.
+ * Discord: a channel webhook. Its URL carries the token that allows posting: it is a
+ * secret, encrypted in the database and never returned. No configuration in clear.
  */
-export const definitionDiscord = {
+export const discordDefinition = {
   config: z.strictObject({}),
   secrets: z.strictObject({
     url: z
       .string()
       .trim()
-      .refine((valeur) => lireWebhookDiscord(valeur) !== null, {
-        message: 'URL de webhook Discord attendue (https://discord.com/api/webhooks/…)',
+      .refine((value) => parseDiscordWebhook(value) !== null, {
+        message: 'Expected a Discord webhook URL (https://discord.com/api/webhooks/…)',
       }),
   }),
-  secretsGeneres: [],
-} as const satisfies DefinitionDestination;
+  generatedSecrets: [],
+} as const satisfies DestinationDefinition;
 
-export type SecretsDiscord = z.output<typeof definitionDiscord.secrets>;
+export type DiscordSecrets = z.output<typeof discordDefinition.secrets>;

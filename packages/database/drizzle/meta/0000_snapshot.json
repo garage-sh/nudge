@@ -1,9 +1,207 @@
 {
-  "id": "76403185-b5d8-4082-ab9b-4b9b0251b963",
+  "id": "327df83e-eebb-40fd-8c7d-ddc36673d9d1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.captures": {
+      "name": "captures",
+      "schema": "",
+      "columns": {
+        "feedback_id": {
+          "name": "feedback_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "captures_feedback_id_feedbacks_id_fk": {
+          "name": "captures_feedback_id_feedbacks_id_fk",
+          "tableFrom": "captures",
+          "tableTo": "feedbacks",
+          "columnsFrom": [
+            "feedback_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "captures_key_unique": {
+          "name": "captures_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.deliveries": {
+      "name": "deliveries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "feedback_id": {
+          "name": "feedback_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination_id": {
+          "name": "destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "delivery_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "external_url": {
+          "name": "external_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_at": {
+          "name": "held_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "deliveries_held_idx": {
+          "name": "deliveries_held_idx",
+          "columns": [
+            {
+              "expression": "destination_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"deliveries\".\"status\" = 'held'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "deliveries_feedback_id_feedbacks_id_fk": {
+          "name": "deliveries_feedback_id_feedbacks_id_fk",
+          "tableFrom": "deliveries",
+          "tableTo": "feedbacks",
+          "columnsFrom": [
+            "feedback_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliveries_destination_id_destinations_id_fk": {
+          "name": "deliveries_destination_id_destinations_id_fk",
+          "tableFrom": "deliveries",
+          "tableTo": "destinations",
+          "columnsFrom": [
+            "destination_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "deliveries_feedback_destination_uniq": {
+          "name": "deliveries_feedback_destination_uniq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "feedback_id",
+            "destination_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.destinations": {
       "name": "destinations",
       "schema": "",
@@ -15,14 +213,14 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "projet_id": {
-          "name": "projet_id",
+        "project_id": {
+          "name": "project_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "nom": {
-          "name": "nom",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -40,13 +238,59 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "etat": {
-          "name": "etat",
-          "type": "etat_destination",
+        "encrypted_secrets": {
+          "name": "encrypted_secrets",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filter_types": {
+          "name": "filter_types",
+          "type": "feedback_type[]",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"bug\",\"suggestion\",\"opinion\",\"question\"}'"
+        },
+        "filter_minimum_severity": {
+          "name": "filter_minimum_severity",
+          "type": "severity",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "destination_state",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "suspended_at": {
+          "name": "suspended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suspension_reason": {
+          "name": "suspension_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_probe_at": {
+          "name": "next_probe_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -65,12 +309,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "destinations_projet_id_projets_id_fk": {
-          "name": "destinations_projet_id_projets_id_fk",
+        "destinations_project_id_projects_id_fk": {
+          "name": "destinations_project_id_projects_id_fk",
           "tableFrom": "destinations",
-          "tableTo": "projets",
+          "tableTo": "projects",
           "columnsFrom": [
-            "projet_id"
+            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -85,8 +329,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.envois": {
-      "name": "envois",
+    "public.feedbacks": {
+      "name": "feedbacks",
       "schema": "",
       "columns": {
         "id": {
@@ -96,42 +340,197 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "retour_id": {
-          "name": "retour_id",
+        "project_id": {
+          "name": "project_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "destination_id": {
-          "name": "destination_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "statut": {
-          "name": "statut",
-          "type": "statut_envoi",
+        "state": {
+          "name": "state",
+          "type": "feedback_state",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'en_attente'"
+          "default": "'received'"
         },
-        "lien_externe": {
-          "name": "lien_externe",
+        "source": {
+          "name": "source",
+          "type": "feedback_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "declared_type": {
+          "name": "declared_type",
+          "type": "feedback_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author": {
+          "name": "author",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_trust": {
+          "name": "author_trust",
+          "type": "author_trust",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "context": {
+          "name": "context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "feedbacks_project_created_at_idx": {
+          "name": "feedbacks_project_created_at_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedbacks_created_at_id_idx": {
+          "name": "feedbacks_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "feedbacks_project_id_projects_id_fk": {
+          "name": "feedbacks_project_id_projects_id_fk",
+          "tableFrom": "feedbacks",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.instance_settings": {
+      "name": "instance_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "smallint",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "judge_provider": {
+          "name": "judge_provider",
+          "type": "judge_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "judge_model": {
+          "name": "judge_model",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "tentatives": {
-          "name": "tentatives",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "derniere_erreur": {
-          "name": "derniere_erreur",
+        "judge_base_url": {
+          "name": "judge_base_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "judge_encrypted_key": {
+          "name": "judge_encrypted_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_destination_type": {
+          "name": "alert_destination_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_destination_config": {
+          "name": "alert_destination_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_destination_encrypted_secrets": {
+          "name": "alert_destination_encrypted_secrets",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retention_days": {
+          "name": "retention_days",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -151,51 +550,24 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "envois_retour_id_retours_id_fk": {
-          "name": "envois_retour_id_retours_id_fk",
-          "tableFrom": "envois",
-          "tableTo": "retours",
-          "columnsFrom": [
-            "retour_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "envois_destination_id_destinations_id_fk": {
-          "name": "envois_destination_id_destinations_id_fk",
-          "tableFrom": "envois",
-          "tableTo": "destinations",
-          "columnsFrom": [
-            "destination_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "envois_retour_destination_uniq": {
-          "name": "envois_retour_destination_uniq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "retour_id",
-            "destination_id"
-          ]
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "instance_settings_single_row": {
+          "name": "instance_settings_single_row",
+          "value": "\"instance_settings\".\"id\" = 1"
+        },
+        "instance_settings_retention_positive": {
+          "name": "instance_settings_retention_positive",
+          "value": "\"instance_settings\".\"retention_days\" > 0"
         }
       },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.projets": {
-      "name": "projets",
+    "public.invitations": {
+      "name": "invitations",
       "schema": "",
       "columns": {
         "id": {
@@ -205,26 +577,106 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "nom": {
-          "name": "nom",
+        "token_hash": {
+          "name": "token_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "description": {
-          "name": "description",
-          "type": "text",
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "cle_publique": {
-          "name": "cle_publique",
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "invitations_created_by_members_id_fk": {
+          "name": "invitations_created_by_members_id_fk",
+          "tableFrom": "invitations",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "invitations_member_id_members_id_fk": {
+          "name": "invitations_member_id_members_id_fk",
+          "tableFrom": "invitations",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "invitations_token_hash_unique": {
+          "name": "invitations_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.members": {
+      "name": "members",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "empreinte_cle_secrete": {
-          "name": "empreinte_cle_secrete",
+        "password_hash": {
+          "name": "password_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -248,18 +700,11 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "projets_cle_publique_unique": {
-          "name": "projets_cle_publique_unique",
+        "members_email_unique": {
+          "name": "members_email_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "cle_publique"
-          ]
-        },
-        "projets_empreinte_cle_secrete_unique": {
-          "name": "projets_empreinte_cle_secrete_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "empreinte_cle_secrete"
+            "email"
           ]
         }
       },
@@ -267,8 +712,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.retours": {
-      "name": "retours",
+    "public.projects": {
+      "name": "projects",
       "schema": "",
       "columns": {
         "id": {
@@ -278,59 +723,36 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "projet_id": {
-          "name": "projet_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "etat": {
-          "name": "etat",
-          "type": "etat_retour",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'recu'"
-        },
-        "source": {
-          "name": "source",
-          "type": "source_retour",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "texte": {
-          "name": "texte",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "type_declare": {
-          "name": "type_declare",
-          "type": "type_retour",
-          "typeSchema": "public",
+        "description": {
+          "name": "description",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "auteur": {
-          "name": "auteur",
-          "type": "jsonb",
+        "public_key": {
+          "name": "public_key",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "confiance_auteur": {
-          "name": "confiance_auteur",
-          "type": "confiance_auteur",
-          "typeSchema": "public",
+        "secret_key_hash": {
+          "name": "secret_key_hash",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "contexte": {
-          "name": "contexte",
-          "type": "jsonb",
+        "allowed_origins": {
+          "name": "allowed_origins",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::jsonb"
+          "default": "'{}'"
         },
         "created_at": {
           "name": "created_at",
@@ -347,18 +769,72 @@
           "default": "now()"
         }
       },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "projects_public_key_unique": {
+          "name": "projects_public_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_key"
+          ]
+        },
+        "projects_secret_key_hash_unique": {
+          "name": "projects_secret_key_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "secret_key_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
       "indexes": {
-        "retours_projet_created_at_idx": {
-          "name": "retours_projet_created_at_idx",
+        "sessions_member_idx": {
+          "name": "sessions_member_idx",
           "columns": [
             {
-              "expression": "projet_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
+              "expression": "member_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -371,12 +847,12 @@
         }
       },
       "foreignKeys": {
-        "retours_projet_id_projets_id_fk": {
-          "name": "retours_projet_id_projets_id_fk",
-          "tableFrom": "retours",
-          "tableTo": "projets",
+        "sessions_member_id_members_id_fk": {
+          "name": "sessions_member_id_members_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "members",
           "columnsFrom": [
-            "projet_id"
+            "member_id"
           ],
           "columnsTo": [
             "id"
@@ -386,7 +862,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "sessions_token_hash_unique": {
+          "name": "sessions_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -402,28 +886,28 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "retour_id": {
-          "name": "retour_id",
+        "feedback_id": {
+          "name": "feedback_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "type_retenu": {
-          "name": "type_retenu",
-          "type": "type_retour",
+        "resolved_type": {
+          "name": "resolved_type",
+          "type": "feedback_type",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
-        "gravite": {
-          "name": "gravite",
-          "type": "gravite",
+        "severity": {
+          "name": "severity",
+          "type": "severity",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
-        "indesirable": {
-          "name": "indesirable",
+        "junk": {
+          "name": "junk",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
@@ -434,14 +918,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "incertain": {
-          "name": "incertain",
+        "uncertain": {
+          "name": "uncertain",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
-        "reponses_brutes": {
-          "name": "reponses_brutes",
+        "raw_answers": {
+          "name": "raw_answers",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -463,12 +947,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "verdicts_retour_id_retours_id_fk": {
-          "name": "verdicts_retour_id_retours_id_fk",
+        "verdicts_feedback_id_feedbacks_id_fk": {
+          "name": "verdicts_feedback_id_feedbacks_id_fk",
           "tableFrom": "verdicts",
-          "tableTo": "retours",
+          "tableTo": "feedbacks",
           "columnsFrom": [
-            "retour_id"
+            "feedback_id"
           ],
           "columnsTo": [
             "id"
@@ -479,11 +963,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "verdicts_retour_id_unique": {
-          "name": "verdicts_retour_id_unique",
+        "verdicts_feedback_id_unique": {
+          "name": "verdicts_feedback_id_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "retour_id"
+            "feedback_id"
           ]
         }
       },
@@ -493,70 +977,79 @@
     }
   },
   "enums": {
-    "public.confiance_auteur": {
-      "name": "confiance_auteur",
+    "public.author_trust": {
+      "name": "author_trust",
       "schema": "public",
       "values": [
-        "declaree",
-        "attestee"
+        "declared",
+        "attested"
       ]
     },
-    "public.etat_destination": {
-      "name": "etat_destination",
+    "public.delivery_status": {
+      "name": "delivery_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "delivered",
+        "failed",
+        "held"
+      ]
+    },
+    "public.destination_state": {
+      "name": "destination_state",
       "schema": "public",
       "values": [
         "active",
-        "suspendue"
+        "suspended"
       ]
     },
-    "public.etat_retour": {
-      "name": "etat_retour",
+    "public.feedback_state": {
+      "name": "feedback_state",
       "schema": "public",
       "values": [
-        "recu",
-        "trie",
-        "dispatche",
-        "ecarte",
-        "en_revue"
+        "received",
+        "triaged",
+        "dispatched",
+        "discarded",
+        "in_review"
       ]
     },
-    "public.gravite": {
-      "name": "gravite",
+    "public.feedback_type": {
+      "name": "feedback_type",
       "schema": "public",
       "values": [
-        "cosmetique",
-        "mineure",
-        "majeure",
-        "bloquante"
+        "bug",
+        "suggestion",
+        "opinion",
+        "question"
       ]
     },
-    "public.source_retour": {
-      "name": "source_retour",
+    "public.judge_provider": {
+      "name": "judge_provider",
+      "schema": "public",
+      "values": [
+        "typesafe",
+        "openrouter",
+        "self_hosted"
+      ]
+    },
+    "public.severity": {
+      "name": "severity",
+      "schema": "public",
+      "values": [
+        "cosmetic",
+        "minor",
+        "major",
+        "blocking"
+      ]
+    },
+    "public.feedback_source": {
+      "name": "feedback_source",
       "schema": "public",
       "values": [
         "widget",
         "api",
         "extension"
-      ]
-    },
-    "public.statut_envoi": {
-      "name": "statut_envoi",
-      "schema": "public",
-      "values": [
-        "en_attente",
-        "livre",
-        "echec",
-        "retenu"
-      ]
-    },
-    "public.type_retour": {
-      "name": "type_retour",
-      "schema": "public",
-      "values": [
-        "bug",
-        "suggestion",
-        "avis",
-        "question"
       ]
     }
   },

@@ -1,112 +1,112 @@
 import type { LogLevel } from '@nestjs/common';
 import type {
-  ClasseEchec,
+  FailureClass,
   DestinationAdapterResolver,
   RetryPolicy,
-  SeuilsTriage,
+  TriageThresholds,
 } from '@nudge/core';
-import type { ConfigJuge, Juge } from '@nudge/judge';
-import type { StockageCaptures } from '@nudge/stockage';
+import type { JudgeConfig, Judge } from '@nudge/judge';
+import type { CaptureStorage } from '@nudge/storage';
 
 export interface WorkerOptions {
   readonly databaseUrl: string;
   readonly redisUrl: string;
-  /** Préfixe des clés BullMQ, identique à celui de l'api. */
+  /** BullMQ key prefix, the same as the api's. */
   readonly queuePrefix?: string;
-  /** Retry des jobs de dispatch ; les tests le raccourcissent. */
+  /** Retry of the dispatch jobs; tests shorten it. */
   readonly retryPolicy?: RetryPolicy;
-  /** Clé d'Instance (`NUDGE_ENCRYPTION_KEY`, 32 octets en base64) : déchiffre la clé du Juge. */
-  readonly cleChiffrement: string;
+  /** Instance key (`NUDGE_ENCRYPTION_KEY`, 32 bytes in base64): decrypts the Judge key. */
+  readonly encryptionKey: string;
   /**
-   * Juge fixe, qui court-circuite celui de l'Instance (tests) ; `null` : mode dégradé.
-   * Absent : le Juge choisi pour l'Instance, à défaut `jugeParDefaut`.
+   * Fixed Judge, which bypasses the Instance's (tests); `null`: degraded mode.
+   * Absent: the Judge chosen for the Instance, failing that `defaultJudge`.
    */
-  readonly juge?: Juge | null;
-  /** Juge des variables `NUDGE_JUDGE_*`, quand l'Instance n'en a pas choisi. */
-  readonly jugeParDefaut?: ConfigJuge | null;
-  /** Délai au-delà duquel une requête au Juge est abandonnée et retentée (30 s par défaut). */
-  readonly delaiJugeMs?: number;
-  /** Seuils de la politique de Verdict ; `SEUILS_TRIAGE_PAR_DEFAUT` à défaut. */
-  readonly seuilsTriage?: SeuilsTriage;
+  readonly judge?: Judge | null;
+  /** Judge from the `NUDGE_JUDGE_*` variables, when the Instance has not chosen one. */
+  readonly defaultJudge?: JudgeConfig | null;
+  /** Time after which a Judge request is abandoned and retried (30 s by default). */
+  readonly judgeTimeoutMs?: number;
+  /** Thresholds of the Verdict policy; `DEFAULT_TRIAGE_THRESHOLDS` by default. */
+  readonly triageThresholds?: TriageThresholds;
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
-  /** Stockage des Captures (`@nudge/stockage`), le même que celui de l'api. */
-  readonly stockageCaptures: StockageCaptures;
-  /** URL publique du dashboard (`NUDGE_DASHBOARD_URL`) : lien « voir le Retour » des Envois (D12). */
+  /** Capture storage (`@nudge/storage`), the same as the api's. */
+  readonly captureStorage: CaptureStorage;
+  /** Public URL of the dashboard (`NUDGE_DASHBOARD_URL`): "view the Feedback" link of Deliveries (D12). */
   readonly dashboardUrl?: string | null;
   /**
-   * Balayages des Retours restés Reçu (D18) et des Envois restés en attente (D26) ;
-   * 5 min de délai, toutes les minutes, à défaut.
+   * Sweeps of the Feedbacks left Received (D18) and of the Deliveries left pending (D26);
+   * 5 min delay, every minute, by default.
    */
-  readonly balayage?: OptionsBalayage;
-  /** Période de la purge de rétention ; `PURGE_PAR_DEFAUT` à défaut. */
-  readonly purge?: OptionsPurge;
-  /** Seuil de Suspension, refroidissement et période de la sonde ; `SUSPENSION_PAR_DEFAUT` à défaut. */
-  readonly suspension?: OptionsSuspension;
+  readonly sweep?: SweepOptions;
+  /** Period of the retention purge; `DEFAULT_PURGE` by default. */
+  readonly purge?: PurgeOptions;
+  /** Suspension threshold, cooldown and probe period; `DEFAULT_SUSPENSION` by default. */
+  readonly suspension?: SuspensionOptions;
   /**
-   * Observateur de chaque passage d'une Destination en Suspendue, appelé par
-   * `SUR_SUSPENSION` après la mise en queue de l'alerte des Membres (tests).
+   * Observer of every transition of a Destination to Suspended, called by
+   * `ON_SUSPENSION` after the Member alert is queued (tests).
    */
-  readonly surSuspension?: SurSuspension;
+  readonly onSuspension?: OnSuspension;
   readonly logger?: false | LogLevel[];
 }
 
-/** Délai d'une requête au Juge avant abandon : un dépassement est transitoire, retenté. */
-export const DELAI_JUGE_PAR_DEFAUT_MS = 30_000;
+/** Time a Judge request gets before being abandoned: exceeding it is transient, retried. */
+export const DEFAULT_JUDGE_TIMEOUT_MS = 30_000;
 
-export interface OptionsBalayage {
+export interface SweepOptions {
   /**
-   * Âge au-delà duquel un Retour encore Reçu est remis au Triage, et un Envoi en
-   * attente sans job (depuis sa dernière mise à jour) remis au dispatch.
+   * Age beyond which a Feedback still Received goes back to Triage, and a pending
+   * Delivery without a job (since its last update) goes back to dispatch.
    */
-  readonly delaiMs: number;
-  /** Période du balayage. */
-  readonly intervalleMs: number;
+  readonly delayMs: number;
+  /** Period of the sweep. */
+  readonly intervalMs: number;
 }
 
-export const BALAYAGE_PAR_DEFAUT: OptionsBalayage = { delaiMs: 5 * 60_000, intervalleMs: 60_000 };
+export const DEFAULT_SWEEP: SweepOptions = { delayMs: 5 * 60_000, intervalMs: 60_000 };
 
-export interface OptionsPurge {
+export interface PurgeOptions {
   /**
-   * Période de la purge des Retours plus anciens que la durée de rétention de
-   * l'Instance (relue en base à chaque passage).
+   * Period of the purge of Feedbacks older than the Instance retention period (read
+   * again from the database on every run).
    */
-  readonly intervalleMs: number;
+  readonly intervalMs: number;
 }
 
-/** Une purge par heure : la durée de rétention se compte en jours. */
-export const PURGE_PAR_DEFAUT: OptionsPurge = { intervalleMs: 60 * 60_000 };
+/** One purge per hour: the retention period is counted in days. */
+export const DEFAULT_PURGE: PurgeOptions = { intervalMs: 60 * 60_000 };
 
-export interface OptionsSuspension {
-  /** Échecs transient consécutifs au-delà desquels (inclus) la Destination est Suspendue. */
-  readonly seuilEchecs: number;
-  /** Délai entre la Suspension (ou une sonde sans réponse) et la sonde suivante. */
-  readonly refroidissementMs: number;
-  /** Période de la tâche qui sonde les Destinations Suspendues dont le refroidissement est écoulé. */
-  readonly intervalleSondeMs: number;
+export interface SuspensionOptions {
+  /** Consecutive transient failures from which (inclusive) the Destination is Suspended. */
+  readonly failureThreshold: number;
+  /** Delay between the Suspension (or an unanswered probe) and the next probe. */
+  readonly cooldownMs: number;
+  /** Period of the task that probes the Suspended Destinations whose cooldown has elapsed. */
+  readonly probeIntervalMs: number;
 }
 
-/** Valeurs reprises d'alliances-pa : 5 échecs, 5 min de refroidissement, sonde chaque minute. */
-export const SUSPENSION_PAR_DEFAUT: OptionsSuspension = {
-  seuilEchecs: 5,
-  refroidissementMs: 5 * 60_000,
-  intervalleSondeMs: 60_000,
+/** Values taken from alliances-pa: 5 failures, 5 min cooldown, a probe every minute. */
+export const DEFAULT_SUSPENSION: SuspensionOptions = {
+  failureThreshold: 5,
+  cooldownMs: 5 * 60_000,
+  probeIntervalMs: 60_000,
 };
 
-/** Le passage d'une Destination en Suspendue, tel que l'enregistre la base. */
+/** The transition of a Destination to Suspended, as the database records it. */
 export interface Suspension {
   readonly destinationId: string;
-  readonly projetId: string;
-  readonly nom: string;
-  /** `transient` : seuil d'échecs consécutifs atteint ; `auth` : identifiants refusés. */
-  readonly classe: Exclude<ClasseEchec, 'permanent'>;
+  readonly projectId: string;
+  readonly name: string;
+  /** `transient`: consecutive failure threshold reached; `auth`: credentials refused. */
+  readonly failureClass: Exclude<FailureClass, 'permanent'>;
   readonly message: string;
-  readonly suspendueLe: Date;
+  readonly suspendedAt: Date;
 }
 
 /**
- * Point d'accroche de chaque passage en Suspendue : appelé une fois par transition,
- * après son commit en base (jamais pour une Destination déjà Suspendue). Au plus une
- * fois : un arrêt du worker entre le commit et l'appel le perd, l'état en base reste
- * la référence. Une erreur levée ici est journalisée sans annuler la Suspension.
+ * Hook on every transition to Suspended: called once per transition, after its
+ * database commit (never for a Destination already Suspended). At most once: a worker
+ * stop between the commit and the call loses it, the database state remains the
+ * reference. An error thrown here is logged without undoing the Suspension.
  */
-export type SurSuspension = (suspension: Suspension) => void | Promise<void>;
+export type OnSuspension = (suspension: Suspension) => void | Promise<void>;

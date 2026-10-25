@@ -1,7 +1,7 @@
-# Dépendances
+# Dependencies
 node_modules
 
-# Yarn Berry : on ne versionne que ce qui doit l'être.
+# Yarn Berry: only commit what must be committed.
 # https://yarnpkg.com/getting-started/qa#which-files-should-be-gitignored
 .yarn/*
 !.yarn/patches
@@ -11,7 +11,7 @@ node_modules
 !.yarn/versions
 .pnp.*
 
-# Sorties de build et caches
+# Build outputs and caches
 dist
 build
 coverage
@@ -19,15 +19,15 @@ coverage
 *.tsbuildinfo
 .vite
 
-# Environnements locaux
+# Local environments
 .env
 .env.*
 !.env.example
 
-# Données locales (Captures sur disque, volumes de dev)
+# Local data (Captures on disk, dev volumes)
 .data/
 
-# Divers
+# Misc
 .DS_Store
 *.log
 .idea

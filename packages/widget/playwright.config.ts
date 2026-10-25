@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Tests navigateur du Widget, sur ses builds (`dist/`, produits par `yarn test:e2e`).
- * Aucun serveur : la page hôte, les scripts et l'API factice sont servis par
- * interception des requêtes (`e2e/hote.ts`).
+ * Browser tests of the Widget, on its builds (`dist/`, produced by `yarn test:e2e`).
+ * No server: the host page, the scripts and the fake API are served by intercepting
+ * requests (`e2e/host.ts`).
  */
 export default defineConfig({
   testDir: './e2e',

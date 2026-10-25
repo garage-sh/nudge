@@ -1,5 +1,5 @@
-import { nomFichierCapture, type TypeCapture } from '@nudge/shared';
+import { captureFileName, type CaptureType } from '@nudge/shared';
 
-/** La clé d'une Capture dans le stockage : une par Retour. */
-export const cleCapture = (retourId: string, contentType: TypeCapture): string =>
-  `retours/${nomFichierCapture(retourId, contentType)}`;
+/** The key of a Capture in the storage: one per Feedback. */
+export const captureKey = (feedbackId: string, contentType: CaptureType): string =>
+  `feedbacks/${captureFileName(feedbackId, contentType)}`;

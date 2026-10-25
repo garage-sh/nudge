@@ -1,13 +1,13 @@
-/** Jetons d'injection Nest de l'api. */
+/** Nest injection tokens of the api. */
 export const DB = Symbol('DB');
 export const TRIAGE_QUEUE_TOKEN = Symbol('TRIAGE_QUEUE');
-/** Queue de dispatch : le rejeu manuel d'un Envoi y remet son job. */
+/** Dispatch queue: the manual replay of a Delivery puts its job back there. */
 export const DISPATCH_QUEUE_TOKEN = Symbol('DISPATCH_QUEUE');
-/** `SessionCookieOptions` du dashboard. */
+/** The dashboard's `SessionCookieOptions`. */
 export const SESSION_COOKIE_OPTIONS = Symbol('SESSION_COOKIE_OPTIONS');
-/** `SecretCipher` des secrets stockés en base, par la clé d'Instance. */
+/** `SecretCipher` for the secrets stored in the database, using the Instance key. */
 export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
-/** `DestinationAdapterResolver` : le bouton « tester » d'une Destination passe par son adaptateur. */
+/** `DestinationAdapterResolver`: a Destination's "test" button goes through its adapter. */
 export const DESTINATION_ADAPTER_RESOLVER = Symbol('DESTINATION_ADAPTER_RESOLVER');
-/** `StockageCaptures` : les images des Captures, partagé avec le worker. */
-export const STOCKAGE_CAPTURES = Symbol('STOCKAGE_CAPTURES');
+/** `CaptureStorage`: the Capture images, shared with the worker. */
+export const CAPTURE_STORAGE = Symbol('CAPTURE_STORAGE');

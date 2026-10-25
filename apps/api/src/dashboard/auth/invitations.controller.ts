@@ -1,16 +1,16 @@
 import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
 import {
-  schemaNouveauMembre,
-  type InvitationCreee,
-  type InvitationVue,
-  type MembreVu,
-  type SessionVue,
+  newMemberSchema,
+  type CreatedInvitation,
+  type InvitationView,
+  type MemberView,
+  type SessionView,
 } from '@nudge/shared';
 import type { Response } from 'express';
 import { AuthThrottleGuard } from './auth-throttle.guard.js';
 import { parseBody } from '../../validation.js';
 import { InvitationsService } from './invitations.service.js';
-import { MembreCourant, SessionGuard } from './session.guard.js';
+import { CurrentMember, SessionGuard } from './session.guard.js';
 import { SessionsService } from './sessions.service.js';
 
 @Controller('api/invitations')
@@ -20,30 +20,30 @@ export class InvitationsController {
     private readonly sessions: SessionsService,
   ) {}
 
-  /** Un Membre génère un lien d'invitation ; le jeton n'est lisible qu'ici. */
+  /** A Member generates an invitation link; the token is readable only here. */
   @Post()
   @UseGuards(SessionGuard)
-  creer(@MembreCourant() membre: MembreVu): Promise<InvitationCreee> {
-    return this.invitations.create(membre);
+  create(@CurrentMember() member: MemberView): Promise<CreatedInvitation> {
+    return this.invitations.create(member);
   }
 
-  /** Publique : la page d'invitation vérifie le lien avant d'afficher le formulaire. */
-  @Get(':jeton')
-  lire(@Param('jeton') jeton: string): Promise<InvitationVue> {
-    return this.invitations.read(jeton);
+  /** Public: the invitation page checks the link before showing the form. */
+  @Get(':token')
+  read(@Param('token') token: string): Promise<InvitationView> {
+    return this.invitations.read(token);
   }
 
-  /** Publique : la personne invitée crée son compte et repart connectée. */
-  @Post(':jeton/acceptation')
+  /** Public: the invited person creates their account and leaves signed in. */
+  @Post(':token/accept')
   @UseGuards(AuthThrottleGuard)
-  async accepter(
-    @Param('jeton') jeton: string,
-    @Body() corps: unknown,
-    @Res({ passthrough: true }) reponse: Response,
-  ): Promise<SessionVue> {
-    const { email, motDePasse } = parseBody(schemaNouveauMembre, corps);
-    const membre = await this.invitations.accept(jeton, email, motDePasse);
-    await this.sessions.start(reponse, membre);
-    return { membre };
+  async accept(
+    @Param('token') token: string,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SessionView> {
+    const { email, password } = parseBody(newMemberSchema, body);
+    const member = await this.invitations.accept(token, email, password);
+    await this.sessions.start(response, member);
+    return { member };
   }
 }

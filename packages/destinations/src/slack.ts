@@ -1,102 +1,102 @@
 import {
-  presenterAlerte,
-  type Alerte,
-  type ClasseEchec,
+  presentAlert,
+  type Alert,
+  type FailureClass,
   type DestinationAdapter,
-  type DestinationConfiguree,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type ConfiguredDestination,
+  type OutgoingDelivery,
+  type DeliveryResult,
 } from '@nudge/core';
 import {
-  LIBELLES_GRAVITE,
-  LIBELLES_TYPE,
-  lireWebhookSlack,
-  type SecretsSlack,
+  SEVERITY_LABELS,
+  FEEDBACK_TYPE_LABELS,
+  parseSlackWebhook,
+  type SlackSecrets,
 } from '@nudge/shared';
-import { tronquer } from './texte.js';
+import { truncate } from './text.js';
 import {
-  DELAI_HTTP_PAR_DEFAUT_MS,
-  classerStatut,
-  echecHttp,
-  messageErreur,
-  texteReponse,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  classifyStatus,
+  httpFailure,
+  errorMessage,
+  responseText,
 } from './http.js';
 
-export interface OptionsSlack {
+export interface SlackOptions {
   readonly fetch?: typeof globalThis.fetch;
-  /** Délai de réponse de Slack, au-delà duquel l'appel est un échec transitoire. */
-  readonly delaiMs?: number;
+  /** Slack response timeout, beyond which the call is a transient failure. */
+  readonly timeoutMs?: number;
 }
 
 /**
- * Slack : un webhook entrant, lié à un canal
+ * Slack: an incoming webhook, tied to a channel
  * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks).
  */
-export function adaptateurSlack(
-  destination: DestinationConfiguree,
-  options: OptionsSlack = {},
+export function slackAdapter(
+  destination: ConfiguredDestination,
+  options: SlackOptions = {},
 ): DestinationAdapter {
-  const url = lireWebhookSlack((destination.secrets as Partial<SecretsSlack>).url ?? '');
-  if (!url) throw new Error(`Slack ${destination.id} sans URL de webhook valide`);
+  const url = parseSlackWebhook((destination.secrets as Partial<SlackSecrets>).url ?? '');
+  if (!url) throw new Error(`Slack ${destination.id} has no valid webhook URL`);
   const fetch = options.fetch ?? globalThis.fetch;
-  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
 
-  const poster = (corps: unknown) =>
+  const post = (body: unknown) =>
     fetch(url, {
       method: 'POST',
       redirect: 'manual',
-      signal: AbortSignal.timeout(delaiMs),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(corps),
+      body: JSON.stringify(body),
     });
 
-  /** Le webhook entrant ne rend pas de permalien : un message livré n'a pas de lien. */
-  async function publier(corps: unknown): Promise<ResultatEnvoi> {
-    let reponse: Response;
+  /** The incoming webhook returns no permalink: a delivered message has no link. */
+  async function publish(body: unknown): Promise<DeliveryResult> {
+    let response: Response;
     try {
-      reponse = await poster(corps);
-    } catch (erreur) {
-      return { statut: 'echec', classe: 'transient', message: messageErreur(erreur) };
+      response = await post(body);
+    } catch (error) {
+      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
     }
-    if (!reponse.ok) return { statut: 'echec', ...(await echecSlack(reponse)) };
-    await reponse.body?.cancel();
-    return { statut: 'livre', lienExterne: null };
+    if (!response.ok) return { status: 'failed', ...(await slackFailure(response)) };
+    await response.body?.cancel();
+    return { status: 'delivered', externalUrl: null };
   }
 
   return {
-    send: (envoi) => publier(corpsSlack(envoi)),
-    alerter: (alerte) => publier(corpsAlerte(alerte)),
+    send: (delivery) => publish(slackBody(delivery)),
+    alert: (alert) => publish(alertBody(alert)),
     /**
-     * Un webhook entrant ne se lit pas : la sonde lui poste un message vide, qu'il refuse
-     * sans rien publier. `no_text` (« the `text` attribute was missing from the
-     * payload ») ou `invalid_payload` prouvent que le webhook existe et accepte de
-     * poster ; un webhook supprimé répond `no_service`, un jeton refusé `invalid_token`.
+     * An incoming webhook cannot be read: the probe posts it an empty message, which it
+     * rejects without publishing anything. `no_text` ("the `text` attribute was missing
+     * from the payload") or `invalid_payload` prove that the webhook exists and accepts
+     * posts; a deleted webhook answers `no_service`, a rejected token `invalid_token`.
      */
     async healthCheck() {
-      let reponse: Response;
+      let response: Response;
       try {
-        reponse = await poster({});
-      } catch (erreur) {
-        return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
+        response = await post({});
+      } catch (error) {
+        return { reachable: false, failureClass: 'transient', message: errorMessage(error) };
       }
-      const code = await texteReponse(reponse);
-      if (reponse.ok || (reponse.status === 400 && CODES_MESSAGE_VIDE.has(code))) {
-        await reponse.body?.cancel();
-        return { joignable: true };
+      const code = await responseText(response);
+      if (response.ok || (response.status === 400 && EMPTY_MESSAGE_CODES.has(code))) {
+        await response.body?.cancel();
+        return { reachable: true };
       }
-      return { joignable: false, ...(await echecSlack(reponse)) };
+      return { reachable: false, ...(await slackFailure(response)) };
     },
   };
 }
 
 /**
- * Codes d'erreur d'un webhook entrant qui refusent tout Envoi, et non ce seul message :
- * webhook supprimé ou désactivé, jeton invalide, espace de travail inactif, canal ou
- * utilisateur introuvable, canal archivé, publication interdite par un administrateur
- * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks). La
- * Destination est alors Suspendue plutôt que chaque Envoi en échec (D21).
+ * Incoming webhook error codes that reject every Delivery, not just this message:
+ * webhook deleted or disabled, invalid token, inactive workspace, channel or user not
+ * found, archived channel, posting forbidden by an admin
+ * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks). The
+ * Destination is then Suspended rather than each Delivery failing (D21).
  */
-const CODES_WEBHOOK_REFUSE = new Set([
+const REJECTED_WEBHOOK_CODES = new Set([
   'action_prohibited',
   'channel_is_archived',
   'channel_not_found',
@@ -110,127 +110,129 @@ const CODES_WEBHOOK_REFUSE = new Set([
   'user_not_found',
 ]);
 
-/** Réponses d'un webhook vivant au message vide de la sonde. */
-const CODES_MESSAGE_VIDE = new Set(['no_text', 'invalid_payload']);
+/** Answers of a live webhook to the probe's empty message. */
+const EMPTY_MESSAGE_CODES = new Set(['no_text', 'invalid_payload']);
 
 /**
- * Classe d'un refus de Slack, qui répond en texte brut par un code d'erreur. 404 et 410
- * (webhook ou canal disparus) refusent la Destination comme 401 et 403 ; les autres
- * 4xx (`invalid_payload`, `no_text`…) visent ce message.
+ * Class of a Slack refusal, which answers in plain text with an error code. 404 and 410
+ * (webhook or channel gone) reject the Destination like 401 and 403; the other 4xx
+ * (`invalid_payload`, `no_text`…) target this message.
  */
-async function echecSlack(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
-  const code = await texteReponse(reponse);
-  return echecHttp(reponse, (status) =>
-    CODES_WEBHOOK_REFUSE.has(code) || status === 404 || status === 410
+async function slackFailure(
+  response: Response,
+): Promise<{ failureClass: FailureClass; message: string }> {
+  const code = await responseText(response);
+  return httpFailure(response, (status) =>
+    REJECTED_WEBHOOK_CODES.has(code) || status === 404 || status === 410
       ? 'auth'
-      : classerStatut(status),
+      : classifyStatus(status),
   );
 }
 
-function corpsSlack({ essai, projet, retour }: EnvoiASortir) {
-  const type = LIBELLES_TYPE[retour.typeRetenu];
-  const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
-  const nomProjet = echapperControles(projet.nom);
-  const titre = `${essai ? 'Essai · ' : ''}${type} · ${nomProjet}`;
-  const pied = [
-    retour.incertain ? 'nudge · Verdict incertain' : 'nudge',
-    ...(lienSurSlack(retour.lienDashboard)
-      ? [`<${retour.lienDashboard}|Voir le Retour dans nudge>`]
+function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
+  const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
+  const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
+  const projectName = escapeControls(project.name);
+  const title = `${isTest ? 'Test · ' : ''}${type} · ${projectName}`;
+  const footer = [
+    feedback.uncertain ? 'nudge · Uncertain verdict' : 'nudge',
+    ...(isSafeSlackLink(feedback.dashboardUrl)
+      ? [`<${feedback.dashboardUrl}|View the feedback in nudge>`]
       : []),
   ];
   return {
-    // Texte de repli des notifications : jamais le texte de l'Auteur.
-    text: titre,
+    // Fallback text of notifications: never the Author's text.
+    text: title,
     blocks: [
-      { type: 'section', text: mrkdwn(`*${titre}*`) },
-      { type: 'section', text: mrkdwn(blocDeCode(retour.texte)) },
+      { type: 'section', text: mrkdwn(`*${title}*`) },
+      { type: 'section', text: mrkdwn(codeBlock(feedback.text)) },
       {
         type: 'section',
         fields: [
           mrkdwn(`*Type*\n${type}`),
-          mrkdwn(`*Gravité*\n${gravite}`),
-          mrkdwn(`*Projet*\n${nomProjet}`),
+          mrkdwn(`*Severity*\n${severity}`),
+          mrkdwn(`*Project*\n${projectName}`),
         ],
       },
-      { type: 'context', elements: [mrkdwn(pied.join(' · '))] },
+      { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
     ],
   };
 }
 
 /**
- * L'alerte en blocs : les noms (saisis par un Membre) et le refus (formulé par la
- * cible) passent par l'échappement des caractères de contrôle, mentions coupées.
+ * The alert as blocks: the names (typed by a Member) and the refusal (worded by the
+ * target) go through control-character escaping, with mentions broken.
  */
-function corpsAlerte(alerte: Alerte) {
-  const { titre, resume, details } = presenterAlerte(alerte);
-  const texte = (brut: string) => echapperControles(neutraliserMentionsGenerales(brut));
-  const pied = [
-    alerte.essai ? 'nudge · alerte d’essai' : 'nudge · alerte',
-    ...(lienSurSlack(alerte.lienDashboard) ? [`<${alerte.lienDashboard}|Ouvrir dans nudge>`] : []),
+function alertBody(alert: Alert) {
+  const { title, summary, details } = presentAlert(alert);
+  const text = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
+  const footer = [
+    alert.isTest ? 'nudge · test alert' : 'nudge · alert',
+    ...(isSafeSlackLink(alert.dashboardUrl) ? [`<${alert.dashboardUrl}|Open in nudge>`] : []),
   ];
   return {
-    text: texte(titre),
+    text: text(title),
     blocks: [
-      { type: 'section', text: mrkdwn(`*${texte(titre)}*`) },
-      { type: 'section', text: mrkdwn(resume) },
+      { type: 'section', text: mrkdwn(`*${text(title)}*`) },
+      { type: 'section', text: mrkdwn(summary) },
       {
         type: 'section',
-        fields: details.map(({ libelle, valeur }) =>
-          mrkdwn(`*${libelle}*\n${tronquer(texte(valeur), CHAMP_MAX)}`),
+        fields: details.map(({ label, value }) =>
+          mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
         ),
       },
-      { type: 'context', elements: [mrkdwn(pied.join(' · '))] },
+      { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
     ],
   };
 }
 
-/** Longueur d'un champ de section (docs.slack.dev, Section block : 2000), marge comprise. */
-const CHAMP_MAX = 1900;
+/** Length of a section field (docs.slack.dev, Section block: 2000), margin included. */
+const FIELD_MAX = 1900;
 
 /**
- * Un objet texte mrkdwn `verbatim` : Slack ne transforme pas son texte brut (« URLs
+ * A `verbatim` mrkdwn text object: Slack does not transform its raw text ("URLs
  * will [not] be auto-converted into links, conversation names will [not] be
- * link-ified », https://docs.slack.dev/reference/block-kit/composition-objects/text-object).
+ * link-ified", https://docs.slack.dev/reference/block-kit/composition-objects/text-object).
  */
 const mrkdwn = (text: string) => ({ type: 'mrkdwn', text, verbatim: true });
 
-/** Un lien du dashboard qu'on peut écrire tel quel dans `<url|texte>`. */
-const lienSurSlack = (lien: string | null): lien is string =>
-  lien !== null && /^https?:\/\/[^\s<>|]+$/.test(lien);
+/** A dashboard link that can be written as is in `<url|text>`. */
+const isSafeSlackLink = (link: string | null): link is string =>
+  link !== null && /^https?:\/\/[^\s<>|]+$/.test(link);
 
-/** Longueur maximale du texte d'une section (docs.slack.dev, Section block). */
+/** Maximum length of a section's text (docs.slack.dev, Section block). */
 const SECTION_MAX = 3000;
 
-const SANS_CHASSE = '\u200b';
-const OUVERTURE = '```\n';
-const FERMETURE = '\n```';
+const ZERO_WIDTH = '​';
+const OPENING = '```\n';
+const CLOSING = '\n```';
 
 /**
- * Le texte de l'Auteur dans un bloc de code : Slack n'y applique aucune mise en forme.
- * `&`, `<` et `>`, « control characters » de Slack, sont échappés : ni mention
- * (`<!channel>`, `<@U…>`), ni lien, ni date ne s'interprètent. Une suite d'accents
- * graves est coupée par un espace sans chasse, pour que le texte ne referme jamais le
- * bloc ; `@channel`, `@here` et `@everyone` le sont aussi, au cas où le texte en
- * sortirait. Borné à la longueur d'une section, sans couper une entité.
+ * The Author's text in a code block: Slack applies no formatting there.
+ * `&`, `<` and `>`, Slack's "control characters", are escaped: no mention
+ * (`<!channel>`, `<@U…>`), link or date is interpreted. A run of backticks is broken
+ * by a zero-width space, so the text never closes the block; `@channel`, `@here` and
+ * `@everyone` are too, in case the text escaped it. Bounded to a section's length,
+ * without splitting an entity.
  */
-function blocDeCode(texte: string): string {
-  const max = SECTION_MAX - OUVERTURE.length - FERMETURE.length;
-  const encode = neutraliserMentionsGenerales(texte).replace(/`(?=`)/g, `\`${SANS_CHASSE}`);
-  let borne = '';
-  for (const caractere of encode) {
-    const morceau = echapperControles(caractere);
-    if (borne.length + morceau.length > max - 1) {
-      borne += '…';
+function codeBlock(text: string): string {
+  const max = SECTION_MAX - OPENING.length - CLOSING.length;
+  const encoded = neutralizeBroadMentions(text).replace(/`(?=`)/g, `\`${ZERO_WIDTH}`);
+  let bounded = '';
+  for (const char of encoded) {
+    const part = escapeControls(char);
+    if (bounded.length + part.length > max - 1) {
+      bounded += '…';
       break;
     }
-    borne += morceau;
+    bounded += part;
   }
-  return `${OUVERTURE}${borne}${FERMETURE}`;
+  return `${OPENING}${bounded}${CLOSING}`;
 }
 
-/** Échappement des caractères de contrôle de Slack (docs.slack.dev, Formatting message text). */
-const echapperControles = (texte: string) =>
-  texte.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+/** Escaping of Slack's control characters (docs.slack.dev, Formatting message text). */
+const escapeControls = (text: string) =>
+  text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-const neutraliserMentionsGenerales = (texte: string) =>
-  texte.replace(/@(channel|here|everyone)/gi, `@${SANS_CHASSE}$1`);
+const neutralizeBroadMentions = (text: string) =>
+  text.replace(/@(channel|here|everyone)/gi, `@${ZERO_WIDTH}$1`);

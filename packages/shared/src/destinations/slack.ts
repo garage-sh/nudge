@@ -1,50 +1,50 @@
 import { z } from 'zod';
-import type { DefinitionDestination } from './definition.js';
+import type { DestinationDefinition } from './definition.js';
 
 /**
- * Hôtes d'où Slack délivre l'URL d'un webhook entrant : `hooks.slack.com`, ou
- * `hooks.slack-gov.com` pour GovSlack
+ * Hosts from which Slack issues an incoming webhook URL: `hooks.slack.com`, or
+ * `hooks.slack-gov.com` for GovSlack
  * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks).
  */
-const HOTES_SLACK = ['hooks.slack.com', 'hooks.slack-gov.com'];
+const SLACK_HOSTS = ['hooks.slack.com', 'hooks.slack-gov.com'];
 
-/** `/services/<espace de travail>/<webhook>/<jeton>` : `T00000000/B00000000/XXXX…`. */
-const CHEMIN_WEBHOOK = /^\/services\/([A-Z0-9]{1,30})\/([A-Z0-9]{1,30})\/([A-Za-z0-9]{1,100})\/?$/;
+/** `/services/<workspace>/<webhook>/<token>`: `T00000000/B00000000/XXXX…`. */
+const WEBHOOK_PATH = /^\/services\/([A-Z0-9]{1,30})\/([A-Z0-9]{1,30})\/([A-Za-z0-9]{1,100})\/?$/;
 
 /**
- * L'URL canonique d'un webhook entrant Slack, ou `null` si la valeur n'en est pas une
- * (https, hôte Slack, sans paramètres). Les webhooks de Workflow Builder
- * (`/triggers/…`) attendent un autre corps : ils ne sont pas acceptés.
+ * The canonical URL of a Slack incoming webhook, or `null` if the value is not one
+ * (https, Slack host, no parameters). Workflow Builder webhooks (`/triggers/…`) expect
+ * a different body: they are not accepted.
  */
-export function lireWebhookSlack(valeur: string): string | null {
+export function parseSlackWebhook(value: string): string | null {
   let url: URL;
   try {
-    url = new URL(valeur.trim());
+    url = new URL(value.trim());
   } catch {
     return null;
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
-  if (!HOTES_SLACK.includes(url.hostname) || url.search || url.hash) return null;
-  const morceaux = CHEMIN_WEBHOOK.exec(url.pathname);
-  return morceaux ? `https://${url.hostname}/services/${morceaux.slice(1, 4).join('/')}` : null;
+  if (!SLACK_HOSTS.includes(url.hostname) || url.search || url.hash) return null;
+  const parts = WEBHOOK_PATH.exec(url.pathname);
+  return parts ? `https://${url.hostname}/services/${parts.slice(1, 4).join('/')}` : null;
 }
 
 /**
- * Slack : un webhook entrant, lié à un canal. Son URL porte le jeton qui autorise à
- * poster : c'est un secret, chiffré en base et jamais rendu. Aucune configuration en
- * clair (le canal est fixé par le webhook).
+ * Slack: an incoming webhook, bound to a channel. Its URL carries the token that allows
+ * posting: it is a secret, encrypted in the database and never returned. No
+ * configuration in clear (the channel is set by the webhook).
  */
-export const definitionSlack = {
+export const slackDefinition = {
   config: z.strictObject({}),
   secrets: z.strictObject({
     url: z
       .string()
       .trim()
-      .refine((valeur) => lireWebhookSlack(valeur) !== null, {
-        message: 'URL de webhook entrant Slack attendue (https://hooks.slack.com/services/…)',
+      .refine((value) => parseSlackWebhook(value) !== null, {
+        message: 'Expected a Slack incoming webhook URL (https://hooks.slack.com/services/…)',
       }),
   }),
-  secretsGeneres: [],
-} as const satisfies DefinitionDestination;
+  generatedSecrets: [],
+} as const satisfies DestinationDefinition;
 
-export type SecretsSlack = z.output<typeof definitionSlack.secrets>;
+export type SlackSecrets = z.output<typeof slackDefinition.secrets>;

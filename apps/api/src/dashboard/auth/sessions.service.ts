@@ -1,19 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { membres, sessions, type Db } from '@nudge/database';
-import type { MembreVu } from '@nudge/shared';
+import { members, sessions, type Db } from '@nudge/database';
+import type { MemberView } from '@nudge/shared';
 import { and, eq, gt, lte } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { DB, SESSION_COOKIE_OPTIONS } from '../../infra/tokens.js';
-import { generateJeton, hashJeton } from './jetons.js';
+import { generateToken, hashToken } from './tokens.js';
 import {
   clearSessionCookie,
-  DUREE_SESSION_MS,
+  SESSION_TTL_MS,
   readSessionCookie,
   writeSessionCookie,
   type SessionCookieOptions,
 } from './session-cookie.js';
 
-/** Sessions du dashboard, stockées en base : se déconnecter les révoque pour de bon. */
+/** Dashboard sessions, stored in the database: signing out revokes them for good. */
 @Injectable()
 export class SessionsService {
   constructor(
@@ -21,38 +21,38 @@ export class SessionsService {
     @Inject(SESSION_COOKIE_OPTIONS) private readonly cookie: SessionCookieOptions,
   ) {}
 
-  /** Ouvre une session pour le Membre et pose son cookie sur la réponse. */
-  async start(reponse: Response, membre: MembreVu): Promise<void> {
-    const jeton = generateJeton();
+  /** Opens a session for the Member and sets its cookie on the response. */
+  async start(response: Response, member: MemberView): Promise<void> {
+    const token = generateToken();
     await this.db.insert(sessions).values({
-      membreId: membre.id,
-      empreinteJeton: hashJeton(jeton),
-      expireLe: new Date(Date.now() + DUREE_SESSION_MS),
+      memberId: member.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     });
-    writeSessionCookie(reponse, jeton, this.cookie);
+    writeSessionCookie(response, token, this.cookie);
   }
 
-  /** Révoque la session de la requête, s'il y en a une, et efface le cookie. */
-  async end(requete: Request, reponse: Response): Promise<void> {
-    const jeton = readSessionCookie(requete);
-    if (jeton) await this.close(jeton);
-    clearSessionCookie(reponse, this.cookie);
+  /** Revokes the request's session, if there is one, and clears the cookie. */
+  async end(request: Request, response: Response): Promise<void> {
+    const token = readSessionCookie(request);
+    if (token) await this.close(token);
+    clearSessionCookie(response, this.cookie);
   }
 
-  /** Le Membre d'une session valide, ou `null` (jeton inconnu, révoqué ou expiré). */
-  async resolve(jeton: string): Promise<MembreVu | null> {
-    const [trouve] = await this.db
-      .select({ id: membres.id, email: membres.email })
+  /** The Member of a valid session, or `null` (token unknown, revoked or expired). */
+  async resolve(token: string): Promise<MemberView | null> {
+    const [found] = await this.db
+      .select({ id: members.id, email: members.email })
       .from(sessions)
-      .innerJoin(membres, eq(membres.id, sessions.membreId))
-      .where(and(eq(sessions.empreinteJeton, hashJeton(jeton)), gt(sessions.expireLe, new Date())))
+      .innerJoin(members, eq(members.id, sessions.memberId))
+      .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
       .limit(1);
-    return trouve ?? null;
+    return found ?? null;
   }
 
-  private async close(jeton: string): Promise<void> {
-    await this.db.delete(sessions).where(eq(sessions.empreinteJeton, hashJeton(jeton)));
-    // Ménage opportuniste : les sessions expirées ne servent plus à rien.
-    await this.db.delete(sessions).where(lte(sessions.expireLe, new Date()));
+  private async close(token: string): Promise<void> {
+    await this.db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+    // Opportunistic cleanup: expired sessions are of no use any more.
+    await this.db.delete(sessions).where(lte(sessions.expiresAt, new Date()));
   }
 }

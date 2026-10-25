@@ -1,120 +1,126 @@
-import { filtreRetient } from '@nudge/core';
-import { estRetourRedispatchable, type EtatRetour, type StatutEnvoi } from '@nudge/shared';
+import { filterAccepts } from '@nudge/core';
+import { isFeedbackRedispatchable, type FeedbackState, type DeliveryStatus } from '@nudge/shared';
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
-import { filtreDe } from './destinations.js';
-import { destinations, envois, retours, verdicts } from './schema.js';
+import { filterOf } from './destinations.js';
+import { destinations, deliveries, feedbacks, verdicts } from './schema.js';
 
-/** Un Envoi que le Dispatch vient de créer : `en_attente` attend son job, `retenu` la sonde. */
-export interface EnvoiCree {
+/** A Delivery Dispatch has just created: `pending` awaits its job, `held` the probe. */
+export interface CreatedDelivery {
   readonly id: string;
-  readonly statut: Extract<StatutEnvoi, 'en_attente' | 'retenu'>;
+  readonly status: Extract<DeliveryStatus, 'pending' | 'held'>;
 }
 
 /**
- * Crée, selon le Verdict courant, les Envois manquants vers les Destinations du Projet
- * dont le Filtre retient le Retour : un seul par (Retour, Destination), les Envois
- * existants ne sont jamais touchés. Un Envoi vers une Destination Suspendue est retenu
- * d'emblée, sans job ni appel sortant. Un Retour Trié passe Dispatché dès qu'un Filtre
- * le retient. Rend les seuls Envois créés par cet appel ; l'appelant met en queue ceux
- * qui sont en attente, après le commit.
+ * Creates, according to the current Verdict, the missing Deliveries to the Project's
+ * Destinations whose Filter accepts the Feedback: a single one per (Feedback,
+ * Destination), existing Deliveries are never touched. A Delivery to a Suspended
+ * Destination is held right away, with no job and no outgoing call. A Triaged Feedback
+ * becomes Dispatched as soon as a Filter accepts it. Returns only the Deliveries created
+ * by this call; the caller queues the pending ones, after the commit.
  */
-export async function creerEnvoisManquants(
+export async function createMissingDeliveries(
   tx: Transaction,
-  retourId: string,
-  projetId: string,
-): Promise<EnvoiCree[]> {
+  feedbackId: string,
+  projectId: string,
+): Promise<CreatedDelivery[]> {
   const [verdict] = await tx
-    .select({ typeRetenu: verdicts.typeRetenu, gravite: verdicts.gravite })
+    .select({ resolvedType: verdicts.resolvedType, severity: verdicts.severity })
     .from(verdicts)
-    .where(eq(verdicts.retourId, retourId));
-  if (!verdict) throw new Error(`Retour ${retourId} à dispatcher sans Verdict`);
-  const destinationsDuProjet = await tx
+    .where(eq(verdicts.feedbackId, feedbackId));
+  if (!verdict) throw new Error(`Feedback ${feedbackId} to dispatch without a Verdict`);
+  const projectDestinations = await tx
     .select({
       id: destinations.id,
-      etat: destinations.etat,
-      filtreTypes: destinations.filtreTypes,
-      filtreGraviteMinimale: destinations.filtreGraviteMinimale,
+      state: destinations.state,
+      filterTypes: destinations.filterTypes,
+      filterMinimumSeverity: destinations.filterMinimumSeverity,
     })
     .from(destinations)
-    .where(eq(destinations.projetId, projetId));
-  const cibles = destinationsDuProjet.filter((d) => filtreRetient(filtreDe(d), verdict));
-  if (cibles.length === 0) return [];
-  const crees = await tx
-    .insert(envois)
+    .where(eq(destinations.projectId, projectId));
+  const targets = projectDestinations.filter((d) => filterAccepts(filterOf(d), verdict));
+  if (targets.length === 0) return [];
+  const created = await tx
+    .insert(deliveries)
     .values(
-      cibles.map((d) => ({
-        retourId,
+      targets.map((d) => ({
+        feedbackId,
         destinationId: d.id,
-        ...(d.etat === 'suspendue' ? { statut: 'retenu' as const, retenuLe: sql`now()` } : {}),
+        ...(d.state === 'suspended' ? { status: 'held' as const, heldAt: sql`now()` } : {}),
       })),
     )
-    .onConflictDoNothing({ target: [envois.retourId, envois.destinationId] })
-    .returning({ id: envois.id, statut: envois.statut });
+    .onConflictDoNothing({ target: [deliveries.feedbackId, deliveries.destinationId] })
+    .returning({ id: deliveries.id, status: deliveries.status });
   await tx
-    .update(retours)
-    .set({ etat: 'dispatche' })
-    .where(and(eq(retours.id, retourId), eq(retours.etat, 'trie')));
-  return crees.map(({ id, statut }) => {
-    if (statut !== 'en_attente' && statut !== 'retenu') {
-      throw new Error(`Envoi ${id} créé au statut inattendu ${statut}`);
+    .update(feedbacks)
+    .set({ state: 'dispatched' })
+    .where(and(eq(feedbacks.id, feedbackId), eq(feedbacks.state, 'triaged')));
+  return created.map(({ id, status }) => {
+    if (status !== 'pending' && status !== 'held') {
+      throw new Error(`Delivery ${id} created with unexpected status ${status}`);
     }
-    return { id, statut };
+    return { id, status };
   });
 }
 
-export type ResultatRedispatch =
-  | { readonly statut: 'applique'; readonly envois: readonly EnvoiCree[] }
-  /** Le Retour n'est ni Trié ni Dispatché : rien n'a changé. */
-  | { readonly statut: 'refuse'; readonly etat: EtatRetour }
-  | { readonly statut: 'introuvable' };
+export type RedispatchResult =
+  | { readonly status: 'applied'; readonly deliveries: readonly CreatedDelivery[] }
+  /** The Feedback is neither Triaged nor Dispatched: nothing changed. */
+  | { readonly status: 'refused'; readonly state: FeedbackState }
+  | { readonly status: 'not_found' };
 
 /**
- * Redispatch manuel d'un Retour Trié ou Dispatché (D22) : les Envois manquants selon
- * le Verdict courant, pour propager une correction ou servir une Destination ajoutée
- * depuis. La ligne du Retour est verrouillée le temps de la lire et de créer les
- * Envois : il ne change pas d'état ni ne disparaît entre-temps. L'appelant met en queue
- * les Envois en attente rendus.
+ * Manual redispatch of a Triaged or Dispatched Feedback (D22): the missing Deliveries
+ * according to the current Verdict, to propagate a correction or serve a Destination
+ * added since. The Feedback's row is locked while it is read and the Deliveries are
+ * created: it neither changes state nor disappears meanwhile. The caller queues the
+ * returned pending Deliveries.
  */
-export async function redispatcherRetour(db: Db, retourId: string): Promise<ResultatRedispatch> {
+export async function redispatchFeedback(db: Db, feedbackId: string): Promise<RedispatchResult> {
   return db.transaction(async (tx) => {
-    const [retour] = await tx
-      .select({ etat: retours.etat, projetId: retours.projetId })
-      .from(retours)
-      .where(eq(retours.id, retourId))
+    const [feedback] = await tx
+      .select({ state: feedbacks.state, projectId: feedbacks.projectId })
+      .from(feedbacks)
+      .where(eq(feedbacks.id, feedbackId))
       .for('update');
-    if (!retour) return { statut: 'introuvable' };
-    if (!estRetourRedispatchable(retour.etat)) return { statut: 'refuse', etat: retour.etat };
+    if (!feedback) return { status: 'not_found' };
+    if (!isFeedbackRedispatchable(feedback.state))
+      return { status: 'refused', state: feedback.state };
     return {
-      statut: 'applique',
-      envois: await creerEnvoisManquants(tx, retourId, retour.projetId),
+      status: 'applied',
+      deliveries: await createMissingDeliveries(tx, feedbackId, feedback.projectId),
     };
   });
 }
 
 /**
- * Annule un redispatch dont la mise en queue a échoué : retire les Envois créés encore
- * en attente (sans job, rien ne les enverrait), et rend Trié un Retour qu'il ne reste
- * plus aucun Envoi pour dire Dispatché. Le Membre peut alors réessayer.
+ * Undoes a redispatch whose queueing failed: removes the created Deliveries still
+ * pending (without a job, nothing would send them), and makes Triaged again a Feedback
+ * that no Delivery is left to call Dispatched. The Member can then retry.
  */
-export async function annulerRedispatch(
+export async function undoRedispatch(
   db: Db,
-  retourId: string,
-  envoiIds: readonly string[],
+  feedbackId: string,
+  deliveryIds: readonly string[],
 ): Promise<void> {
-  if (envoiIds.length === 0) return;
+  if (deliveryIds.length === 0) return;
   await db.transaction(async (tx) => {
     await tx
-      .delete(envois)
-      .where(and(inArray(envois.id, [...envoiIds]), eq(envois.statut, 'en_attente')));
+      .delete(deliveries)
+      .where(and(inArray(deliveries.id, [...deliveryIds]), eq(deliveries.status, 'pending')));
     await tx
-      .update(retours)
-      .set({ etat: 'trie' })
+      .update(feedbacks)
+      .set({ state: 'triaged' })
       .where(
         and(
-          eq(retours.id, retourId),
-          eq(retours.etat, 'dispatche'),
-          notExists(tx.select({ id: envois.id }).from(envois).where(eq(envois.retourId, retourId))),
+          eq(feedbacks.id, feedbackId),
+          eq(feedbacks.state, 'dispatched'),
+          notExists(
+            tx
+              .select({ id: deliveries.id })
+              .from(deliveries)
+              .where(eq(deliveries.feedbackId, feedbackId)),
+          ),
         ),
       );
   });

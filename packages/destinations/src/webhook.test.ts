@@ -1,259 +1,259 @@
 import { createHmac } from 'node:crypto';
-import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
+import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
-import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
-import { adaptateurWebhook } from './webhook.js';
+import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { webhookAdapter } from './webhook.js';
 
-const SECRET = 'secret-de-signature-de-test';
-const MAINTENANT = new Date('2026-10-24T09:30:00.000Z');
-const HORODATAGE = '1792834200';
+const SECRET = 'test-signing-secret';
+const NOW = new Date('2026-10-24T09:30:00.000Z');
+const TIMESTAMP = '1792834200';
 
-const DESTINATION: DestinationConfiguree = {
+const DESTINATION: ConfiguredDestination = {
   id: '6f1c2a40-0000-4000-8000-000000000001',
-  projetId: '6f1c2a40-0000-4000-8000-000000000002',
-  nom: 'Récepteur',
+  projectId: '6f1c2a40-0000-4000-8000-000000000002',
+  name: 'Receiver',
   type: 'webhook',
-  config: { url: 'https://recepteur.test/nudge?canal=bugs' },
-  secrets: { secretSignature: SECRET },
+  config: { url: 'https://receiver.test/nudge?channel=bugs' },
+  secrets: { signingSecret: SECRET },
 };
 
-const ENVOI: EnvoiASortir = {
-  envoiId: '6f1c2a40-0000-4000-8000-000000000003',
-  essai: false,
-  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
-  retour: {
+const DELIVERY: OutgoingDelivery = {
+  deliveryId: '6f1c2a40-0000-4000-8000-000000000003',
+  isTest: false,
+  project: { id: DESTINATION.projectId!, name: 'Shop' },
+  feedback: {
     id: '6f1c2a40-0000-4000-8000-000000000004',
-    texte: '@everyone <script>alert(1)</script> [clic](javascript:alert(1)) **gras**',
+    text: '@everyone <script>alert(1)</script> [click](javascript:alert(1)) **bold**',
     source: 'api',
-    typeRetenu: 'bug',
-    gravite: 'majeure',
-    incertain: true,
-    auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'attestee' },
-    contexte: { url: 'https://boutique.test/panier', metadonnees: { version: '2.3.1' } },
+    resolvedType: 'bug',
+    severity: 'major',
+    uncertain: true,
+    author: { id: 'u-42', email: 'ada@client.test', trust: 'attested' },
+    context: { url: 'https://shop.test/cart', metadata: { version: '2.3.1' } },
     capture: null,
-    recuLe: new Date('2026-10-24T09:29:58.000Z'),
-    lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000004',
+    receivedAt: new Date('2026-10-24T09:29:58.000Z'),
+    dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000004',
   },
 };
 
-interface RequeteRecue {
+interface ReceivedRequest {
   readonly url: string;
   readonly init: RequestInit;
-  readonly entetes: Headers;
-  readonly corps: string;
+  readonly headers: Headers;
+  readonly body: string;
 }
 
-/** Un récepteur enregistré : il rend les réponses données, dans l'ordre, et garde les requêtes. */
-function recepteur(...reponses: ({ status: number; corps?: string } | Error | 'bloque')[]) {
-  const requetes: RequeteRecue[] = [];
-  let suivante = 0;
+/** A recorded receiver: it returns the given responses, in order, and keeps the requests. */
+function receiver(...replies: ({ status: number; body?: string } | Error | 'hang')[]) {
+  const requests: ReceivedRequest[] = [];
+  let next = 0;
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
-    requetes.push({
+    requests.push({
       url: String(url),
       init,
-      entetes: new Headers(init.headers),
-      corps: String(init.body),
+      headers: new Headers(init.headers),
+      body: String(init.body),
     });
-    const reponse = reponses[Math.min(suivante++, reponses.length - 1)] ?? { status: 204 };
-    if (reponse instanceof Error) throw reponse;
-    if (reponse === 'bloque') {
-      // Ne répond jamais : seul le délai de l'adaptateur (signal) l'interrompt.
+    const reply = replies[Math.min(next++, replies.length - 1)] ?? { status: 204 };
+    if (reply instanceof Error) throw reply;
+    if (reply === 'hang') {
+      // Never answers: only the adapter's timeout (signal) interrupts it.
       return new Promise<Response>((_, reject) =>
         init.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
       );
     }
-    // Un 204 ou un 3xx n'a pas de corps.
-    const sansCorps = reponse.status === 204 || (reponse.status >= 300 && reponse.status < 400);
-    return new Response(sansCorps ? null : (reponse.corps ?? null), { status: reponse.status });
+    // A 204 or a 3xx has no body.
+    const noBody = reply.status === 204 || (reply.status >= 300 && reply.status < 400);
+    return new Response(noBody ? null : (reply.body ?? null), { status: reply.status });
   }) as typeof globalThis.fetch;
-  return { fetch, requetes };
+  return { fetch, requests };
 }
 
-const webhook = (fetch: typeof globalThis.fetch, delaiMs?: number) =>
-  adaptateurWebhook(DESTINATION, { fetch, maintenant: () => MAINTENANT, delaiMs });
+const webhook = (fetch: typeof globalThis.fetch, timeoutMs?: number) =>
+  webhookAdapter(DESTINATION, { fetch, now: () => NOW, timeoutMs });
 
-const signatureAttendue = (horodatage: string, corps: string) =>
-  `sha256=${createHmac('sha256', SECRET).update(`${horodatage}.${corps}`).digest('hex')}`;
+const expectedSignature = (timestamp: string, body: string) =>
+  `sha256=${createHmac('sha256', SECRET).update(`${timestamp}.${body}`).digest('hex')}`;
 
-describe('Adaptateur webhook', () => {
-  it('POSTe le Retour en JSON à l’URL configurée, texte brut et non réécrit', async () => {
-    const { fetch, requetes } = recepteur({ status: 200 });
+describe('Webhook adapter', () => {
+  it('POSTs the Feedback as JSON to the configured URL, raw text not rewritten', async () => {
+    const { fetch, requests } = receiver({ status: 200 });
 
-    expect(await webhook(fetch).send(ENVOI)).toEqual({ statut: 'livre', lienExterne: null });
+    expect(await webhook(fetch).send(DELIVERY)).toEqual({ status: 'delivered', externalUrl: null });
 
-    const [requete] = requetes;
-    expect(requete?.url).toBe('https://recepteur.test/nudge?canal=bugs');
-    expect(requete?.init.method).toBe('POST');
-    expect(requete?.entetes.get('content-type')).toBe('application/json');
-    expect(requete?.entetes.get('x-nudge-evenement')).toBe('retour');
-    expect(requete?.entetes.get('x-nudge-envoi')).toBe(ENVOI.envoiId);
-    expect(JSON.parse(requete!.corps)).toEqual({
-      evenement: 'retour',
-      essai: false,
-      envoi: { id: ENVOI.envoiId },
-      projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
-      retour: {
-        id: ENVOI.retour.id,
-        texte: '@everyone <script>alert(1)</script> [clic](javascript:alert(1)) **gras**',
+    const [request] = requests;
+    expect(request?.url).toBe('https://receiver.test/nudge?channel=bugs');
+    expect(request?.init.method).toBe('POST');
+    expect(request?.headers.get('content-type')).toBe('application/json');
+    expect(request?.headers.get('x-nudge-event')).toBe('feedback');
+    expect(request?.headers.get('x-nudge-delivery')).toBe(DELIVERY.deliveryId);
+    expect(JSON.parse(request!.body)).toEqual({
+      event: 'feedback',
+      isTest: false,
+      delivery: { id: DELIVERY.deliveryId },
+      project: { id: DESTINATION.projectId!, name: 'Shop' },
+      feedback: {
+        id: DELIVERY.feedback.id,
+        text: '@everyone <script>alert(1)</script> [click](javascript:alert(1)) **bold**',
         source: 'api',
         type: 'bug',
-        gravite: 'majeure',
-        incertain: true,
-        auteur: { id: 'u-42', email: 'ada@client.test', nom: null, confiance: 'attestee' },
-        contexte: { url: 'https://boutique.test/panier', metadonnees: { version: '2.3.1' } },
+        severity: 'major',
+        uncertain: true,
+        author: { id: 'u-42', email: 'ada@client.test', name: null, trust: 'attested' },
+        context: { url: 'https://shop.test/cart', metadata: { version: '2.3.1' } },
         capture: null,
-        recuLe: '2026-10-24T09:29:58.000Z',
-        lien: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000004',
+        receivedAt: '2026-10-24T09:29:58.000Z',
+        dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000004',
       },
     });
   });
 
-  describe('alerte (Destination d’alerte)', () => {
-    it('POSTe l’alerte signée, événement « alerte », avec son id stable', async () => {
-      const { fetch, requetes } = recepteur({ status: 200 });
+  describe('alert (Alert destination)', () => {
+    it('POSTs the signed alert, event "alert", with its stable id', async () => {
+      const { fetch, requests } = receiver({ status: 200 });
 
-      expect(await webhook(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
-        statut: 'livre',
-        lienExterne: null,
+      expect(await webhook(fetch).alert(IN_REVIEW_ALERT)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
       });
 
-      const [requete] = requetes;
-      expect(requete?.url).toBe('https://recepteur.test/nudge?canal=bugs');
-      expect(requete?.entetes.get('x-nudge-evenement')).toBe('alerte');
-      expect(requete?.entetes.get('x-nudge-alerte')).toBe(ALERTE_EN_REVUE.id);
-      expect(requete?.entetes.get('x-nudge-envoi')).toBeNull();
-      expect(requete?.entetes.get('x-nudge-signature')).toBe(
-        signatureAttendue(HORODATAGE, requete!.corps),
+      const [request] = requests;
+      expect(request?.url).toBe('https://receiver.test/nudge?channel=bugs');
+      expect(request?.headers.get('x-nudge-event')).toBe('alert');
+      expect(request?.headers.get('x-nudge-alert')).toBe(IN_REVIEW_ALERT.id);
+      expect(request?.headers.get('x-nudge-delivery')).toBeNull();
+      expect(request?.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, request!.body),
       );
-      expect(JSON.parse(requete!.corps)).toEqual({
-        evenement: 'alerte',
-        essai: false,
-        alerte: {
-          id: ALERTE_EN_REVUE.id,
-          type: 'retour_en_revue',
-          le: '2026-10-24T09:30:00.000Z',
-          titre: 'Retour en revue · @everyone *Boutique*',
-          resume: expect.stringContaining('influencer le Triage'),
-          projet: { id: ALERTE_EN_REVUE.projet.id, nom: '@everyone *Boutique*' },
-          retour: { id: ALERTE_EN_REVUE.retour.id },
-          lien: ALERTE_EN_REVUE.lienDashboard,
+      expect(JSON.parse(request!.body)).toEqual({
+        event: 'alert',
+        isTest: false,
+        alert: {
+          id: IN_REVIEW_ALERT.id,
+          type: 'feedback_in_review',
+          at: '2026-10-24T09:30:00.000Z',
+          title: 'Feedback in review · @everyone *Shop*',
+          summary: expect.stringContaining('influence Triage'),
+          project: { id: IN_REVIEW_ALERT.project.id, name: '@everyone *Shop*' },
+          feedback: { id: IN_REVIEW_ALERT.feedback.id },
+          dashboardUrl: IN_REVIEW_ALERT.dashboardUrl,
         },
       });
     });
 
-    it('d’une Destination Suspendue, transmet sa classe et le refus tels quels', async () => {
-      const { fetch, requetes } = recepteur({ status: 204 });
+    it('for a Suspended Destination, passes its class and the refusal as is', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
 
-      await webhook(fetch).alerter(ALERTE_SUSPENSION);
+      await webhook(fetch).alert(SUSPENSION_ALERT);
 
-      expect(JSON.parse(requetes[0]!.corps).alerte).toMatchObject({
-        type: 'destination_suspendue',
+      expect(JSON.parse(requests[0]!.body).alert).toMatchObject({
+        type: 'destination_suspended',
         destination: {
-          id: ALERTE_SUSPENSION.destination.id,
-          nom: 'Linear [prod](https://piege.test)',
-          classe: 'auth',
-          message: 'HTTP 401 : <!channel> @here `jeton` refusé',
+          id: SUSPENSION_ALERT.destination.id,
+          name: 'Linear [prod](https://trap.test)',
+          failureClass: 'auth',
+          message: 'HTTP 401: <!channel> @here `token` rejected',
         },
-        lien: null,
+        dashboardUrl: null,
       });
     });
 
-    it('classe un refus du récepteur comme un Envoi', async () => {
-      const { fetch } = recepteur({ status: 503 }, { status: 401 });
-      const adaptateur = webhook(fetch);
+    it("classifies the receiver's refusal like a Delivery", async () => {
+      const { fetch } = receiver({ status: 503 }, { status: 401 });
+      const adapter = webhook(fetch);
 
-      expect(await adaptateur.alerter(ALERTE_EN_REVUE)).toMatchObject({ classe: 'transient' });
-      expect(await adaptateur.alerter(ALERTE_EN_REVUE)).toMatchObject({ classe: 'auth' });
+      expect(await adapter.alert(IN_REVIEW_ALERT)).toMatchObject({ failureClass: 'transient' });
+      expect(await adapter.alert(IN_REVIEW_ALERT)).toMatchObject({ failureClass: 'auth' });
     });
   });
 
   describe('Capture', () => {
     const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff]);
-    const avecCapture = (lire: () => Promise<Uint8Array | null>): EnvoiASortir => ({
-      ...ENVOI,
-      retour: { ...ENVOI.retour, capture: { contentType: 'image/png', octets: 9, lire } },
+    const withCapture = (read: () => Promise<Uint8Array | null>): OutgoingDelivery => ({
+      ...DELIVERY,
+      feedback: { ...DELIVERY.feedback, capture: { contentType: 'image/png', bytes: 9, read } },
     });
 
-    it('la joint au JSON en base64, sous la signature (D10)', async () => {
-      const { fetch, requetes } = recepteur({ status: 204 });
+    it('attaches it to the JSON in base64, under the signature (D10)', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
 
-      expect(await webhook(fetch).send(avecCapture(async () => PNG))).toEqual({
-        statut: 'livre',
-        lienExterne: null,
+      expect(await webhook(fetch).send(withCapture(async () => PNG))).toEqual({
+        status: 'delivered',
+        externalUrl: null,
       });
 
-      const corps = requetes[0]!.corps;
-      expect(JSON.parse(corps).retour.capture).toEqual({
+      const body = requests[0]!.body;
+      expect(JSON.parse(body).feedback.capture).toEqual({
         contentType: 'image/png',
         data: 'iVBORw0KGgr/',
       });
-      expect(requetes[0]!.entetes.get('x-nudge-signature')).toBe(
-        signatureAttendue(HORODATAGE, corps),
+      expect(requests[0]!.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, body),
       );
     });
 
-    it('envoie le Retour sans elle si le stockage ne l’a plus', async () => {
-      const { fetch, requetes } = recepteur({ status: 204 });
+    it('sends the Feedback without it if storage no longer has it', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
 
-      await webhook(fetch).send(avecCapture(async () => null));
+      await webhook(fetch).send(withCapture(async () => null));
 
-      expect(JSON.parse(requetes[0]!.corps).retour.capture).toBeNull();
+      expect(JSON.parse(requests[0]!.body).feedback.capture).toBeNull();
     });
 
-    it('stockage injoignable : échec transitoire, sans appel au récepteur', async () => {
-      const { fetch, requetes } = recepteur({ status: 204 });
+    it('unreachable storage: transient failure, without calling the receiver', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
 
-      const resultat = await webhook(fetch).send(
-        avecCapture(() => Promise.reject(new Error('S3 GET : HTTP 503'))),
+      const result = await webhook(fetch).send(
+        withCapture(() => Promise.reject(new Error('S3 GET: HTTP 503'))),
       );
 
-      expect(resultat).toEqual({
-        statut: 'echec',
-        classe: 'transient',
-        message: 'Capture illisible : S3 GET : HTTP 503',
+      expect(result).toEqual({
+        status: 'failed',
+        failureClass: 'transient',
+        message: 'Unreadable Capture: S3 GET: HTTP 503',
       });
-      expect(requetes).toEqual([]);
+      expect(requests).toEqual([]);
     });
   });
 
-  it('signe le corps brut et l’horodatage en HMAC-SHA256 avec le secret de la Destination', async () => {
-    const { fetch, requetes } = recepteur({ status: 204 });
+  it("signs the raw body and the timestamp with HMAC-SHA256 using the Destination's secret", async () => {
+    const { fetch, requests } = receiver({ status: 204 });
 
-    await webhook(fetch).send(ENVOI);
+    await webhook(fetch).send(DELIVERY);
 
-    const [requete] = requetes;
-    expect(requete?.entetes.get('x-nudge-timestamp')).toBe(HORODATAGE);
-    expect(requete?.entetes.get('x-nudge-signature')).toBe(
-      signatureAttendue(HORODATAGE, requete!.corps),
+    const [request] = requests;
+    expect(request?.headers.get('x-nudge-timestamp')).toBe(TIMESTAMP);
+    expect(request?.headers.get('x-nudge-signature')).toBe(
+      expectedSignature(TIMESTAMP, request!.body),
     );
-    // Un autre secret ne produit pas la même signature.
-    const autre = createHmac('sha256', 'autre').update(`${HORODATAGE}.${requete!.corps}`);
-    expect(requete?.entetes.get('x-nudge-signature')).not.toBe(`sha256=${autre.digest('hex')}`);
+    // Another secret does not produce the same signature.
+    const other = createHmac('sha256', 'other').update(`${TIMESTAMP}.${request!.body}`);
+    expect(request?.headers.get('x-nudge-signature')).not.toBe(`sha256=${other.digest('hex')}`);
   });
 
-  it('marque le Retour d’exemple du bouton « tester »', async () => {
-    const { fetch, requetes } = recepteur({ status: 200 });
+  it('marks the sample Feedback of the "test" button', async () => {
+    const { fetch, requests } = receiver({ status: 200 });
 
-    await webhook(fetch).send({ ...ENVOI, essai: true });
+    await webhook(fetch).send({ ...DELIVERY, isTest: true });
 
-    expect(JSON.parse(requetes[0]!.corps)).toMatchObject({ evenement: 'retour', essai: true });
+    expect(JSON.parse(requests[0]!.body)).toMatchObject({ event: 'feedback', isTest: true });
   });
 
-  it('ne suit pas les redirections : un 3xx est un échec permanent', async () => {
-    const { fetch, requetes } = recepteur({ status: 301 });
+  it('does not follow redirects: a 3xx is a permanent failure', async () => {
+    const { fetch, requests } = receiver({ status: 301 });
 
-    expect(await webhook(fetch).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'permanent',
+    expect(await webhook(fetch).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'permanent',
     });
-    expect(requetes[0]?.init.redirect).toBe('manual');
+    expect(requests[0]?.init.redirect).toBe('manual');
   });
 
   it.each([
-    [200, 'livre'],
-    [202, 'livre'],
-    [204, 'livre'],
+    [200, 'delivered'],
+    [202, 'delivered'],
+    [204, 'delivered'],
     [408, 'transient'],
     [425, 'transient'],
     [429, 'transient'],
@@ -267,62 +267,62 @@ describe('Adaptateur webhook', () => {
     [410, 'permanent'],
     [413, 'permanent'],
     [422, 'permanent'],
-  ])('classe une réponse %i : %s', async (status, attendu) => {
-    const { fetch } = recepteur({ status, corps: 'détail du récepteur' });
+  ])('classifies a %i response: %s', async (status, expected) => {
+    const { fetch } = receiver({ status, body: 'receiver detail' });
 
-    const resultat = await webhook(fetch).send(ENVOI);
+    const result = await webhook(fetch).send(DELIVERY);
 
-    if (attendu === 'livre') {
-      expect(resultat).toEqual({ statut: 'livre', lienExterne: null });
+    if (expected === 'delivered') {
+      expect(result).toEqual({ status: 'delivered', externalUrl: null });
     } else {
-      expect(resultat).toEqual({
-        statut: 'echec',
-        classe: attendu,
+      expect(result).toEqual({
+        status: 'failed',
+        failureClass: expected,
         message: expect.stringContaining(String(status)),
       });
     }
   });
 
-  it('reprend le début de la réponse du récepteur dans le message d’échec, borné', async () => {
-    const { fetch } = recepteur({ status: 422, corps: `champ manquant ${'x'.repeat(1000)}` });
+  it("carries the start of the receiver's response into the failure message, bounded", async () => {
+    const { fetch } = receiver({ status: 422, body: `missing field ${'x'.repeat(1000)}` });
 
-    const resultat = await webhook(fetch).send(ENVOI);
+    const result = await webhook(fetch).send(DELIVERY);
 
-    expect(resultat).toMatchObject({ message: expect.stringContaining('champ manquant') });
-    expect(resultat.statut === 'echec' && resultat.message.length).toBeLessThan(400);
+    expect(result).toMatchObject({ message: expect.stringContaining('missing field') });
+    expect(result.status === 'failed' && result.message.length).toBeLessThan(400);
   });
 
-  it('une erreur réseau est transitoire', async () => {
-    const { fetch } = recepteur(new TypeError('fetch failed'));
+  it('a network error is transient', async () => {
+    const { fetch } = receiver(new TypeError('fetch failed'));
 
-    expect(await webhook(fetch).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'transient',
+    expect(await webhook(fetch).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'transient',
       message: expect.stringContaining('fetch failed'),
     });
   });
 
-  it('un récepteur qui ne répond pas dans le délai est transitoire', async () => {
-    const { fetch } = recepteur('bloque');
+  it('a receiver that does not answer within the timeout is transient', async () => {
+    const { fetch } = receiver('hang');
 
-    expect(await webhook(fetch, 50).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'transient',
+    expect(await webhook(fetch, 50).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'transient',
     });
   });
 
   describe('healthCheck', () => {
-    it('envoie un ping signé ; une réponse 2xx rend la Destination joignable', async () => {
-      const { fetch, requetes } = recepteur({ status: 200 });
+    it('sends a signed ping; a 2xx response makes the Destination reachable', async () => {
+      const { fetch, requests } = receiver({ status: 200 });
 
-      expect(await webhook(fetch).healthCheck()).toEqual({ joignable: true });
+      expect(await webhook(fetch).healthCheck()).toEqual({ reachable: true });
 
-      const [requete] = requetes;
-      expect(requete?.init.method).toBe('POST');
-      expect(requete?.entetes.get('x-nudge-evenement')).toBe('ping');
-      expect(JSON.parse(requete!.corps)).toEqual({ evenement: 'ping' });
-      expect(requete?.entetes.get('x-nudge-signature')).toBe(
-        signatureAttendue(HORODATAGE, requete!.corps),
+      const [request] = requests;
+      expect(request?.init.method).toBe('POST');
+      expect(request?.headers.get('x-nudge-event')).toBe('ping');
+      expect(JSON.parse(request!.body)).toEqual({ event: 'ping' });
+      expect(request?.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, request!.body),
       );
     });
 
@@ -330,17 +330,20 @@ describe('Adaptateur webhook', () => {
       [503, 'transient'],
       [401, 'auth'],
       [404, 'permanent'],
-    ])('une réponse %i rend la Destination injoignable (%s)', async (status, classe) => {
-      const { fetch } = recepteur({ status });
+    ])('a %i response makes the Destination unreachable (%s)', async (status, failureClass) => {
+      const { fetch } = receiver({ status });
 
-      expect(await webhook(fetch).healthCheck()).toMatchObject({ joignable: false, classe });
+      expect(await webhook(fetch).healthCheck()).toMatchObject({
+        reachable: false,
+        failureClass,
+      });
     });
   });
 
-  it('est enregistré pour le type « webhook » dans le registre des adaptateurs', async () => {
-    const adaptateur = resolveDestinationAdapter(DESTINATION);
+  it('is registered for the "webhook" type in the adapter registry', async () => {
+    const adapter = resolveDestinationAdapter(DESTINATION);
 
-    expect(typeof adaptateur.send).toBe('function');
-    expect(typeof adaptateur.healthCheck).toBe('function');
+    expect(typeof adapter.send).toBe('function');
+    expect(typeof adapter.healthCheck).toBe('function');
   });
 });

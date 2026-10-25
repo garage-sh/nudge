@@ -1,47 +1,54 @@
+import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
-import type { FormulaireTypeDestination } from './type-destination.js';
+import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
 
-const depot = (config: Readonly<Record<string, unknown>>) =>
-  typeof config.depot === 'string' ? config.depot : '';
+const repository = (config: Readonly<Record<string, unknown>>) =>
+  typeof config.repository === 'string' ? config.repository : '';
 
 /**
- * GitHub Issues : le jeton d'accès est un secret, saisi sans jamais être réaffiché ;
- * le dépôt est désigné comme dans son URL (propriétaire/dépôt).
+ * GitHub Issues: the access token is a secret, typed in and never shown again; the
+ * repository is named as in its URL (owner/repository).
  */
-export const formulaireGitHub: FormulaireTypeDestination<'github'> = {
-  libelle: 'GitHub Issues',
-  configInitiale: { depot: '' },
-  Champs: ({ idPrefixe, config, setConfig, secrets, setSecrets, secretsEnregistres }) => {
-    const gardee = secretsEnregistres.includes('jeton');
-    return (
-      <>
-        <Field
-          libelle="Jeton d’accès"
-          id={`${idPrefixe}-github-jeton`}
-          type="password"
-          autoComplete="off"
-          required={!gardee}
-          placeholder="github_pat_…"
-          value={secrets.jeton ?? ''}
-          onChange={(e) => setSecrets({ ...secrets, jeton: e.target.value })}
-          aide={
-            gardee
-              ? 'Un jeton est enregistré (chiffré) : laissez vide pour le garder.'
-              : 'GitHub › Settings › Developer settings › Fine-grained tokens : limité à ce dépôt, permission Issues en lecture et écriture. Stocké chiffré, jamais réaffiché.'
-          }
-        />
-        <Field
-          libelle="Dépôt"
-          id={`${idPrefixe}-github-depot`}
-          required
-          placeholder="organisation/depot"
-          value={depot(config)}
-          onChange={(e) => setConfig({ ...config, depot: e.target.value })}
-          aide="Le propriétaire et le nom du dépôt, comme dans son URL : github.com/organisation/depot."
-        />
-      </>
-    );
-  },
-  resume: (config) => `Dépôt ${depot(config)}`,
-  secretsGeneres: {},
+function GitHubFields({
+  idPrefix,
+  config,
+  setConfig,
+  secrets,
+  setSecrets,
+  savedSecrets,
+}: TypeFieldsProps) {
+  const t = useT();
+  const kept = savedSecrets.includes('token');
+  return (
+    <>
+      <Field
+        label={t.destinationTypes.github.token}
+        id={`${idPrefix}-github-token`}
+        type="password"
+        autoComplete="off"
+        required={!kept}
+        placeholder="github_pat_…"
+        value={secrets.token ?? ''}
+        onChange={(e) => setSecrets({ ...secrets, token: e.target.value })}
+        help={kept ? t.destinationTypes.savedToken : t.destinationTypes.github.tokenHelp}
+      />
+      <Field
+        label={t.destinationTypes.github.repository}
+        id={`${idPrefix}-github-repository`}
+        required
+        placeholder={t.destinationTypes.github.repositoryPlaceholder}
+        value={repository(config)}
+        onChange={(e) => setConfig({ ...config, repository: e.target.value })}
+        help={t.destinationTypes.github.repositoryHelp}
+      />
+    </>
+  );
+}
+
+export const gitHubForm: DestinationTypeForm<'github'> = {
+  label: 'GitHub Issues',
+  initialConfig: { repository: '' },
+  Fields: GitHubFields,
+  summary: (config, t) => t.destinationTypes.github.summary(repository(config)),
+  generatedSecrets: {},
 };

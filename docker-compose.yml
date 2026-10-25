@@ -1,46 +1,46 @@
-# Une Instance nudge complète : `docker compose up -d`, puis http://localhost:8080.
-# La configuration se lit dans `.env` (copier `.env.example`) ; voir le README.
+# A complete nudge Instance: `docker compose up -d`, then http://localhost:8080.
+# The configuration is read from `.env` (copy `.env.example`); see the README.
 #
-# Seul le dashboard publie un port : il sert aussi l'api (/api, /v1) et le Widget
-# (/widget/nudge-widget.js) sur la même origine. Mettre un reverse proxy TLS devant.
+# Only the dashboard publishes a port: it also serves the api (/api, /v1) and the Widget
+# (/widget/nudge-widget.js) on the same origin. Put a TLS reverse proxy in front of it.
 #
-# Les images viennent de ghcr.io ; NUDGE_VERSION les épingle (défaut : latest).
-# Construire depuis les sources : ajouter `-f docker-compose.build.yml`. Répliquer le
-# worker à part : ajouter `-f docker-compose.worker.yml` (voir le README).
+# The images come from ghcr.io; NUDGE_VERSION pins them (default: latest).
+# Build from source: add `-f docker-compose.build.yml`. Replicate the worker
+# separately: add `-f docker-compose.worker.yml` (see the README).
 
 x-nudge-env: &nudge-env
-  DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD:?définir NUDGE_POSTGRES_PASSWORD dans .env}@postgres:5432/nudge
+  DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD:?set NUDGE_POSTGRES_PASSWORD in .env}@postgres:5432/nudge
   REDIS_URL: redis://redis:6379
-  NUDGE_ENCRYPTION_KEY: ${NUDGE_ENCRYPTION_KEY:?définir NUDGE_ENCRYPTION_KEY dans .env (openssl rand -base64 32)}
+  NUDGE_ENCRYPTION_KEY: ${NUDGE_ENCRYPTION_KEY:?set NUDGE_ENCRYPTION_KEY in .env (openssl rand -base64 32)}
   NUDGE_DASHBOARD_URL: ${NUDGE_DASHBOARD_URL:-}
   NUDGE_COOKIE_SECURE: ${NUDGE_COOKIE_SECURE:-true}
-  # Le proxy du dashboard, plus ceux placés devant lui (voir le README).
+  # The dashboard's proxy, plus those placed in front of it (see the README).
   NUDGE_TRUST_PROXY: ${NUDGE_TRUST_PROXY:-1}
   NUDGE_ROLES: ${NUDGE_ROLES:-}
-  NUDGE_WIDGET_LIMITE_IP: ${NUDGE_WIDGET_LIMITE_IP:-}
-  NUDGE_WIDGET_LIMITE_PROJET: ${NUDGE_WIDGET_LIMITE_PROJET:-}
+  NUDGE_WIDGET_RATE_LIMIT_IP: ${NUDGE_WIDGET_RATE_LIMIT_IP:-}
+  NUDGE_WIDGET_RATE_LIMIT_PROJECT: ${NUDGE_WIDGET_RATE_LIMIT_PROJECT:-}
   NUDGE_JUDGE_PROVIDER: ${NUDGE_JUDGE_PROVIDER:-}
   NUDGE_JUDGE_API_KEY: ${NUDGE_JUDGE_API_KEY:-}
   NUDGE_JUDGE_MODEL: ${NUDGE_JUDGE_MODEL:-}
   NUDGE_JUDGE_BASE_URL: ${NUDGE_JUDGE_BASE_URL:-}
   NUDGE_JUDGE_TIMEOUT_MS: ${NUDGE_JUDGE_TIMEOUT_MS:-}
-  NUDGE_TRIAGE_SEUIL_INDESIRABLE: ${NUDGE_TRIAGE_SEUIL_INDESIRABLE:-}
-  NUDGE_TRIAGE_SEUIL_MANIPULATION: ${NUDGE_TRIAGE_SEUIL_MANIPULATION:-}
-  NUDGE_TRIAGE_SEUIL_CONFIANCE: ${NUDGE_TRIAGE_SEUIL_CONFIANCE:-}
-  NUDGE_SUSPENSION_SEUIL_ECHECS: ${NUDGE_SUSPENSION_SEUIL_ECHECS:-}
-  NUDGE_SUSPENSION_REFROIDISSEMENT_MS: ${NUDGE_SUSPENSION_REFROIDISSEMENT_MS:-}
-  NUDGE_SUSPENSION_INTERVALLE_SONDE_MS: ${NUDGE_SUSPENSION_INTERVALLE_SONDE_MS:-}
-  NUDGE_PURGE_INTERVALLE_MS: ${NUDGE_PURGE_INTERVALLE_MS:-}
-  NUDGE_CAPTURES_STOCKAGE: ${NUDGE_CAPTURES_STOCKAGE:-disque}
-  # Le volume `captures`, monté au même endroit dans l'api et le worker.
-  NUDGE_CAPTURES_DOSSIER: /var/lib/nudge/captures
+  NUDGE_TRIAGE_JUNK_THRESHOLD: ${NUDGE_TRIAGE_JUNK_THRESHOLD:-}
+  NUDGE_TRIAGE_MANIPULATION_THRESHOLD: ${NUDGE_TRIAGE_MANIPULATION_THRESHOLD:-}
+  NUDGE_TRIAGE_CONFIDENCE_THRESHOLD: ${NUDGE_TRIAGE_CONFIDENCE_THRESHOLD:-}
+  NUDGE_SUSPENSION_FAILURE_THRESHOLD: ${NUDGE_SUSPENSION_FAILURE_THRESHOLD:-}
+  NUDGE_SUSPENSION_COOLDOWN_MS: ${NUDGE_SUSPENSION_COOLDOWN_MS:-}
+  NUDGE_SUSPENSION_PROBE_INTERVAL_MS: ${NUDGE_SUSPENSION_PROBE_INTERVAL_MS:-}
+  NUDGE_PURGE_INTERVAL_MS: ${NUDGE_PURGE_INTERVAL_MS:-}
+  NUDGE_CAPTURES_STORAGE: ${NUDGE_CAPTURES_STORAGE:-disk}
+  # The `captures` volume, mounted at the same place in the api and the worker.
+  NUDGE_CAPTURES_DIR: /var/lib/nudge/captures
   NUDGE_S3_ENDPOINT: ${NUDGE_S3_ENDPOINT:-}
   NUDGE_S3_REGION: ${NUDGE_S3_REGION:-}
   NUDGE_S3_BUCKET: ${NUDGE_S3_BUCKET:-}
   NUDGE_S3_ACCESS_KEY_ID: ${NUDGE_S3_ACCESS_KEY_ID:-}
   NUDGE_S3_SECRET_ACCESS_KEY: ${NUDGE_S3_SECRET_ACCESS_KEY:-}
-  NUDGE_S3_PREFIXE: ${NUDGE_S3_PREFIXE:-}
-  NUDGE_S3_STYLE_CHEMIN: ${NUDGE_S3_STYLE_CHEMIN:-}
+  NUDGE_S3_PREFIX: ${NUDGE_S3_PREFIX:-}
+  NUDGE_S3_FORCE_PATH_STYLE: ${NUDGE_S3_FORCE_PATH_STYLE:-}
 
 services:
   postgres:
@@ -48,7 +48,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: nudge
-      POSTGRES_PASSWORD: ${NUDGE_POSTGRES_PASSWORD:?définir NUDGE_POSTGRES_PASSWORD dans .env}
+      POSTGRES_PASSWORD: ${NUDGE_POSTGRES_PASSWORD:?set NUDGE_POSTGRES_PASSWORD in .env}
       POSTGRES_DB: nudge
     volumes:
       - postgres:/var/lib/postgresql/data
@@ -58,7 +58,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # Les queues BullMQ : persistées (AOF), et jamais évincées sous pression mémoire.
+  # The BullMQ queues: persisted (AOF), and never evicted under memory pressure.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -71,7 +71,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # Applique les migrations de la base, puis s'arrête ; l'api et le worker l'attendent.
+  # Applies the database migrations, then stops; the api and the worker wait for it.
   migrate:
     image: ghcr.io/garage-sh/nudge:${NUDGE_VERSION:-latest}
     command: ['node', 'apps/api/dist/migrate.js']
@@ -81,7 +81,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # L'api et le worker dans le même processus (NUDGE_ROLES, défaut : api,worker).
+  # The api and the worker in the same process (NUDGE_ROLES, default: api,worker).
   nudge:
     image: ghcr.io/garage-sh/nudge:${NUDGE_VERSION:-latest}
     restart: unless-stopped

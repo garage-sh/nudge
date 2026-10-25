@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Client JS de l'API publique de nudge : envoi de Retours depuis un backend avec la clé secrète du Projet.",
+  "description": "JS client for nudge's public API: sends Feedback from a backend with the Project's secret key.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

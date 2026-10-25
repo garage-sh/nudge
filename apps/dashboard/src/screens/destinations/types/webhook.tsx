@@ -1,29 +1,35 @@
+import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
-import type { FormulaireTypeDestination } from './type-destination.js';
+import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
 
 const url = (config: Readonly<Record<string, unknown>>) =>
   typeof config.url === 'string' ? config.url : '';
 
-export const formulaireWebhook: FormulaireTypeDestination<'webhook'> = {
-  libelle: 'Webhook',
-  configInitiale: { url: '' },
-  Champs: ({ idPrefixe, config, setConfig }) => (
+function WebhookFields({ idPrefix, config, setConfig }: TypeFieldsProps) {
+  const t = useT();
+  return (
     <Field
-      libelle="URL"
-      id={`${idPrefixe}-url`}
+      label={t.destinationTypes.webhook.url}
+      id={`${idPrefix}-url`}
       type="url"
       required
-      placeholder="https://exemple.com/nudge"
+      placeholder="https://example.com/nudge"
       value={url(config)}
       onChange={(e) => setConfig({ ...config, url: e.target.value })}
-      aide="nudge y POSTe chaque Retour en JSON, signé : X-Nudge-Signature vaut sha256=HMAC(secret, X-Nudge-Timestamp + « . » + corps)."
+      help={t.destinationTypes.webhook.urlHelp}
     />
-  ),
-  resume: url,
-  secretsGeneres: {
-    secretSignature: {
-      libelle: 'Secret de signature',
-      aide: 'Votre récepteur vérifie avec lui que les appels viennent de cette Instance.',
-    },
+  );
+}
+
+export const webhookForm: DestinationTypeForm<'webhook'> = {
+  label: 'Webhook',
+  initialConfig: { url: '' },
+  Fields: WebhookFields,
+  summary: url,
+  generatedSecrets: {
+    signingSecret: (t) => ({
+      label: t.destinationTypes.webhook.signingSecret,
+      help: t.destinationTypes.webhook.signingSecretHelp,
+    }),
   },
 };

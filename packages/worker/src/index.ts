@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 
 export {
-  type OptionsBalayage,
-  type OptionsPurge,
-  type OptionsSuspension,
+  type SweepOptions,
+  type PurgeOptions,
+  type SuspensionOptions,
   type Suspension,
-  type SurSuspension,
+  type OnSuspension,
   type WorkerOptions,
 } from './options.js';
-export { configWorkerFromEnv, type ConfigWorker } from './env.js';
+export { workerConfigFromEnv, type WorkerConfig } from './env.js';
 export { createWorker } from './worker.js';

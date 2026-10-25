@@ -4,12 +4,12 @@ import config from '@nudge/tsup-config';
 import type { Plugin } from 'esbuild';
 
 /**
- * Résout `html-to-image` comme Node (son build ESM, `module`) : esbuild bascule en
- * résolution Yarn PnP dès qu'il trouve un `.pnp.cjs` dans un dossier parent, même hors
- * du dépôt, et ne trouverait alors pas le paquet embarqué dans le build IIFE.
+ * Resolves `html-to-image` the way Node does (its ESM build, `module`): esbuild switches
+ * to Yarn PnP resolution as soon as it finds a `.pnp.cjs` in a parent directory, even
+ * outside the repo, and would then not find the package bundled into the IIFE build.
  */
-const resolutionNode: Plugin = {
-  name: 'resolution-node',
+const nodeResolution: Plugin = {
+  name: 'node-resolution',
   setup(build) {
     const require = createRequire(import.meta.url);
     build.onResolve({ filter: /^html-to-image$/ }, () => ({
@@ -19,24 +19,24 @@ const resolutionNode: Plugin = {
 };
 
 export default [
-  // npm : ESM et types, l'élément et le wrapper React (React reste chez l'hôte).
+  // npm: ESM and types, the element and the React wrapper (React stays with the host).
   config({
     entry: { index: 'src/index.ts', react: 'src/react.tsx' },
     format: ['esm'],
     external: ['react'],
-    // Le rendu de la Capture est embarqué : le build reste sans dépendance d'exécution.
+    // The Capture renderer is bundled: the build has no runtime dependency.
     noExternal: ['html-to-image'],
-    esbuildPlugins: [resolutionNode],
-    // Les deux builds tournent en parallèle dans `dist/` : aucun ne le vide.
+    esbuildPlugins: [nodeResolution],
+    // Both builds run in parallel into `dist/`: neither cleans it.
     clean: false,
     shims: false,
   }),
-  // Balise script : un seul fichier autonome, minifié, qui expose `window.Nudge`.
+  // Script tag: a single self-contained, minified file that exposes `window.Nudge`.
   config({
     entry: { 'nudge-widget': 'src/iife.ts' },
     format: ['iife'],
     noExternal: ['html-to-image'],
-    esbuildPlugins: [resolutionNode],
+    esbuildPlugins: [nodeResolution],
     globalName: 'Nudge',
     outExtension: () => ({ js: '.js' }),
     dts: false,

@@ -1,34 +1,34 @@
 import { z } from 'zod';
 
 /**
- * Ce qu'un type de Destination déclare pour l'API du dashboard. Chaque type
- * (`webhook.ts`, `discord.ts`…) en exporte une, enregistrée dans
- * `DEFINITIONS_DESTINATION` (`index.ts`).
+ * What a Destination type declares for the dashboard API. Each type
+ * (`webhook.ts`, `discord.ts`…) exports one, registered in
+ * `DESTINATION_DEFINITIONS` (`index.ts`).
  */
-export interface DefinitionDestination {
-  /** Configuration non secrète : stockée en clair (jsonb) et rendue au dashboard. */
+export interface DestinationDefinition {
+  /** Non-secret configuration: stored in clear (jsonb) and returned to the dashboard. */
   readonly config: z.ZodType<Record<string, unknown>>;
   /**
-   * Secrets saisis par le Membre (jetons, URL à jeton…) : chiffrés en base, jamais
-   * rendus. Un schéma vide (`z.strictObject({})`) si le type n'en a pas.
+   * Secrets entered by the Member (tokens, URL with a token…): encrypted in the
+   * database, never returned. An empty schema (`z.strictObject({})`) if the type has none.
    */
   readonly secrets: z.ZodType<Record<string, string>>;
   /**
-   * Secrets que l'Instance génère elle-même à la création (secret de signature…) :
-   * chiffrés avec les autres, montrés une seule fois au Membre, régénérables.
+   * Secrets the Instance generates itself on creation (signing secret…): encrypted
+   * with the others, shown only once to the Member, regenerable.
    */
-  readonly secretsGeneres: readonly string[];
+  readonly generatedSecrets: readonly string[];
 }
 
-/** URL http(s) d'un service externe, sans identifiants (ils iraient en clair dans la config). */
-export const schemaUrlHttp = z
+/** http(s) URL of an external service, without credentials (they would sit in clear in the config). */
+export const httpUrlSchema = z
   .string()
   .trim()
   .max(2048)
   .refine(
-    (valeur) => {
+    (value) => {
       try {
-        const url = new URL(valeur);
+        const url = new URL(value);
         return (
           (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password
         );
@@ -36,5 +36,5 @@ export const schemaUrlHttp = z
         return false;
       }
     },
-    { message: 'URL http(s) attendue, sans identifiants' },
+    { message: 'Expected an http(s) URL, without credentials' },
   );

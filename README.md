@@ -2,19 +2,19 @@
 
 [![CI](https://github.com/garage-sh/nudge/actions/workflows/ci.yml/badge.svg)](https://github.com/garage-sh/nudge/actions/workflows/ci.yml)
 [![Images](https://github.com/garage-sh/nudge/actions/workflows/images.yml/badge.svg)](https://github.com/garage-sh/nudge/pkgs/container/nudge)
-[![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
+[![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-nudge collecte les retours des utilisateurs de plusieurs applications, les trie et les envoie là où l'équipe travaille. C'est un outil open-source (AGPL-3.0) et auto-hébergé.
+nudge collects feedback from the users of several applications, triages it and sends it where the team works. It is open-source (AGPL-3.0) and self-hosted.
 
-Chaque **Projet** intègre le **Widget**, ou appelle l'API publique depuis son serveur. Les **Retours** reçus passent par un **Triage** : un **Juge**, un modèle de décision System One (via TypeSafe, OpenRouter ou votre propre serveur), détermine leur Type et leur Gravité, et repère les Retours Indésirables et les tentatives de Manipulation. Ils sont ensuite dispatchés vers les **Destinations** du Projet (webhook signé, Discord, Linear, Slack, GitHub Issues) dont le **Filtre** les retient. Les **Membres** suivent tout depuis un dashboard.
+Each **Project** embeds the **Widget**, or calls the public API from its server. Incoming **Feedback** goes through **Triage**: a **Judge**, a System One decision model (through TypeSafe, OpenRouter or your own server), determines its Type and Severity, and spots Junk feedback and Manipulation attempts. It is then dispatched to the Project's **Destinations** (signed webhook, Discord, Linear, Slack, GitHub Issues) whose **Filter** accepts it. **Members** follow everything from a dashboard, available in English and French (language selector in the dashboard).
 
-Le vocabulaire est défini dans [`CONTEXT.md`](CONTEXT.md), et les décisions d'architecture sont dans [`docs/adr/`](docs/adr/).
+The vocabulary is defined in [`CONTEXT.md`](CONTEXT.md), and architecture decisions are in [`docs/adr/`](docs/adr/).
 
-## Démarrer une Instance
+## Running an Instance
 
-Il faut Docker et Docker Compose v2. Une Instance est faite de quatre conteneurs : `nudge` (l'api et le worker), `dashboard`, Postgres et Redis. Un cinquième conteneur, `migrate`, applique les migrations puis s'arrête. Les images sont publiées sur `ghcr.io/garage-sh/nudge` et `ghcr.io/garage-sh/nudge-dashboard`, pour amd64 et arm64.
+You need Docker and Docker Compose v2. An Instance is made of four containers: `nudge` (the api and the worker), `dashboard`, Postgres and Redis. A fifth container, `migrate`, applies the migrations then stops. The images are published to `ghcr.io/garage-sh/nudge` and `ghcr.io/garage-sh/nudge-dashboard`, for amd64 and arm64.
 
-Inutile de cloner le dépôt : le fichier compose et l'exemple de configuration suffisent.
+No need to clone the repository: the compose file and the example configuration are enough.
 
 ```bash
 mkdir nudge && cd nudge
@@ -22,55 +22,55 @@ curl -fsSL -o docker-compose.yml https://github.com/garage-sh/nudge/releases/lat
 curl -fsSL -o .env https://github.com/garage-sh/nudge/releases/latest/download/env.example
 ```
 
-Dans `.env`, renseignez les deux variables requises :
+In `.env`, fill in the two required variables:
 
 ```bash
-NUDGE_ENCRYPTION_KEY=$(openssl rand -base64 32)   # la valeur, pas la commande
+NUDGE_ENCRYPTION_KEY=$(openssl rand -base64 32)   # the value, not the command
 NUDGE_POSTGRES_PASSWORD=$(openssl rand -hex 24)
 ```
 
-Ensuite :
+Then:
 
 ```bash
 docker compose up -d
 ```
 
-Quand `docker compose ps` montre `nudge` en état `healthy`, ouvrez <http://localhost:8080>. Le premier écran crée le premier Membre. Les suivants sont invités depuis le dashboard, par un lien d'invitation.
+When `docker compose ps` shows `nudge` as `healthy`, open <http://localhost:8080>. The first screen creates the first Member. The next ones are invited from the dashboard, with an invitation link.
 
-Vous pouvez alors :
+You can then:
 
-1. créer un **Projet**. Ses clés publique et secrète ne s'affichent qu'une fois : notez-les, ou régénérez-les plus tard ;
-2. déclarer ses **Origines autorisées**, c'est-à-dire les sites où le Widget est installé (`https://app.exemple.com`) ;
-3. ajouter des **Destinations**, avec leur Filtre, et les tester depuis le dashboard ;
-4. choisir le **Juge** dans **Paramètres**. Sans Juge, nudge tourne en mode dégradé : il ne détecte ni Gravité, ni Indésirable, ni Manipulation, et chaque Verdict est Incertain.
+1. create a **Project**. Its public and secret keys are shown only once: write them down, or regenerate them later;
+2. declare its **Allowed origins**, that is the sites where the Widget is installed (`https://app.example.com`);
+3. add **Destinations**, with their Filter, and test them from the dashboard;
+4. choose the **Judge** in **Settings**. Without a Judge, nudge runs in degraded mode: it detects neither Severity, nor Junk, nor Manipulation, and every Verdict is Uncertain.
 
-### Ce que sert le port publié
+### What the published port serves
 
-Seul le conteneur `dashboard` publie un port (`NUDGE_PORT`, 8080 par défaut). Il sert tout sur la même origine :
+Only the `dashboard` container publishes a port (`NUDGE_PORT`, 8080 by default). It serves everything on the same origin:
 
-| Chemin                    | Contenu                                                       |
-| ------------------------- | ------------------------------------------------------------- |
-| `/`                       | le dashboard des Membres                                      |
-| `/api/…`                  | l'API du dashboard (session par cookie), relayée vers `nudge` |
-| `/v1/retours`             | l'ingestion publique (Widget et SDK), relayée vers `nudge`    |
-| `/widget/nudge-widget.js` | le Widget pour la balise script                               |
+| Path                      | Content                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `/`                       | the Members' dashboard                                    |
+| `/api/…`                  | the dashboard API (cookie session), relayed to `nudge`    |
+| `/v1/feedbacks`           | the public ingestion (Widget and SDK), relayed to `nudge` |
+| `/widget/nudge-widget.js` | the Widget for the script tag                             |
 
-Comme tout est servi sur la même origine, le cookie de session reste first-party, sans CORS.
+Because everything is served on the same origin, the session cookie stays first-party, without CORS.
 
-### En production : HTTPS
+### In production: HTTPS
 
-Placez un reverse proxy TLS (Caddy, Traefik, nginx…) devant le port publié, puis réglez :
+Put a TLS reverse proxy (Caddy, Traefik, nginx…) in front of the published port, then set:
 
-- `NUDGE_DASHBOARD_URL=https://nudge.exemple.com` pour que les Envois et les alertes portent un lien vers le Retour ;
-- `NUDGE_TRUST_PROXY=2`, c'est-à-dire votre proxy plus celui du dashboard. L'api lit l'IP du client dans `X-Forwarded-For`, ce qui sert au rate limit du Widget et à l'anti force brute de la connexion. Une valeur trop haute laisserait un client choisir son IP.
+- `NUDGE_DASHBOARD_URL=https://nudge.example.com` so that Deliveries and alerts carry a link to the Feedback;
+- `NUDGE_TRUST_PROXY=2`, that is your proxy plus the dashboard's. The api reads the client IP from `X-Forwarded-For`, which the Widget rate limit and the sign-in brute-force protection rely on. A value too high would let a client choose its IP.
 
-Le cookie de session est `Secure` : il faut donc HTTPS. Les navigateurs font une exception pour `http://localhost`. Pour essayer l'Instance en HTTP depuis une autre machine, `NUDGE_COOKIE_SECURE=false` lève cette protection, mais ne le faites jamais sur une Instance exposée.
+The session cookie is `Secure`, so HTTPS is required. Browsers make an exception for `http://localhost`. To try the Instance over HTTP from another machine, `NUDGE_COOKIE_SECURE=false` lifts this protection, but never do it on an exposed Instance.
 
-### Mettre à jour, sauvegarder, monter en charge
+### Updating, backing up, scaling
 
-- **Mettre à jour** : `docker compose pull && docker compose up -d`. Le service `migrate` applique les nouvelles migrations avant que `nudge` ne redémarre. Lisez les [notes de version](https://github.com/garage-sh/nudge/releases) avant de changer de version mineure. Il n'y a pas de migration descendante : revenir à une version précédente veut dire restaurer la sauvegarde de Postgres faite avant la mise à jour.
-- **Épingler une version** : `NUDGE_VERSION` dans `.env`. Par défaut, `latest` suit la dernière release. `0.1` reçoit les correctifs de la 0.1, et `0.1.2` ne bouge plus. Les images de `main`, non publiées en release, portent le tag `edge`.
-- **Vérifier une image** : chaque image publiée est signée avec cosign, sans clé, depuis la CI du dépôt.
+- **Updating**: `docker compose pull && docker compose up -d`. The `migrate` service applies the new migrations before `nudge` restarts. Read the [release notes](https://github.com/garage-sh/nudge/releases) before changing minor version. There are no down migrations: going back to a previous version means restoring the Postgres backup taken before the update.
+- **Pinning a version**: `NUDGE_VERSION` in `.env`. By default, `latest` follows the latest release. `0.1` receives the 0.1 fixes, and `0.1.2` never moves. Images built from `main`, not released, carry the `edge` tag.
+- **Verifying an image**: every published image is signed with cosign, keyless, from the repository's CI.
 
   ```bash
   cosign verify ghcr.io/garage-sh/nudge:latest \
@@ -78,139 +78,205 @@ Le cookie de session est `Secure` : il faut donc HTTPS. Les navigateurs font une
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 
-- **Sauvegarder** : les volumes `postgres` (la source de vérité), `captures` et `redis`, ainsi que la valeur de `NUDGE_ENCRYPTION_KEY`. Sans cette clé, les secrets stockés (clé du Juge, jetons des Destinations) sont illisibles et doivent être ressaisis. Redis ne porte que les queues : un Retour resté Reçu est remis au Triage tout seul, mais un Envoi en attente perdu avec Redis reste bloqué.
-- **Monter en charge** : par défaut, l'api et le worker tournent dans le même processus (`NUDGE_ROLES=api,worker`). Pour répliquer le worker sans répliquer l'api, téléchargez aussi [`docker-compose.worker.yml`](docker-compose.worker.yml), qui démarre la même image avec `NUDGE_ROLES=worker` :
+- **Backing up**: the `postgres` (the source of truth), `captures` and `redis` volumes, as well as the value of `NUDGE_ENCRYPTION_KEY`. Without this key, the stored secrets (Judge key, Destination tokens) are unreadable and must be entered again. Redis only holds the queues: a Feedback left Received goes back to Triage on its own, but a pending Delivery lost with Redis stays stuck.
+- **Scaling**: by default, the api and the worker run in the same process (`NUDGE_ROLES=api,worker`). To replicate the worker without replicating the api, also download [`docker-compose.worker.yml`](docker-compose.worker.yml) (attached to every release, like `docker-compose.yml`), which starts the same image with `NUDGE_ROLES=worker`:
 
   ```bash
   docker compose -f docker-compose.yml -f docker-compose.worker.yml up -d --scale worker=3
   ```
 
-  Les workers se partagent alors les queues, et un pic de Triage ne ralentit plus la collecte. L'api se réplique aussi, mais le rate limit du Widget est compté en mémoire, par réplique : avec N répliques, la limite effective est multipliée par N.
+  The workers then share the queues, and a Triage spike no longer slows down collection. The api can be replicated too, but the Widget rate limit is counted in memory, per replica: with N replicas, the effective limit is multiplied by N.
 
 ## Configuration
 
-Toute la configuration passe par des variables d'environnement. [`.env.example`](.env.example) les décrit une à une. Une variable vide prend sa valeur par défaut. Une valeur invalide empêche le serveur de démarrer, et l'erreur nomme la variable fautive.
+All configuration goes through environment variables. [`.env.example`](.env.example) describes them one by one. An empty variable takes its default value. An invalid value prevents the server from starting, and the error names the faulty variable.
 
-| Variable                                                                                                             | Rôle                                                                                         |
-| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `NUDGE_ENCRYPTION_KEY`                                                                                               | **Requise.** Clé d'Instance (32 octets, base64) : chiffre en AES-256-GCM les secrets en base |
-| `NUDGE_POSTGRES_PASSWORD`                                                                                            | **Requise** (compose). Mot de passe de Postgres                                              |
-| `NUDGE_PORT`, `NUDGE_DASHBOARD_URL`, `NUDGE_COOKIE_SECURE`, `NUDGE_TRUST_PROXY`                                      | Accès : port publié, URL publique, cookie HTTPS, proxys de confiance                         |
-| `NUDGE_WIDGET_LIMITE_IP`, `NUDGE_WIDGET_LIMITE_PROJET`                                                               | Rate limit du Widget, en Retours par minute (20 par IP, 600 par Projet)                      |
-| `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`, `NUDGE_JUDGE_BASE_URL`, `NUDGE_JUDGE_TIMEOUT_MS` | Juge par défaut et délai d'une requête au Juge (30 s)                                        |
-| `NUDGE_TRIAGE_SEUIL_INDESIRABLE`, `NUDGE_TRIAGE_SEUIL_MANIPULATION`, `NUDGE_TRIAGE_SEUIL_CONFIANCE`                  | Seuils de la politique de Verdict (0.8, 0.7, 0.6)                                            |
-| `NUDGE_SUSPENSION_SEUIL_ECHECS`, `NUDGE_SUSPENSION_REFROIDISSEMENT_MS`, `NUDGE_SUSPENSION_INTERVALLE_SONDE_MS`       | Suspension des Destinations (5 échecs, 5 min, sonde chaque minute)                           |
-| `NUDGE_PURGE_INTERVALLE_MS`                                                                                          | Période de la purge de Rétention (1 h)                                                       |
-| `NUDGE_CAPTURES_STOCKAGE`, `NUDGE_CAPTURES_DOSSIER`, `NUDGE_S3_*`                                                    | Stockage des Captures : disque ou S3-compatible                                              |
+| Variable                                                                                                             | Role                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `NUDGE_ENCRYPTION_KEY`                                                                                               | **Required.** Instance key (32 bytes, base64): encrypts the secrets stored in the database with AES-256-GCM |
+| `NUDGE_POSTGRES_PASSWORD`                                                                                            | **Required** (compose). Postgres password                                                                   |
+| `NUDGE_VERSION`, `NUDGE_ROLES`                                                                                       | Image version (compose, `latest`) and what the process runs (`api`, `worker`, default `api,worker`)         |
+| `NUDGE_PORT`, `NUDGE_DASHBOARD_URL`, `NUDGE_COOKIE_SECURE`, `NUDGE_TRUST_PROXY`                                      | Access: published port, public URL, HTTPS-only cookie, trusted proxies                                      |
+| `NUDGE_WIDGET_RATE_LIMIT_IP`, `NUDGE_WIDGET_RATE_LIMIT_PROJECT`                                                      | Widget rate limit, in Feedbacks per minute (20 per IP, 600 per Project)                                     |
+| `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`, `NUDGE_JUDGE_BASE_URL`, `NUDGE_JUDGE_TIMEOUT_MS` | Default Judge, and timeout of a request to the Judge (30 s)                                                 |
+| `NUDGE_TRIAGE_JUNK_THRESHOLD`, `NUDGE_TRIAGE_MANIPULATION_THRESHOLD`, `NUDGE_TRIAGE_CONFIDENCE_THRESHOLD`            | Thresholds of the Verdict policy (0.8, 0.7, 0.6)                                                            |
+| `NUDGE_SUSPENSION_FAILURE_THRESHOLD`, `NUDGE_SUSPENSION_COOLDOWN_MS`, `NUDGE_SUSPENSION_PROBE_INTERVAL_MS`           | Destination suspension (5 failures, 5 min, probe every minute)                                              |
+| `NUDGE_PURGE_INTERVAL_MS`                                                                                            | Period of the Retention purge (1 h)                                                                         |
+| `NUDGE_CAPTURES_STORAGE`, `NUDGE_CAPTURES_DIR`, `NUDGE_S3_*`                                                         | Capture storage: `disk` or S3-compatible (`s3`)                                                             |
 
-### Juge
+### Judge
 
-Le Juge se choisit dans le dashboard (**Paramètres**), et sa clé y est stockée chiffrée. Les variables `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL` et `NUDGE_JUDGE_BASE_URL` ne servent que de repli tant qu'aucun Juge n'est choisi ; `NUDGE_JUDGE_TIMEOUT_MS` s'applique toujours. Trois fournisseurs sont possibles :
+The Judge is chosen in the dashboard (**Settings**), and its key is stored there encrypted. The `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL` and `NUDGE_JUDGE_BASE_URL` variables are only a fallback as long as no Judge is chosen; `NUDGE_JUDGE_TIMEOUT_MS` always applies. Three providers are available:
 
-- `typesafe` : TypeSafe System One (Jev). Il demande `NUDGE_JUDGE_API_KEY` ;
-- `openrouter` : pplx-decider via l'API Decisions d'OpenRouter. Il demande `NUDGE_JUDGE_API_KEY` ;
-- `auto_heberge` : tout serveur qui expose l'API Decisions (pplx-decider auto-hébergé, par exemple). Il demande `NUDGE_JUDGE_BASE_URL`, et la clé y est facultative.
+- `typesafe`: TypeSafe System One (Jev, `jev-latest` by default). It requires `NUDGE_JUDGE_API_KEY`;
+- `openrouter`: pplx-decider through OpenRouter's Decisions API (`perplexity/pplx-decider-v1.2` by default). It requires `NUDGE_JUDGE_API_KEY`;
+- `self_hosted`: any server that exposes the Decisions API (a self-hosted pplx-decider, for example; `pplx-decider-flash-v1.2` by default). It requires `NUDGE_JUDGE_BASE_URL`, and the key is optional.
 
-Seuls le texte du Retour, son contexte non personnel et la Description du Projet partent au Juge, et uniquement comme donnée. La Capture ne lui est jamais transmise.
+Only the Feedback text, its non-personal context and the Project description are sent to the Judge, and only as data. The Capture is never sent to it.
 
 ### Captures
 
-Par défaut, les Captures sont écrites sur disque, dans le volume `captures` que l'api et le worker partagent. Pour un stockage objet S3-compatible (AWS S3, MinIO, Garage…), réglez `NUDGE_CAPTURES_STOCKAGE=s3` ainsi que `NUDGE_S3_ENDPOINT`, `NUDGE_S3_BUCKET`, `NUDGE_S3_ACCESS_KEY_ID` et `NUDGE_S3_SECRET_ACCESS_KEY`. `NUDGE_S3_REGION`, `NUDGE_S3_PREFIXE` et `NUDGE_S3_STYLE_CHEMIN` sont facultatives. Les Captures déjà sur disque ne sont pas migrées vers S3.
+By default, Captures are written to disk (`NUDGE_CAPTURES_STORAGE=disk`), in the `captures` volume that the api and the worker share. For S3-compatible object storage (AWS S3, MinIO, Garage…), set `NUDGE_CAPTURES_STORAGE=s3` as well as `NUDGE_S3_ENDPOINT`, `NUDGE_S3_BUCKET`, `NUDGE_S3_ACCESS_KEY_ID` and `NUDGE_S3_SECRET_ACCESS_KEY`. `NUDGE_S3_REGION` (`us-east-1`), `NUDGE_S3_PREFIX` and `NUDGE_S3_FORCE_PATH_STYLE` (`true`) are optional. Captures already on disk are not migrated to S3.
 
-## Intégrer un Projet
+## Integrating a Project
 
-### Widget : balise script
+### Widget: script tag
 
 ```html
 <script
-  src="https://nudge.exemple.com/widget/nudge-widget.js"
-  data-cle="nk_pub_…"
-  data-api="https://nudge.exemple.com"
+  src="https://nudge.example.com/widget/nudge-widget.js"
+  data-public-key="nk_pub_…"
+  data-api="https://nudge.example.com"
 ></script>
 ```
 
-Le Widget ajoute à la page un bouton « Laisser un retour » qui ouvre un formulaire. Il est isolé dans un Shadow DOM : son CSS et celui de la page ne se perturbent pas. Il n'est accepté que depuis les **Origines autorisées** du Projet. Il joint automatiquement l'URL de la page, le navigateur, l'OS et la taille de l'écran.
+The Widget adds a "Send feedback" button to the page, which opens a form. It is isolated in a Shadow DOM: its CSS and the page's do not interfere. It is only accepted from the Project's **Allowed origins**. It automatically attaches the page URL, the browser, the OS and the screen size.
 
-Pour transmettre l'identité de l'utilisateur connecté et des métadonnées, omettez `data-cle` et `data-api` et montez le Widget vous-même :
+**Language.** The Widget speaks English and French. Without a `locale`, it follows the page's `<html lang>`, then the browser's language: French if either is French, English otherwise. To force it, add `data-locale="en"` or `data-locale="fr"` to the script tag (or the `locale` option below).
+
+To pass the signed-in user's identity and metadata, omit `data-public-key` and `data-api` and mount the Widget yourself:
 
 ```html
-<script src="https://nudge.exemple.com/widget/nudge-widget.js"></script>
+<script src="https://nudge.example.com/widget/nudge-widget.js"></script>
 <script>
-  Nudge.monterWidget({
-    cle: 'nk_pub_…',
-    api: 'https://nudge.exemple.com',
-    auteur: { id: 'u-42', email: 'ada@exemple.com', nom: 'Ada' },
-    metadonnees: { version: '2.3.1', environnement: 'production' },
+  Nudge.mountWidget({
+    publicKey: 'nk_pub_…',
+    api: 'https://nudge.example.com',
+    author: { id: 'u-42', email: 'ada@example.com', name: 'Ada' },
+    metadata: { version: '2.3.1', environment: 'production' },
+    locale: 'en', // optional: 'en' | 'fr', detected when omitted
   });
 </script>
 ```
 
-Une identité venue du navigateur est enregistrée comme **déclarée**, jamais comme attestée : n'importe qui peut la falsifier. Pour une identité digne de confiance, envoyez le Retour depuis votre serveur avec le SDK.
+The script also defines the `<nudge-widget>` custom element, which you can place yourself: `<nudge-widget public-key="nk_pub_…" api="https://nudge.example.com" locale="fr"></nudge-widget>`, with `author` and `metadata` set as properties.
 
-**Captures.** L'Auteur peut cocher « Joindre une capture de la page ». Il voit alors un aperçu, sur lequel il peut flouter des zones avant l'envoi, et rien n'est capturé sans son accord. Marquez les éléments sensibles avec `data-nudge-mask` : ils sont toujours masqués, dans le navigateur, avant que l'image ne quitte la page.
+An identity coming from the browser is recorded as **declared**, never as attested: anyone can forge it. For a trustworthy identity, send the Feedback from your server with the SDK.
+
+**Captures.** The Author can tick "Attach a screenshot of the page". They then see a preview, on which they can blur areas before sending, and nothing is captured without their consent. Mark sensitive elements with `data-nudge-mask`: they are always masked, in the browser, before the image leaves the page.
 
 ```html
-<div data-nudge-mask>IBAN : FR76 …</div>
+<div data-nudge-mask>IBAN: FR76 …</div>
 ```
 
-### Widget : composant React
+### Widget: React component
 
-`@nudge/widget` (dans `packages/widget`) fournit aussi le web component en ESM et un wrapper React. Le package n'est pas encore publié sur npm.
+`@nudge/widget` (in `packages/widget`) also provides the web component as ESM and a React wrapper. The package is not yet published on npm.
 
 ```tsx
 import { NudgeWidget } from '@nudge/widget/react';
 
-<NudgeWidget cle="nk_pub_…" api="https://nudge.exemple.com" auteur={{ id: user.id }} />;
+<NudgeWidget
+  publicKey="nk_pub_…"
+  api="https://nudge.example.com"
+  author={{ id: user.id }}
+  locale="en"
+/>;
 ```
 
-### SDK JS : depuis un serveur
+### JS SDK: from a server
 
-`@nudge/sdk` (dans `packages/sdk`, pas encore publié sur npm) poste des Retours avec la **clé secrète** du Projet. L'Auteur transmis est alors **attesté**. La Source du Retour est `api`. La clé secrète ne doit jamais quitter le serveur.
+`@nudge/sdk` (in `packages/sdk`, not yet published on npm) posts Feedback with the Project's **secret key**. The Author passed is then **attested**. The Feedback's Source is `api`. The secret key must never leave the server.
 
 ```ts
-import { creerClient, ErreurNudge } from '@nudge/sdk';
+import { createClient, NudgeError } from '@nudge/sdk';
 
-const nudge = creerClient({
-  url: 'https://nudge.exemple.com',
-  cleSecrete: process.env.NUDGE_CLE_SECRETE!, // nk_sec_…
+const nudge = createClient({
+  url: 'https://nudge.example.com',
+  secretKey: process.env.NUDGE_SECRET_KEY!, // nk_sec_…
 });
 
 try {
-  const { id } = await nudge.envoyerRetour({
-    texte: 'Impossible de télécharger ma facture',
-    type: 'bug', // facultatif : bug | suggestion | avis | question
-    auteur: { id: 'u-42', email: 'ada@exemple.com' },
-    contexte: { url: 'https://app.exemple.com/factures', metadonnees: { plan: 'pro' } },
+  const { id } = await nudge.sendFeedback({
+    text: 'I cannot download my invoice',
+    type: 'bug', // optional: bug | suggestion | opinion | question
+    author: { id: 'u-42', email: 'ada@example.com' },
+    context: { url: 'https://app.example.com/invoices', metadata: { plan: 'pro' } },
   });
-} catch (erreur) {
-  if (erreur instanceof ErreurNudge) console.error(erreur.statut, erreur.code, erreur.details);
+} catch (error) {
+  if (error instanceof NudgeError) console.error(error.status, error.code, error.details);
 }
 ```
 
-Le SDK ne retente pas un envoi de lui-même. Passez `{ signal }` en second argument pour borner l'appel dans le temps.
+The SDK does not retry a submission on its own. Pass `{ signal }` as the second argument to bound the call in time.
 
-### API HTTP
+### HTTP API
 
-Le Widget et le SDK appellent tous deux `POST /v1/retours`, avec l'en-tête `Authorization: Bearer <clé>`. La clé publique est celle du Widget et exige l'en-tête `Origin` ; la clé secrète est celle du serveur.
+The Widget and the SDK both call `POST /v1/feedbacks`, with the `Authorization: Bearer <key>` header. The public key is the Widget's and requires the `Origin` header; the secret key is the server's.
 
-| Champ      | Contenu                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| `texte`    | requis, 5 000 caractères au plus                                                                |
-| `type`     | facultatif : `bug`, `suggestion`, `avis` ou `question`                                          |
-| `auteur`   | facultatif : `id`, `email`, `nom`                                                               |
-| `contexte` | facultatif : `url`, `userAgent`, `viewport {largeur, hauteur}`, `metadonnees` (50 clés au plus) |
-| `capture`  | facultatif : `{ contentType: 'image/png' \| 'image/jpeg', data: <base64> }`, 2 Mio au plus      |
+| Field     | Content                                                                                 |
+| --------- | --------------------------------------------------------------------------------------- |
+| `text`    | required, 5,000 characters at most                                                      |
+| `type`    | optional: `bug`, `suggestion`, `opinion` or `question`                                  |
+| `author`  | optional: `id`, `email`, `name`                                                         |
+| `context` | optional: `url`, `userAgent`, `viewport {width, height}`, `metadata` (50 keys at most)  |
+| `capture` | optional: `{ contentType: 'image/png' \| 'image/jpeg', data: <base64> }`, 2 MiB at most |
 
-L'API répond `202 { id, etat: 'recu' }`. En cas de refus, elle renvoie `{ erreur, details? }` avec l'un de ces codes :
+The API answers `202 { id, state: 'received' }`. On refusal, it returns `{ error, details? }` with one of these codes:
 
-- `400 retour_invalide` : le corps est mal formé ;
-- `401 cle_manquante` ou `cle_invalide` : la clé est absente ou refusée ;
-- `403 origine_refusee` : l'origine n'est pas autorisée pour ce Projet ;
-- `429 trop_de_retours` : le rate limit est atteint. La réponse porte `Retry-After`.
+- `400 invalid_feedback`: the body is malformed (`details` lists the refused fields as `{ path, message }`);
+- `401 missing_key` or `invalid_key`: the key is missing or rejected;
+- `403 origin_refused`: the origin is not allowed for this Project;
+- `429 too_many_feedbacks`: the rate limit is reached. The response carries `Retry-After`.
 
-## Développer
+### Webhook Destination
 
-Il faut Node 26 (`.nvmrc`) et Docker. Yarn 4 est fourni par le dépôt (`.yarn/releases`).
+A webhook Destination receives a JSON `POST` per event. Its signing secret is generated by the Instance and shown only once, when the Destination is created (it can be regenerated from the dashboard). Redirects are not followed, and any non-2xx response counts as a failure.
+
+| Header                               | Content                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `X-Nudge-Event`                      | `feedback`, `alert` (when the webhook is the Alert destination) or `ping` (health probe) |
+| `X-Nudge-Delivery` / `X-Nudge-Alert` | stable id of the Delivery or the alert: use it to ignore a retried delivery              |
+| `X-Nudge-Timestamp`                  | Unix time, in seconds                                                                    |
+| `X-Nudge-Signature`                  | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret          |
+
+A `feedback` event looks like this (`isTest` is `true` for the dashboard's test button):
+
+```json
+{
+  "event": "feedback",
+  "isTest": false,
+  "delivery": { "id": "…" },
+  "project": { "id": "…", "name": "Billing" },
+  "feedback": {
+    "id": "…",
+    "text": "I cannot download my invoice",
+    "source": "widget",
+    "type": "bug",
+    "severity": "major",
+    "uncertain": false,
+    "author": { "id": "u-42", "email": "ada@example.com", "name": null, "trust": "declared" },
+    "context": { "url": "https://app.example.com/invoices" },
+    "capture": null,
+    "receivedAt": "2026-10-25T09:30:00.000Z",
+    "dashboardUrl": "https://nudge.example.com/…"
+  }
+}
+```
+
+`capture` is `{ contentType, data }` (base64) when the Feedback has one. An `alert` event carries `alert: { id, type, at, title, summary, project, dashboardUrl }`, plus `feedback: { id }` for `feedback_in_review` or `destination: { id, name, failureClass, message }` for `destination_suspended`. The text is sent raw, as the Author wrote it: encode it for wherever you display it.
+
+To verify the signature, recompute it over the raw body, before parsing it:
+
+```ts
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function verifyNudgeSignature(rawBody: string, headers: Headers, secret: string): boolean {
+  const timestamp = headers.get('x-nudge-timestamp') ?? '';
+  const signature = headers.get('x-nudge-signature') ?? '';
+  // Reject deliveries older than 5 minutes, against replays.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const expected = `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')}`;
+  return (
+    signature.length === expected.length &&
+    timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+  );
+}
+```
+
+## Development
+
+You need Node 26 (`.nvmrc`) and Docker. Yarn 4 is shipped in the repository (`.yarn/releases`).
 
 ```bash
 yarn install
@@ -220,32 +286,32 @@ REDIS_URL=redis://localhost:6379
 NUDGE_ENCRYPTION_KEY=$(openssl rand -base64 32)
 NUDGE_COOKIE_SECURE=false
 NUDGE_DASHBOARD_URL=http://localhost:5173
-NUDGE_CAPTURES_DOSSIER=$PWD/.data/captures
+NUDGE_CAPTURES_DIR=$PWD/.data/captures
 EOF
-yarn dev:infra             # Postgres et Redis (docker-compose.dev.yml)
+yarn dev:infra             # Postgres and Redis (docker-compose.dev.yml)
 yarn db:migrate
-yarn dev                   # api et worker sur :3000, dashboard sur :5173 (relaie /api vers :3000)
+yarn dev                   # api and worker on :3000, dashboard on :5173 (relays /api to :3000)
 ```
 
-L'api et les scripts `db:*` lisent le `.env` racine ; une variable déjà exportée dans le shell l'emporte. Les autres variables sont décrites dans `.env.example`.
+The api and the `db:*` scripts read the root `.env`; a variable already exported in the shell takes precedence. The other variables are described in `.env.example`.
 
-`yarn dev` relance `dev:infra`, construit les packages dont dépendent les apps, puis démarre l'api (avec le worker) et le dashboard en mode watch. Une seule app : `yarn workspace @nudge/api dev`. Le worker est la bibliothèque `packages/worker`, que l'api démarre selon `NUDGE_ROLES`.
+`yarn dev` runs `dev:infra` again, builds the packages the apps depend on, then starts the api (with the worker) and the dashboard in watch mode. A single app: `yarn workspace @nudge/api dev`. The worker is the `packages/worker` library, which the api starts according to `NUDGE_ROLES`.
 
-Pour construire et lancer les images depuis les sources plutôt que de les tirer de ghcr.io :
+To build and run the images from source rather than pulling them from ghcr.io:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Pour vérifier une modification :
+To check a change:
 
-- `yarn check-types` vérifie les types ;
-- `yarn test` lance les tests (les tests du pipeline démarrent Postgres et Redis avec testcontainers) ;
-- `yarn workspace @nudge/widget test:e2e` lance les tests navigateur du Widget (Playwright) ;
-- `yarn lint` lance le lint.
+- `yarn check-types` checks the types;
+- `yarn test` runs the tests (the pipeline tests start Postgres and Redis with testcontainers);
+- `yarn workspace @nudge/widget test:e2e` runs the Widget's browser tests (Playwright);
+- `yarn lint` runs the linter.
 
-Pour contribuer, lisez [`CONTRIBUTING.md`](CONTRIBUTING.md). Pour signaler une faille, lisez [`SECURITY.md`](SECURITY.md).
+To contribute, read [`CONTRIBUTING.md`](CONTRIBUTING.md). To report a vulnerability, read [`SECURITY.md`](SECURITY.md).
 
-## Licence
+## License
 
-[AGPL-3.0](LICENSE). Si vous modifiez nudge et l'offrez comme service, vous devez publier vos modifications.
+[AGPL-3.0](LICENSE). If you modify nudge and offer it as a service, you must publish your modifications.

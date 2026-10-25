@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type Pipeline } from './harness/index.js';
 
-/** Un Envoi est identifié par (Retour, Destination) : rejouer un job ne crée pas de doublon. */
-describe('Idempotence des Envois', () => {
+/** A Delivery is identified by (Feedback, Destination): replaying a job creates no duplicate. */
+describe('Delivery idempotence', () => {
   let pipeline: Pipeline;
 
   beforeAll(async () => {
@@ -13,46 +13,46 @@ describe('Idempotence des Envois', () => {
     await pipeline?.stop();
   });
 
-  async function retourLivre(nom: string) {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom });
-    const { fake } = await pipeline.createDestination(projet.id);
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
-    const reponse = await pipeline.postRetour(cleSecrete, { texte: `Retour de ${nom}` });
-    const { id } = (await reponse.json()) as { id: string };
-    const retour = await pipeline.waitForRetour(id, (r) =>
-      r.envois.some((e) => e.statut === 'livre'),
+  async function deliveredFeedback(name: string) {
+    const { project, secretKey } = await pipeline.createProject({ name });
+    const { fake } = await pipeline.createDestination(project.id);
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
+    const response = await pipeline.postFeedback(secretKey, { text: `Feedback from ${name}` });
+    const { id } = (await response.json()) as { id: string };
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((e) => e.status === 'delivered'),
     );
-    return { retour, fake };
+    return { feedback, fake };
   }
 
-  it('un job de Triage rejoué ne crée ni second Envoi ni second appel à la Destination', async () => {
-    const { retour, fake } = await retourLivre('Triage rejoué');
+  it('a replayed Triage job creates neither a second Delivery nor a second call to the Destination', async () => {
+    const { feedback, fake } = await deliveredFeedback('Replayed Triage');
 
-    await pipeline.rejouerTriage(retour.id);
+    await pipeline.replayTriage(feedback.id);
 
-    const apres = await pipeline.readRetour(retour.id);
-    expect(apres?.envois).toEqual(retour.envois);
+    const after = await pipeline.readFeedback(feedback.id);
+    expect(after?.deliveries).toEqual(feedback.deliveries);
     expect(fake.attempts).toHaveLength(1);
   });
 
-  it('un job de Triage rejoué après le Dispatch ne sert pas une Destination ajoutée depuis', async () => {
-    const { retour, fake } = await retourLivre('Destination ajoutée après');
-    const ajoutee = await pipeline.createDestination(retour.projetId, { nom: 'Ajoutée après' });
+  it('a Triage job replayed after the Dispatch does not serve a Destination added since', async () => {
+    const { feedback, fake } = await deliveredFeedback('Destination added after');
+    const added = await pipeline.createDestination(feedback.projectId, { name: 'Added after' });
 
-    await pipeline.rejouerTriage(retour.id);
+    await pipeline.replayTriage(feedback.id);
 
-    expect((await pipeline.readRetour(retour.id))?.envois).toEqual(retour.envois);
-    expect(ajoutee.fake.attempts).toHaveLength(0);
+    expect((await pipeline.readFeedback(feedback.id))?.deliveries).toEqual(feedback.deliveries);
+    expect(added.fake.attempts).toHaveLength(0);
     expect(fake.attempts).toHaveLength(1);
   });
 
-  it('un job de Dispatch rejoué ne livre pas une seconde fois un Envoi déjà livré', async () => {
-    const { retour, fake } = await retourLivre('Dispatch rejoué');
-    const [envoi] = retour.envois;
+  it('a replayed Dispatch job does not deliver an already delivered Delivery a second time', async () => {
+    const { feedback, fake } = await deliveredFeedback('Replayed Dispatch');
+    const [delivery] = feedback.deliveries;
 
-    await pipeline.rejouerDispatch(envoi!.id);
+    await pipeline.replayDispatch(delivery!.id);
 
-    expect((await pipeline.readRetour(retour.id))?.envois).toEqual(retour.envois);
+    expect((await pipeline.readFeedback(feedback.id))?.deliveries).toEqual(feedback.deliveries);
     expect(fake.attempts).toHaveLength(1);
   });
 });

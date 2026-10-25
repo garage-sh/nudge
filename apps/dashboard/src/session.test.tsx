@@ -1,84 +1,84 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { CONNECTE, fakeApi, MEMBRE, SANS_SESSION } from './test/fake-api.js';
+import { SIGNED_IN, fakeApi, MEMBER, NO_SESSION } from './test/fake-api.js';
 import { renderDashboard } from './test/render.js';
 
-describe('Session du dashboard', () => {
-  it('envoie au setup tant qu’aucun Membre n’existe', async () => {
+describe('Dashboard session', () => {
+  it('sends to the setup while no Member exists', async () => {
     fakeApi({
-      'GET /api/session': SANS_SESSION,
-      'GET /api/setup': { status: 200, body: { requis: true } },
+      'GET /api/session': NO_SESSION,
+      'GET /api/setup': { status: 200, body: { required: true } },
     });
 
-    renderDashboard('/projets');
+    renderDashboard('/projects');
 
-    expect(await screen.findByRole('heading', { name: /premier compte/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /first account/i })).toBeTruthy();
   });
 
-  it('envoie à la connexion sans session, puis revient à la page demandée', async () => {
+  it('sends to sign in without a session, then back to the requested page', async () => {
     const api = fakeApi({
-      'GET /api/session': SANS_SESSION,
-      'GET /api/setup': { status: 200, body: { requis: false } },
-      'POST /api/session': CONNECTE,
-      'GET /api/projets': { status: 200, body: [] },
+      'GET /api/session': NO_SESSION,
+      'GET /api/setup': { status: 200, body: { required: false } },
+      'POST /api/session': SIGNED_IN,
+      'GET /api/projects': { status: 200, body: [] },
     });
-    renderDashboard('/projets');
+    renderDashboard('/projects');
 
-    await userEvent.type(await screen.findByLabelText(/email/i), MEMBRE.email);
-    await userEvent.type(screen.getByLabelText(/mot de passe/i), 'un mot de passe solide');
-    await userEvent.click(screen.getByRole('button', { name: /se connecter/i }));
+    await userEvent.type(await screen.findByLabelText(/email/i), MEMBER.email);
+    await userEvent.type(screen.getByLabelText(/password/i), 'a strong password');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
-    expect(await screen.findByRole('heading', { name: 'Projets' })).toBeTruthy();
-    expect(screen.getByText(MEMBRE.email)).toBeTruthy();
-    expect(api.appels.find((a) => a.route === 'POST /api/session')?.corps).toEqual({
-      email: MEMBRE.email,
-      motDePasse: 'un mot de passe solide',
+    expect(await screen.findByRole('heading', { name: 'Projects' })).toBeTruthy();
+    expect(screen.getByText(MEMBER.email)).toBeTruthy();
+    expect(api.calls.find((c) => c.route === 'POST /api/session')?.body).toEqual({
+      email: MEMBER.email,
+      password: 'a strong password',
     });
   });
 
-  it('affiche un refus de connexion sans quitter la page', async () => {
+  it('shows a refused sign-in without leaving the page', async () => {
     fakeApi({
-      'GET /api/session': SANS_SESSION,
-      'GET /api/setup': { status: 200, body: { requis: false } },
-      'POST /api/session': { status: 401, body: { erreur: 'identifiants_invalides' } },
+      'GET /api/session': NO_SESSION,
+      'GET /api/setup': { status: 200, body: { required: false } },
+      'POST /api/session': { status: 401, body: { error: 'invalid_credentials' } },
     });
-    renderDashboard('/connexion');
+    renderDashboard('/sign-in');
 
-    await userEvent.type(await screen.findByLabelText(/email/i), MEMBRE.email);
-    await userEvent.type(screen.getByLabelText(/mot de passe/i), 'mauvais');
-    await userEvent.click(screen.getByRole('button', { name: /se connecter/i }));
+    await userEvent.type(await screen.findByLabelText(/email/i), MEMBER.email);
+    await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      expect.stringMatching(/email ou mot de passe incorrect/i),
+      expect.stringMatching(/incorrect email or password/i),
     );
   });
 
-  it('revient à la connexion quand l’API signale la session perdue', async () => {
+  it('goes back to sign in when the API reports the session lost', async () => {
     fakeApi({
-      'GET /api/session': CONNECTE,
-      'GET /api/setup': { status: 200, body: { requis: false } },
-      'GET /api/projets': SANS_SESSION,
+      'GET /api/session': SIGNED_IN,
+      'GET /api/setup': { status: 200, body: { required: false } },
+      'GET /api/projects': NO_SESSION,
     });
 
-    renderDashboard('/projets');
+    renderDashboard('/projects');
 
-    expect(await screen.findByRole('button', { name: /se connecter/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
   });
 
-  it('se déconnecte', async () => {
+  it('signs out', async () => {
     const api = fakeApi({
-      'GET /api/session': CONNECTE,
-      'GET /api/setup': { status: 200, body: { requis: false } },
-      'GET /api/projets': { status: 200, body: [] },
+      'GET /api/session': SIGNED_IN,
+      'GET /api/setup': { status: 200, body: { required: false } },
+      'GET /api/projects': { status: 200, body: [] },
       'DELETE /api/session': { status: 204 },
     });
-    renderDashboard('/projets');
+    renderDashboard('/projects');
 
-    await userEvent.click(await screen.findByRole('button', { name: /se déconnecter/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /sign out/i }));
 
-    expect(await screen.findByRole('button', { name: /se connecter/i })).toBeTruthy();
-    expect(api.appels.map((a) => a.route)).toContain('DELETE /api/session');
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
+    expect(api.calls.map((c) => c.route)).toContain('DELETE /api/session');
   });
 });

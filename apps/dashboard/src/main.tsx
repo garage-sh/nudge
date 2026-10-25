@@ -5,9 +5,9 @@ import '@fontsource-variable/instrument-sans';
 import '@fontsource/jetbrains-mono/400.css';
 import './styles.css';
 
-const racine = document.getElementById('racine');
-if (!racine) throw new Error('Élément #racine introuvable');
-createRoot(racine).render(
+const root = document.getElementById('root');
+if (!root) throw new Error('Element #root not found');
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,

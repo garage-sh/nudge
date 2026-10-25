@@ -1,22 +1,23 @@
 import { createElement, useLayoutEffect, useRef } from 'react';
-import { definirWidget, NOM_ELEMENT, type NudgeWidget as ElementWidget } from './index.js';
-import type { OptionsWidget } from './options.js';
+import { defineWidget, ELEMENT_NAME, type NudgeWidget as WidgetElement } from './index.js';
+import type { WidgetOptions } from './options.js';
 
-export type { AuteurDeclare, Metadonnees, OptionsWidget } from './options.js';
+export type { Locale } from './locales/index.js';
+export type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
 
-export type NudgeWidgetProps = OptionsWidget;
+export type NudgeWidgetProps = WidgetOptions;
 
 /**
- * Le Widget en composant React : `<NudgeWidget cle="nk_pub_…" api="…" auteur={…} />`.
- * L'élément est monté une fois ; un changement de props met à jour ses propriétés
- * sans le recréer, de sorte qu'un formulaire en cours de saisie reste ouvert.
+ * The Widget as a React component: `<NudgeWidget publicKey="nk_pub_…" api="…" author={…} />`.
+ * The element is mounted once; a props change updates its properties without
+ * recreating it, so a form being filled in stays open.
  */
-export function NudgeWidget({ cle, api, auteur, metadonnees }: NudgeWidgetProps) {
-  const ref = useRef<ElementWidget>(null);
+export function NudgeWidget({ publicKey, api, author, metadata, locale }: NudgeWidgetProps) {
+  const ref = useRef<WidgetElement>(null);
   useLayoutEffect(() => {
-    // Défini avant d'écrire les propriétés : l'élément est alors mis à niveau.
-    definirWidget();
-    ref.current?.configurer({ cle, api, auteur, metadonnees });
-  }, [cle, api, auteur, metadonnees]);
-  return createElement(NOM_ELEMENT, { ref });
+    // Defined before writing the properties: the element is then upgraded.
+    defineWidget();
+    ref.current?.configure({ publicKey, api, author, metadata, locale });
+  }, [publicKey, api, author, metadata, locale]);
+  return createElement(ELEMENT_NAME, { ref });
 }

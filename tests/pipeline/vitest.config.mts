@@ -1,14 +1,14 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import { resolutionSources, swcNest } from '../../vitest.shared.mts';
+import { sourceResolution, swcNest } from '../../vitest.shared.mts';
 
 export default mergeConfig(
-  resolutionSources,
+  sourceResolution,
   defineConfig({
     plugins: [swcNest()],
     test: {
       name: '@nudge/pipeline-tests',
-      // Un conteneur Postgres et un conteneur Redis pour toute la suite ;
-      // chaque `startPipeline()` s'isole dans sa propre base et son propre préfixe de queues.
+      // One Postgres container and one Redis container for the whole suite;
+      // each `startPipeline()` isolates itself in its own database and queue prefix.
       globalSetup: ['./src/harness/containers.ts'],
       testTimeout: 30_000,
       hookTimeout: 120_000,

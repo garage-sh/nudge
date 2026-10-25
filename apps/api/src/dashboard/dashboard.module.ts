@@ -6,13 +6,13 @@ import {
 } from '@nestjs/common';
 import type { DestinationAdapterResolver } from '@nudge/core';
 import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
-import { AlertesController } from './alertes/alertes.controller.js';
-import { AlertesService } from './alertes/alertes.service.js';
+import { AlertsController } from './alerts/alerts.controller.js';
+import { AlertsService } from './alerts/alerts.service.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
-import { MembresController } from './auth/membres.controller.js';
-import { MembresService } from './auth/membres.service.js';
+import { MembersController } from './auth/members.controller.js';
+import { MembersService } from './auth/members.service.js';
 import type { SessionCookieOptions } from './auth/session-cookie.js';
 import { SessionController } from './auth/session.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
@@ -20,44 +20,44 @@ import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
 import { DestinationsController } from './destinations/destinations.controller.js';
 import { DestinationsService } from './destinations/destinations.service.js';
-import { DestinationAlerteService } from './instance/destination-alerte.service.js';
+import { AlertDestinationService } from './instance/alert-destination.service.js';
 import { InstanceController } from './instance/instance.controller.js';
-import { JugeInstanceService } from './instance/juge-instance.service.js';
-import { RetentionInstanceService } from './instance/retention-instance.service.js';
-import { ProjetsController } from './projets/projets.controller.js';
-import { ProjetsService } from './projets/projets.service.js';
-import { EnvoisController } from './retours/envois.controller.js';
-import { EnvoisService } from './retours/envois.service.js';
-import { RetoursController } from './retours/retours.controller.js';
-import { RetoursService } from './retours/retours.service.js';
-import { RedispatchService } from './retours/redispatch.service.js';
-import { RevueService } from './retours/revue.service.js';
+import { InstanceJudgeService } from './instance/instance-judge.service.js';
+import { InstanceRetentionService } from './instance/instance-retention.service.js';
+import { ProjectsController } from './projects/projects.controller.js';
+import { ProjectsService } from './projects/projects.service.js';
+import { DeliveriesController } from './feedbacks/deliveries.controller.js';
+import { DeliveriesService } from './feedbacks/deliveries.service.js';
+import { FeedbacksController } from './feedbacks/feedbacks.controller.js';
+import { FeedbacksService } from './feedbacks/feedbacks.service.js';
+import { RedispatchService } from './feedbacks/redispatch.service.js';
+import { ReviewService } from './feedbacks/review.service.js';
 import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
   readonly sessionCookie: SessionCookieOptions;
-  /** Adaptateurs de Destination, pour l'envoi d'essai du bouton « tester ». */
+  /** Destination adapters, for the test delivery of the "test" button. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
 
-/** Contrôleurs de l'API du dashboard : tous passent par `ClientHeaderMiddleware`. */
+/** Controllers of the dashboard API: all go through `ClientHeaderMiddleware`. */
 const CONTROLLERS = [
   SetupController,
   SessionController,
   InvitationsController,
-  MembresController,
-  ProjetsController,
-  RetoursController,
-  EnvoisController,
+  MembersController,
+  ProjectsController,
+  FeedbacksController,
+  DeliveriesController,
   InstanceController,
   DestinationsController,
-  AlertesController,
+  AlertsController,
 ];
 
 /**
- * API du dashboard, sous `/api/…`, authentifiée par session de Membre.
- * Un écran qui a besoin d'un endpoint ajoute son contrôleur à `CONTROLLERS`, gardé
- * par `SessionGuard`, et ses services aux `providers`.
+ * Dashboard API, under `/api/…`, authenticated by Member session.
+ * A screen that needs an endpoint adds its controller to `CONTROLLERS`, guarded by
+ * `SessionGuard`, and its services to the `providers`.
  */
 @Module({})
 export class DashboardModule implements NestModule {
@@ -68,18 +68,18 @@ export class DashboardModule implements NestModule {
       providers: [
         { provide: SESSION_COOKIE_OPTIONS, useValue: options.sessionCookie },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
-        MembresService,
+        MembersService,
         SessionsService,
         InvitationsService,
-        ProjetsService,
-        RetoursService,
-        RevueService,
+        ProjectsService,
+        FeedbacksService,
+        ReviewService,
         RedispatchService,
-        EnvoisService,
-        JugeInstanceService,
-        RetentionInstanceService,
-        DestinationAlerteService,
-        AlertesService,
+        DeliveriesService,
+        InstanceJudgeService,
+        InstanceRetentionService,
+        AlertDestinationService,
+        AlertsService,
         DestinationsService,
         SessionGuard,
         AuthThrottleGuard,

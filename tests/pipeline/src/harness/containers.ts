@@ -11,29 +11,29 @@ declare module 'vitest' {
 }
 
 /**
- * testcontainers ne lit pas le contexte Docker courant (Colima, Docker Desktop…) :
- * sans `DOCKER_HOST`, on le prend au contexte actif. Le socket monté dans le
- * conteneur Ryuk est celui de la VM, pas celui du poste.
+ * testcontainers does not read the current Docker context (Colima, Docker Desktop…):
+ * without `DOCKER_HOST`, it is taken from the active context. The socket mounted in
+ * the Ryuk container is the VM's, not the host's.
  */
 function configureDocker(): void {
   if (process.env.DOCKER_HOST) return;
   try {
-    const hote = execFileSync(
+    const host = execFileSync(
       'docker',
       ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'],
       { encoding: 'utf8' },
     ).trim();
-    if (!hote || hote === 'unix:///var/run/docker.sock') return;
-    process.env.DOCKER_HOST = hote;
+    if (!host || host === 'unix:///var/run/docker.sock') return;
+    process.env.DOCKER_HOST = host;
     process.env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE ??= '/var/run/docker.sock';
   } catch {
-    // Pas de CLI docker : testcontainers tentera ses stratégies par défaut.
+    // No docker CLI: testcontainers will try its default strategies.
   }
 }
 
 /**
- * Setup global : un Postgres et un Redis pour toute la suite. Chaque pipeline
- * démarré s'y isole (base dédiée, préfixe de queues dédié).
+ * Global setup: one Postgres and one Redis for the whole suite. Each pipeline
+ * started isolates itself in them (dedicated database, dedicated queue prefix).
  */
 export default async function setup(project: TestProject) {
   configureDocker();

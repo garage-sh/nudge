@@ -1,18 +1,18 @@
-import { MODELES_JUGE_PAR_DEFAUT } from '@nudge/shared';
-import { jugeDecisions } from './decisions-http.js';
-import type { Juge } from './port.js';
-import { joinUrl, type OptionsAdaptateur } from './url.js';
+import { DEFAULT_JUDGE_MODELS } from '@nudge/shared';
+import { decisionsJudge } from './decisions-http.js';
+import type { Judge } from './port.js';
+import { joinUrl, type AdapterOptions } from './url.js';
 
-/** Hôte de l'API TypeSafe (https://docs.typesafe.ai/api/system-one). */
-export const URL_TYPESAFE = 'https://api.typesafe.ai';
+/** TypeSafe API host (https://docs.typesafe.ai/api/system-one). */
+export const TYPESAFE_URL = 'https://api.typesafe.ai';
 
-/** Jev, par l'API systemone de TypeSafe : `POST /v1/systemone`. */
-export function jugeTypeSafe(options: OptionsAdaptateur & { readonly cleApi: string }): Juge {
-  return jugeDecisions({
-    fournisseur: 'TypeSafe',
-    url: joinUrl(options.urlBase ?? URL_TYPESAFE, '/v1/systemone'),
-    modele: options.modele ?? MODELES_JUGE_PAR_DEFAUT.typesafe,
-    cleApi: options.cleApi,
+/** Jev, through TypeSafe's systemone API: `POST /v1/systemone`. */
+export function typeSafeJudge(options: AdapterOptions & { readonly apiKey: string }): Judge {
+  return decisionsJudge({
+    provider: 'TypeSafe',
+    url: joinUrl(options.baseUrl ?? TYPESAFE_URL, '/v1/systemone'),
+    model: options.model ?? DEFAULT_JUDGE_MODELS.typesafe,
+    apiKey: options.apiKey,
     fetch: options.fetch,
   });
 }

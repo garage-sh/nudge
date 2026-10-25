@@ -1,48 +1,50 @@
 import { vi } from 'vitest';
 
-/** Réponse scriptée : statut et corps JSON, ou fonction du corps reçu. */
-export type ReponseFactice =
-  { status: number; body?: unknown } | ((corps: unknown) => { status: number; body?: unknown });
+/** A scripted response: status and JSON body, or a function of the received body. */
+export type FakeResponse =
+  { status: number; body?: unknown } | ((body: unknown) => { status: number; body?: unknown });
 
 /**
- * API du dashboard factice, branchée à la frontière réseau (`fetch`) :
- * chaque route `"MÉTHODE /chemin"` rend la réponse scriptée ; toute autre, 404.
- * Comme l'api, il refuse (403) une écriture sans l'en-tête `x-nudge-client`.
- * `appels` garde les requêtes reçues, pour vérifier ce que l'écran a envoyé.
+ * A fake dashboard API, plugged in at the network boundary (`fetch`): each
+ * `"METHOD /path"` route returns its scripted response; any other, 404.
+ * Like the api, it refuses (403) a write without the `x-nudge-client` header.
+ * `calls` keeps the received requests, to check what the screen sent.
  */
-export function fakeApi(routes: Record<string, ReponseFactice>) {
-  const appels: { route: string; corps: unknown }[] = [];
+export function fakeApi(routes: Record<string, FakeResponse>) {
+  const calls: { route: string; body: unknown }[] = [];
   const table = { ...routes };
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (entree: string, init: RequestInit = {}) => {
-      const methode = init.method ?? 'GET';
-      const route = `${methode} ${entree}`;
-      const enTete = new Headers(init.headers).get('x-nudge-client');
-      if (methode !== 'GET' && enTete !== 'dashboard') {
-        // Comme l'api : une écriture sans l'en-tête du dashboard est refusée.
-        return new Response(JSON.stringify({ erreur: 'en_tete_manquant' }), { status: 403 });
+    vi.fn(async (input: string, init: RequestInit = {}) => {
+      const method = init.method ?? 'GET';
+      const route = `${method} ${input}`;
+      const header = new Headers(init.headers).get('x-nudge-client');
+      if (method !== 'GET' && header !== 'dashboard') {
+        // Like the api: a write without the dashboard's header is refused.
+        return new Response(JSON.stringify({ error: 'missing_header' }), { status: 403 });
       }
-      const corps = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
-      appels.push({ route, corps });
-      const scriptee = table[route];
-      const { status, body } =
-        typeof scriptee === 'function'
-          ? scriptee(corps)
-          : (scriptee ?? { status: 404, body: { erreur: 'route_inconnue' } });
-      return new Response(body === undefined ? null : JSON.stringify(body), { status });
+      const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+      calls.push({ route, body });
+      const scripted = table[route];
+      const response =
+        typeof scripted === 'function'
+          ? scripted(body)
+          : (scripted ?? { status: 404, body: { error: 'unknown_route' } });
+      return new Response(response.body === undefined ? null : JSON.stringify(response.body), {
+        status: response.status,
+      });
     }),
   );
   return {
-    appels,
-    /** Remplace la réponse d'une route en cours de test. */
-    set(route: string, reponse: ReponseFactice) {
-      table[route] = reponse;
+    calls,
+    /** Replaces a route's response during a test. */
+    set(route: string, response: FakeResponse) {
+      table[route] = response;
     },
   };
 }
 
-export const MEMBRE = { id: 'membre-1', email: 'ada@nudge.test' };
+export const MEMBER = { id: 'member-1', email: 'ada@nudge.test' };
 
-export const SANS_SESSION = { status: 401, body: { erreur: 'session_requise' } };
-export const CONNECTE = { status: 200, body: { membre: MEMBRE } };
+export const NO_SESSION = { status: 401, body: { error: 'session_required' } };
+export const SIGNED_IN = { status: 200, body: { member: MEMBER } };

@@ -1,22 +1,26 @@
+import type { Locale } from './locales/index.js';
+
 /**
- * Identité de l'Auteur que l'application hôte connaît (utilisateur connecté).
- * Venue du navigateur, l'Instance l'enregistre comme *déclarée*, jamais attestée.
+ * The Author's identity as the host app knows it (signed-in user).
+ * Coming from the browser, the Instance records it as *declared*, never attested.
  */
-export interface AuteurDeclare {
+export interface DeclaredAuthor {
   readonly id?: string;
   readonly email?: string;
-  readonly nom?: string;
+  readonly name?: string;
 }
 
-/** Métadonnées libres de l'hôte (version, environnement…), jointes au contexte du Retour. */
-export type Metadonnees = Readonly<Record<string, string | number | boolean | null>>;
+/** Free-form host metadata (version, environment…), attached to the Feedback context. */
+export type Metadata = Readonly<Record<string, string | number | boolean | null>>;
 
-/** Ce que l'Intégrateur donne au Widget. */
-export interface OptionsWidget {
-  /** Clé publique du Projet (`nk_pub_…`). */
-  readonly cle: string;
-  /** Adresse de l'Instance nudge (`https://nudge.exemple`). */
+/** What the integrator gives the Widget. */
+export interface WidgetOptions {
+  /** The Project's public key (`nk_pub_…`). */
+  readonly publicKey: string;
+  /** Address of the nudge Instance (`https://nudge.example`). */
   readonly api: string;
-  readonly auteur?: AuteurDeclare;
-  readonly metadonnees?: Metadonnees;
+  readonly author?: DeclaredAuthor;
+  readonly metadata?: Metadata;
+  /** The Widget's language; detected from the page, then the browser, when omitted. */
+  readonly locale?: Locale;
 }

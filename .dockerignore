@@ -1,5 +1,5 @@
-# Contexte des images (Dockerfile) : les sources et les manifestes, rien de construit
-# ni d'installé sur le poste.
+# Image build context (Dockerfile): sources and manifests, nothing built or
+# installed on the local machine.
 .git
 **/node_modules
 **/dist

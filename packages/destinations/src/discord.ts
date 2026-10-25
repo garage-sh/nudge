@@ -1,270 +1,273 @@
 import {
-  presenterAlerte,
-  type Alerte,
-  type ClasseEchec,
+  presentAlert,
+  type Alert,
+  type FailureClass,
   type DestinationAdapter,
-  type DestinationConfiguree,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type ConfiguredDestination,
+  type OutgoingDelivery,
+  type DeliveryResult,
 } from '@nudge/core';
 import {
-  LIBELLES_GRAVITE,
-  LIBELLES_TYPE,
-  lireWebhookDiscord,
-  type Gravite,
-  type SecretsDiscord,
+  SEVERITY_LABELS,
+  FEEDBACK_TYPE_LABELS,
+  parseDiscordWebhook,
+  type Severity,
+  type DiscordSecrets,
 } from '@nudge/shared';
-import { DELAI_HTTP_PAR_DEFAUT_MS, classerStatut, echecHttp, messageErreur } from './http.js';
-import { lienSur } from './markdown.js';
-import { tronquer } from './texte.js';
+import { DEFAULT_HTTP_TIMEOUT_MS, classifyStatus, httpFailure, errorMessage } from './http.js';
+import { isSafeLink } from './markdown.js';
+import { truncate } from './text.js';
 
-export interface OptionsDiscord {
+export interface DiscordOptions {
   readonly fetch?: typeof globalThis.fetch;
-  /** Délai de réponse de Discord, au-delà duquel l'appel est un échec transitoire. */
-  readonly delaiMs?: number;
-  /** Serveur de chaque webhook déjà lu, par id de webhook (tests : un cache neuf). */
-  readonly serveurs?: Map<string, string>;
+  /** Discord response timeout, beyond which the call is a transient failure. */
+  readonly timeoutMs?: number;
+  /** Server (guild) of each webhook already read, by webhook id (tests: a fresh cache). */
+  readonly guilds?: Map<string, string>;
 }
 
 /**
- * Le serveur d'un webhook ne change pas : lu une fois par processus, il n'ajoute pas
- * un appel à chaque Envoi sur la limite de débit du webhook.
+ * A webhook's server does not change: read once per process, it does not add a call
+ * per Delivery against the webhook's rate limit.
  */
-const SERVEURS_PAR_WEBHOOK = new Map<string, string>();
+const GUILDS_BY_WEBHOOK = new Map<string, string>();
 
-/** « User-Agent: DiscordBot ($url, $versionNumber) » (docs.discord.com/developers/reference). */
+/** "User-Agent: DiscordBot ($url, $versionNumber)" (docs.discord.com/developers/reference). */
 const USER_AGENT = 'DiscordBot (https://github.com/garage-sh/nudge, 1.0)';
 
 /**
- * Discord : un webhook de salon (« Execute Webhook »,
+ * Discord: a channel webhook ("Execute Webhook",
  * https://docs.discord.com/developers/resources/webhook#execute-webhook).
  */
-export function adaptateurDiscord(
-  destination: DestinationConfiguree,
-  options: OptionsDiscord = {},
+export function discordAdapter(
+  destination: ConfiguredDestination,
+  options: DiscordOptions = {},
 ): DestinationAdapter {
-  const webhook = lireWebhookDiscord((destination.secrets as Partial<SecretsDiscord>).url ?? '');
-  if (!webhook) throw new Error(`Discord ${destination.id} sans URL de webhook valide`);
+  const webhook = parseDiscordWebhook((destination.secrets as Partial<DiscordSecrets>).url ?? '');
+  if (!webhook) throw new Error(`Discord ${destination.id} has no valid webhook URL`);
   const fetch = options.fetch ?? globalThis.fetch;
-  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
-  const serveurs = options.serveurs ?? SERVEURS_PAR_WEBHOOK;
-  const { id: idWebhook, jeton } = webhook;
-  const pointDAppel = `https://discord.com/api/v10/webhooks/${idWebhook}/${jeton}`;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+  const guilds = options.guilds ?? GUILDS_BY_WEBHOOK;
+  const { id: webhookId, token } = webhook;
+  const endpoint = `https://discord.com/api/v10/webhooks/${webhookId}/${token}`;
 
-  const appeler = (url: string, init: RequestInit = {}) =>
+  const call = (url: string, init: RequestInit = {}) =>
     fetch(url, {
       ...init,
       redirect: 'manual',
-      signal: AbortSignal.timeout(delaiMs),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { 'user-agent': USER_AGENT, ...init.headers },
     });
 
   /**
-   * Le lien d'un message posté : `https://discord.com/channels/<serveur>/<salon>/<message>`.
-   * L'objet Message ne porte pas le serveur ; le webhook, lu avec son jeton, si. Une
-   * lecture qui échoue n'annule pas la livraison : le lien manque, c'est tout.
+   * The link of a posted message: `https://discord.com/channels/<guild>/<channel>/<message>`.
+   * The Message object does not carry the guild; the webhook, read with its token, does.
+   * A failed read does not cancel the delivery: the link is missing, that is all.
    */
-  async function lienDuMessage({ id, channel_id }: MessageCree): Promise<string | null> {
+  async function messageLink({ id, channel_id }: CreatedMessage): Promise<string | null> {
     if (!id || !channel_id) return null;
-    const serveur = serveurs.get(idWebhook) ?? (await lireServeur());
-    return serveur ? `https://discord.com/channels/${serveur}/${channel_id}/${id}` : null;
+    const guild = guilds.get(webhookId) ?? (await readGuild());
+    return guild ? `https://discord.com/channels/${guild}/${channel_id}/${id}` : null;
   }
 
-  async function lireServeur(): Promise<string | null> {
+  async function readGuild(): Promise<string | null> {
     try {
-      const reponse = await appeler(pointDAppel);
-      if (!reponse.ok) {
-        await reponse.body?.cancel();
+      const response = await call(endpoint);
+      if (!response.ok) {
+        await response.body?.cancel();
         return null;
       }
-      const { guild_id } = (await reponse.json()) as { guild_id?: unknown };
+      const { guild_id } = (await response.json()) as { guild_id?: unknown };
       if (typeof guild_id !== 'string') return null;
-      serveurs.set(idWebhook, guild_id);
+      guilds.set(webhookId, guild_id);
       return guild_id;
     } catch {
       return null;
     }
   }
 
-  /** « Execute Webhook » : le message créé, ou l'échec classé. */
-  async function executer(
-    corps: unknown,
-  ): Promise<{ ok: true; cree: MessageCree } | { ok: false; echec: ResultatEnvoi }> {
-    let reponse: Response;
+  /** "Execute Webhook": the created message, or the classified failure. */
+  async function execute(
+    body: unknown,
+  ): Promise<{ ok: true; created: CreatedMessage } | { ok: false; failure: DeliveryResult }> {
+    let response: Response;
     try {
-      reponse = await appeler(`${pointDAppel}?wait=true`, {
+      response = await call(`${endpoint}?wait=true`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(corps),
+        body: JSON.stringify(body),
       });
-    } catch (erreur) {
+    } catch (error) {
       return {
         ok: false,
-        echec: { statut: 'echec', classe: 'transient', message: messageErreur(erreur) },
+        failure: { status: 'failed', failureClass: 'transient', message: errorMessage(error) },
       };
     }
-    if (!reponse.ok)
-      return { ok: false, echec: { statut: 'echec', ...(await echecDiscord(reponse)) } };
-    return { ok: true, cree: (await reponse.json().catch(() => ({}))) as MessageCree };
+    if (!response.ok)
+      return { ok: false, failure: { status: 'failed', ...(await discordFailure(response)) } };
+    return { ok: true, created: (await response.json().catch(() => ({}))) as CreatedMessage };
   }
 
   return {
-    async send(envoi) {
-      const execution = await executer(corpsDiscord(envoi));
-      if (!execution.ok) return execution.echec;
-      return { statut: 'livre', lienExterne: await lienDuMessage(execution.cree) };
+    async send(delivery) {
+      const execution = await execute(discordBody(delivery));
+      if (!execution.ok) return execution.failure;
+      return { status: 'delivered', externalUrl: await messageLink(execution.created) };
     },
-    /** Le lien du message n'est gardé nulle part : le serveur n'est pas lu pour l'alerte. */
-    async alerter(alerte) {
-      const execution = await executer(corpsAlerte(alerte));
-      return execution.ok ? { statut: 'livre', lienExterne: null } : execution.echec;
+    /** The message link is kept nowhere: the guild is not read for the alert. */
+    async alert(alert) {
+      const execution = await execute(alertBody(alert));
+      return execution.ok ? { status: 'delivered', externalUrl: null } : execution.failure;
     },
-    /** « Get Webhook with Token » : vérifie le jeton sans poster dans le salon. */
+    /** "Get Webhook with Token": checks the token without posting in the channel. */
     async healthCheck() {
-      let reponse: Response;
+      let response: Response;
       try {
-        reponse = await appeler(pointDAppel);
-      } catch (erreur) {
-        return { joignable: false, classe: 'transient', message: messageErreur(erreur) };
+        response = await call(endpoint);
+      } catch (error) {
+        return { reachable: false, failureClass: 'transient', message: errorMessage(error) };
       }
-      if (reponse.ok) {
-        await reponse.body?.cancel();
-        return { joignable: true };
+      if (response.ok) {
+        await response.body?.cancel();
+        return { reachable: true };
       }
-      return { joignable: false, ...(await echecDiscord(reponse)) };
+      return { reachable: false, ...(await discordFailure(response)) };
     },
   };
 }
 
-interface MessageCree {
+interface CreatedMessage {
   readonly id?: string;
   readonly channel_id?: string;
 }
 
 /**
- * Codes JSON d'un webhook de salon forum, qui refuse tout message sans fil
- * (docs.discord.com/developers/topics/opcodes-and-status-codes) : 220001 « must have a
- * thread_name or thread_id », 220004 « Webhook services cannot be used in forum
- * channels », 40058 « Cannot send a message in a forum channel ».
+ * JSON codes of a forum channel webhook, which rejects every message without a thread
+ * (docs.discord.com/developers/topics/opcodes-and-status-codes): 220001 "must have a
+ * thread_name or thread_id", 220004 "Webhook services cannot be used in forum
+ * channels", 40058 "Cannot send a message in a forum channel".
  */
-const CODES_SALON_FORUM = new Set([220001, 220004, 40058]);
+const FORUM_CHANNEL_CODES = new Set([220001, 220004, 40058]);
 
 /**
- * Classe d'un refus de Discord. Le webhook lui-même est refusé, et la Destination
- * Suspendue plutôt que chaque Envoi en échec, quand :
- * - il n'existe plus (404) : « If a webhook returns a 404 status you should not attempt
- *   to use it again » (docs.discord.com/developers/topics/rate-limits) ;
- * - il est celui d'un salon forum, qui refusera tous les Envois.
+ * Class of a Discord refusal. The webhook itself is rejected, and the Destination
+ * Suspended rather than each Delivery failing, when:
+ * - it no longer exists (404): "If a webhook returns a 404 status you should not attempt
+ *   to use it again" (docs.discord.com/developers/topics/rate-limits);
+ * - it belongs to a forum channel, which will reject every Delivery.
  */
-async function echecDiscord(reponse: Response): Promise<{ classe: ClasseEchec; message: string }> {
-  const code = reponse.status >= 400 && reponse.status < 500 ? await codeJson(reponse) : null;
-  const webhookRefuse = (status: number) =>
-    status === 404 || (code !== null && CODES_SALON_FORUM.has(code));
-  return echecHttp(reponse, (status) => (webhookRefuse(status) ? 'auth' : classerStatut(status)));
+async function discordFailure(
+  response: Response,
+): Promise<{ failureClass: FailureClass; message: string }> {
+  const code = response.status >= 400 && response.status < 500 ? await jsonCode(response) : null;
+  const webhookRejected = (status: number) =>
+    status === 404 || (code !== null && FORUM_CHANNEL_CODES.has(code));
+  return httpFailure(response, (status) =>
+    webhookRejected(status) ? 'auth' : classifyStatus(status),
+  );
 }
 
-/** Le `code` d'un corps d'erreur JSON de Discord, lu sur une copie de la réponse. */
-async function codeJson(reponse: Response): Promise<number | null> {
+/** The `code` of a Discord JSON error body, read from a clone of the response. */
+async function jsonCode(response: Response): Promise<number | null> {
   try {
-    const { code } = (await reponse.clone().json()) as { code?: unknown };
+    const { code } = (await response.clone().json()) as { code?: unknown };
     return typeof code === 'number' ? code : null;
   } catch {
     return null;
   }
 }
 
-function corpsDiscord({ essai, projet, retour }: EnvoiASortir) {
-  const type = LIBELLES_TYPE[retour.typeRetenu];
-  const titre = `${essai ? 'Essai · ' : ''}${type} · ${echapperMarkdown(projet.nom)}`;
+function discordBody({ isTest, project, feedback }: OutgoingDelivery) {
+  const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
+  const title = `${isTest ? 'Test · ' : ''}${type} · ${escapeMarkdown(project.name)}`;
   return {
     allowed_mentions: { parse: [] },
     embeds: [
       {
-        title: tronquer(titre, TITRE_MAX),
-        ...(retour.lienDashboard ? { url: retour.lienDashboard } : {}),
-        description: blocDeCode(retour.texte),
-        timestamp: retour.recuLe.toISOString(),
-        color: COULEURS[retour.gravite ?? 'aucune'],
+        title: truncate(title, TITLE_MAX),
+        ...(feedback.dashboardUrl ? { url: feedback.dashboardUrl } : {}),
+        description: codeBlock(feedback.text),
+        timestamp: feedback.receivedAt.toISOString(),
+        color: COLORS[feedback.severity ?? 'none'],
         fields: [
           { name: 'Type', value: type, inline: true },
           {
-            name: 'Gravité',
-            value: retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée',
+            name: 'Severity',
+            value: feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed',
             inline: true,
           },
           {
-            name: 'Projet',
-            value: tronquer(echapperMarkdown(projet.nom), CHAMP_MAX),
+            name: 'Project',
+            value: truncate(escapeMarkdown(project.name), FIELD_MAX),
             inline: true,
           },
         ],
-        footer: { text: retour.incertain ? 'nudge · Verdict incertain' : 'nudge' },
+        footer: { text: feedback.uncertain ? 'nudge · Uncertain verdict' : 'nudge' },
       },
     ],
   };
 }
 
 /**
- * L'alerte en un embed : titre et détails écrits par nudge, où les noms (saisis par un
- * Membre) et le refus (formulé par la cible) sont échappés comme le nom du Projet.
+ * The alert as one embed: title and details written by nudge, where the names (typed
+ * by a Member) and the refusal (worded by the target) are escaped like the Project name.
  */
-function corpsAlerte(alerte: Alerte) {
-  const { titre, resume, details } = presenterAlerte(alerte);
+function alertBody(alert: Alert) {
+  const { title, summary, details } = presentAlert(alert);
   return {
     allowed_mentions: { parse: [] },
     embeds: [
       {
-        title: tronquer(echapperMarkdown(titre), TITRE_MAX),
-        ...(lienSur(alerte.lienDashboard) ? { url: alerte.lienDashboard } : {}),
-        description: resume,
-        timestamp: alerte.le.toISOString(),
-        color: COULEUR_ALERTE,
-        fields: details.map(({ libelle, valeur, long }) => ({
-          name: libelle,
-          value: tronquer(echapperMarkdown(valeur), CHAMP_MAX),
+        title: truncate(escapeMarkdown(title), TITLE_MAX),
+        ...(isSafeLink(alert.dashboardUrl) ? { url: alert.dashboardUrl } : {}),
+        description: summary,
+        timestamp: alert.at.toISOString(),
+        color: ALERT_COLOR,
+        fields: details.map(({ label, value, long }) => ({
+          name: label,
+          value: truncate(escapeMarkdown(value), FIELD_MAX),
           inline: !long,
         })),
-        footer: { text: alerte.essai ? 'nudge · alerte d’essai' : 'nudge · alerte' },
+        footer: { text: alert.isTest ? 'nudge · test alert' : 'nudge · alert' },
       },
     ],
   };
 }
 
-const COULEUR_ALERTE = 0xf1c40f;
+const ALERT_COLOR = 0xf1c40f;
 
-/** Bandeau de l'embed, du gris (cosmétique) au rouge (bloquante). */
-const COULEURS: Readonly<Record<Gravite | 'aucune', number>> = {
-  aucune: 0x99aab5,
-  cosmetique: 0x95a5a6,
-  mineure: 0x3498db,
-  majeure: 0xe67e22,
-  bloquante: 0xe74c3c,
+/** Embed stripe, from grey (cosmetic) to red (blocking). */
+const COLORS: Readonly<Record<Severity | 'none', number>> = {
+  none: 0x99aab5,
+  cosmetic: 0x95a5a6,
+  minor: 0x3498db,
+  major: 0xe67e22,
+  blocking: 0xe74c3c,
 };
 
-/** Limites d'un embed (docs.discord.com/developers/resources/message#embed-limits). */
-const TITRE_MAX = 256;
+/** Embed limits (docs.discord.com/developers/resources/message#embed-limits). */
+const TITLE_MAX = 256;
 const DESCRIPTION_MAX = 4096;
-const CHAMP_MAX = 1024;
+const FIELD_MAX = 1024;
 
-const SANS_CHASSE = '\u200b';
-const OUVERTURE = '```\n';
-const FERMETURE = '\n```';
+const ZERO_WIDTH = '​';
+const OPENING = '```\n';
+const CLOSING = '\n```';
 
 /**
- * Le texte de l'Auteur dans un bloc de code : Discord n'y interprète ni markdown, ni
- * lien, ni mention. Une suite d'accents graves est coupée par un espace sans chasse,
- * pour que le texte ne referme jamais le bloc ; `@everyone` et `@here` le sont aussi,
- * au cas où le texte sortirait du bloc.
+ * The Author's text in a code block: Discord interprets no markdown, link or mention
+ * there. A run of backticks is broken by a zero-width space, so the text never closes
+ * the block; `@everyone` and `@here` are too, in case the text escaped the block.
  */
-function blocDeCode(texte: string): string {
-  const encode = neutraliserMentionsGenerales(texte).replace(/`(?=`)/g, `\`${SANS_CHASSE}`);
-  return `${OUVERTURE}${tronquer(encode, DESCRIPTION_MAX - OUVERTURE.length - FERMETURE.length)}${FERMETURE}`;
+function codeBlock(text: string): string {
+  const encoded = neutralizeBroadMentions(text).replace(/`(?=`)/g, `\`${ZERO_WIDTH}`);
+  return `${OPENING}${truncate(encoded, DESCRIPTION_MAX - OPENING.length - CLOSING.length)}${CLOSING}`;
 }
 
-/** Un texte du Membre (nom du Projet) affiché tel quel dans un titre ou un champ markdown. */
-function echapperMarkdown(texte: string): string {
-  return neutraliserMentionsGenerales(texte).replace(/[\\`*_~|>[\]()<#-]/g, '\\$&');
+/** A Member's text (Project name) shown as is in a markdown title or field. */
+function escapeMarkdown(text: string): string {
+  return neutralizeBroadMentions(text).replace(/[\\`*_~|>[\]()<#-]/g, '\\$&');
 }
 
-const neutraliserMentionsGenerales = (texte: string) =>
-  texte.replace(/@(everyone|here)/gi, `@${SANS_CHASSE}$1`);
+const neutralizeBroadMentions = (text: string) =>
+  text.replace(/@(everyone|here)/gi, `@${ZERO_WIDTH}$1`);

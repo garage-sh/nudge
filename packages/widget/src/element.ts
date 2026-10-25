@@ -1,311 +1,365 @@
-import type { TypeRetour } from '@nudge/shared';
-import { capturerPage, encoderCapture, flouterZone, type Rectangle } from './capture.js';
-import { LIBELLES_TYPE, LIMITES, TYPES_RETOUR } from './domaine.js';
-import { posterRetour } from './soumission.js';
-import { MESSAGES } from './messages.js';
-import type { AuteurDeclare, Metadonnees, OptionsWidget } from './options.js';
+import type { FeedbackType } from '@nudge/shared';
+import { blurArea, capturePage, encodeCapture, type Rectangle } from './capture.js';
+import { LIMITS } from './domain.js';
+import { en } from './locales/en.js';
+import { LOCALES, resolveLocale, type Locale, type Messages } from './locales/index.js';
+import type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
 import { STYLES } from './styles.js';
+import { postFeedback } from './submission.js';
 
-/** Nom de l'élément : `<nudge-widget cle="nk_pub_…" api="https://nudge.exemple">`. */
-export const NOM_ELEMENT = 'nudge-widget';
+/** The element's name: `<nudge-widget public-key="nk_pub_…" api="https://nudge.example">`. */
+export const ELEMENT_NAME = 'nudge-widget';
 
-const GABARIT = `
-<div class="racine">
-  <section class="panneau" role="dialog" aria-labelledby="titre" hidden>
-    <div class="entete">
-      <h2 id="titre">${MESSAGES.titre}</h2>
-      <button type="button" class="fermer" aria-label="${MESSAGES.fermer}">×</button>
+/** The keys of the plain texts, which the layout points to with `data-text` and `data-label`. */
+type TextKey = { [K in keyof Messages]: Messages[K] extends string ? K : never }[keyof Messages];
+
+const FEEDBACK_TYPES = Object.keys(en.feedbackTypes) as FeedbackType[];
+
+// The texts are filled in by `#localize`, in the Widget's language.
+const LAYOUT = `
+<div class="root">
+  <section class="panel" role="dialog" aria-labelledby="title" hidden>
+    <div class="header">
+      <h2 id="title" data-text="title"></h2>
+      <button type="button" class="close" data-label="close">×</button>
     </div>
     <form novalidate>
-      <label for="texte">${MESSAGES.texte}</label>
-      <textarea id="texte" name="texte" rows="5" maxlength="${LIMITES.texte}"></textarea>
-      <label for="type">${MESSAGES.type}</label>
+      <label for="text" data-text="text"></label>
+      <textarea id="text" name="text" rows="5" maxlength="${LIMITS.text}"></textarea>
+      <label for="type" data-text="type"></label>
       <select id="type" name="type">
-        <option value="">${MESSAGES.typeNonPrecise}</option>
-        ${TYPES_RETOUR.map((type) => `<option value="${type}">${LIBELLES_TYPE[type]}</option>`).join('')}
+        <option value="" data-text="typeUnspecified"></option>
+        ${FEEDBACK_TYPES.map((type) => `<option value="${type}"></option>`).join('')}
       </select>
-      <label for="email">${MESSAGES.email}</label>
-      <input id="email" name="email" type="email" autocomplete="email" maxlength="${LIMITES.email}">
-      <label class="option"><input type="checkbox" name="capture">${MESSAGES.joindreCapture}</label>
-      <p class="etat-capture" hidden>${MESSAGES.captureEnCours}</p>
-      <div class="apercu" hidden>
-        <p class="aide">${MESSAGES.aideCapture}</p>
-        <div class="cadre">
-          <canvas role="img" aria-label="${MESSAGES.apercuCapture}"></canvas>
+      <label for="email" data-text="email"></label>
+      <input id="email" name="email" type="email" autocomplete="email" maxlength="${LIMITS.email}">
+      <label class="option"><input type="checkbox" name="capture"><span data-text="attachCapture"></span></label>
+      <p class="capture-status" data-text="captureInProgress" hidden></p>
+      <div class="preview" hidden>
+        <p class="help" data-text="captureHelp"></p>
+        <div class="frame">
+          <canvas role="img" data-label="capturePreview"></canvas>
           <div class="selection" hidden></div>
         </div>
-        <button type="button" class="retirer-flous">${MESSAGES.retirerFlous}</button>
+        <button type="button" class="clear-blurs" data-text="clearBlurs"></button>
       </div>
-      <p class="erreur" role="alert" hidden></p>
-      <button type="submit" class="envoyer">${MESSAGES.envoyer}</button>
+      <p class="error" role="alert" hidden></p>
+      <button type="submit" class="submit" data-text="submit"></button>
     </form>
     <p class="confirmation" role="status" hidden></p>
   </section>
-  <button type="button" class="lanceur" aria-expanded="false">${MESSAGES.lanceur}</button>
+  <button type="button" class="launcher" aria-expanded="false" data-text="launcher"></button>
 </div>`;
 
-// Hors navigateur (rendu serveur d'une app React), la classe reste importable.
-const ElementHtml = (
+// Outside a browser (server rendering of a React app), the class stays importable.
+const HtmlElement = (
   typeof HTMLElement === 'undefined' ? class {} : HTMLElement
 ) as typeof HTMLElement;
 
-const PROPRIETES = ['cle', 'api', 'auteur', 'metadonnees'] as const;
+const PROPERTIES = ['publicKey', 'api', 'author', 'metadata', 'locale'] as const;
 
 /**
- * Le Widget : un bouton toujours accessible qui ouvre un formulaire de Retour, le
- * tout dans un Shadow DOM. Attributs `cle` et `api` ; propriétés `auteur` et
- * `metadonnees` pour l'identité et le contexte fournis par l'hôte.
+ * The Widget: an always-reachable button that opens a Feedback form, all inside a
+ * Shadow DOM. Attributes `public-key`, `api` and `locale`; properties `author` and
+ * `metadata` for the identity and context the host provides.
  */
-export class NudgeWidget extends ElementHtml {
-  #auteur: AuteurDeclare | undefined;
-  #metadonnees: Metadonnees | undefined;
-  readonly #racine: ShadowRoot;
+export class NudgeWidget extends HtmlElement {
+  static readonly observedAttributes = ['locale'];
+
+  #author: DeclaredAuthor | undefined;
+  #metadata: Metadata | undefined;
+  readonly #root: ShadowRoot;
   /**
-   * La Capture que l'Auteur a choisi de joindre : l'image masquée d'origine, que
-   * « Retirer les flous » rétablit dans l'aperçu (qui porte, lui, les flous tracés).
+   * The Capture the Author chose to attach: the original masked image, which
+   * "Remove blurs" restores in the preview (which carries the drawn blurs).
    */
   #capture: ImageData | null = null;
-  /** La Capture en train d'être prise ; l'envoi l'attend. */
-  #captureEnCours: Promise<void> | null = null;
-  /** Le coin de départ du rectangle que l'Auteur trace sur l'aperçu, en pixels de la Capture. */
-  #trace: { x: number; y: number } | null = null;
+  /** The Capture being taken; sending waits for it. */
+  #captureInProgress: Promise<void> | null = null;
+  /** The starting corner of the rectangle the Author draws on the preview, in Capture pixels. */
+  #drag: { x: number; y: number } | null = null;
 
   constructor() {
     super();
-    this.#racine = this.attachShadow({ mode: 'open' });
-    this.#racine.innerHTML = `<style>${STYLES}</style>${GABARIT}`;
-    this.#el('.lanceur').addEventListener('click', () => this.#basculer());
-    this.#el('.fermer').addEventListener('click', () => this.#fermer());
-    this.#el('.panneau').addEventListener('keydown', (evenement) => {
-      if ((evenement as KeyboardEvent).key === 'Escape') this.#fermer();
+    this.#root = this.attachShadow({ mode: 'open' });
+    this.#root.innerHTML = `<style>${STYLES}</style>${LAYOUT}`;
+    this.#el('.launcher').addEventListener('click', () => this.#toggle());
+    this.#el('.close').addEventListener('click', () => this.#close());
+    this.#el('.panel').addEventListener('keydown', (event) => {
+      if ((event as KeyboardEvent).key === 'Escape') this.#close();
     });
-    this.#el<HTMLTextAreaElement>('textarea').addEventListener('input', (evenement) =>
-      (evenement.target as HTMLTextAreaElement).setCustomValidity(''),
+    this.#el<HTMLTextAreaElement>('textarea').addEventListener('input', (event) =>
+      (event.target as HTMLTextAreaElement).setCustomValidity(''),
     );
-    this.#el<HTMLInputElement>('input[name="capture"]').addEventListener('change', (evenement) => {
-      if ((evenement.target as HTMLInputElement).checked) {
-        this.#captureEnCours = this.#prendreCapture();
+    this.#el<HTMLInputElement>('input[name="capture"]').addEventListener('change', (event) => {
+      if ((event.target as HTMLInputElement).checked) {
+        this.#captureInProgress = this.#takeCapture();
       } else {
-        this.#retirerCapture();
+        this.#removeCapture();
       }
     });
-    this.#brancherFloutage();
-    this.#el('form').addEventListener('submit', (evenement) => {
-      evenement.preventDefault();
-      void this.#soumettre();
+    this.#wireBlurring();
+    this.#el('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.#submit();
     });
-    // Une propriété posée avant la définition de l'élément masquerait l'accesseur.
-    for (const propriete of PROPRIETES) {
-      if (Object.hasOwn(this, propriete)) {
-        const valeur: unknown = this[propriete];
-        delete this[propriete];
-        Object.assign(this, { [propriete]: valeur });
+    // A property set before the element was defined would shadow the accessor.
+    for (const property of PROPERTIES) {
+      if (Object.hasOwn(this, property)) {
+        const value: unknown = this[property];
+        delete this[property];
+        Object.assign(this, { [property]: value });
       }
     }
+    this.#localize();
   }
 
-  get cle(): string {
-    return this.getAttribute('cle') ?? '';
+  connectedCallback(): void {
+    // The page's language is known once the element is in it.
+    this.#localize();
   }
-  set cle(valeur: string) {
-    this.setAttribute('cle', valeur);
+
+  attributeChangedCallback(): void {
+    this.#localize();
+  }
+
+  get publicKey(): string {
+    return this.getAttribute('public-key') ?? '';
+  }
+  set publicKey(value: string) {
+    this.setAttribute('public-key', value);
   }
 
   get api(): string {
     return this.getAttribute('api') ?? '';
   }
-  set api(valeur: string) {
-    this.setAttribute('api', valeur);
+  set api(value: string) {
+    this.setAttribute('api', value);
   }
 
-  get auteur(): AuteurDeclare | undefined {
-    return this.#auteur;
+  /** The language the Widget speaks: the requested one, else the detected one. */
+  get locale(): Locale {
+    return resolveLocale(this.getAttribute('locale'));
   }
-  set auteur(valeur: AuteurDeclare | undefined) {
-    this.#auteur = valeur;
-  }
-
-  get metadonnees(): Metadonnees | undefined {
-    return this.#metadonnees;
-  }
-  set metadonnees(valeur: Metadonnees | undefined) {
-    this.#metadonnees = valeur;
+  set locale(value: Locale | undefined) {
+    if (value) this.setAttribute('locale', value);
+    else this.removeAttribute('locale');
   }
 
-  /** Pose d'un coup la clé, l'Instance, l'identité et les métadonnées de l'hôte. */
-  configurer(options: OptionsWidget): void {
-    this.cle = options.cle;
+  get author(): DeclaredAuthor | undefined {
+    return this.#author;
+  }
+  set author(value: DeclaredAuthor | undefined) {
+    this.#author = value;
+  }
+
+  get metadata(): Metadata | undefined {
+    return this.#metadata;
+  }
+  set metadata(value: Metadata | undefined) {
+    this.#metadata = value;
+  }
+
+  /** Sets the key, the Instance, the language, the identity and the host metadata at once. */
+  configure(options: WidgetOptions): void {
+    this.publicKey = options.publicKey;
     this.api = options.api;
-    this.#auteur = options.auteur;
-    this.#metadonnees = options.metadonnees;
+    this.locale = options.locale;
+    this.#author = options.author;
+    this.#metadata = options.metadata;
   }
 
-  #el<E extends HTMLElement = HTMLElement>(selecteur: string): E {
-    const element = this.#racine.querySelector<E>(selecteur);
-    if (!element) throw new Error(`Widget nudge : ${selecteur} introuvable`);
+  #el<E extends HTMLElement = HTMLElement>(selector: string): E {
+    const element = this.#root.querySelector<E>(selector);
+    if (!element) throw new Error(`nudge widget: ${selector} not found`);
     return element;
   }
 
-  #basculer(): void {
-    if (this.#el('.panneau').hidden) this.#ouvrir();
-    else this.#fermer();
+  get #messages(): Messages {
+    return LOCALES[this.locale];
   }
 
-  #ouvrir(): void {
-    this.#el('.panneau').hidden = false;
-    this.#el('form').hidden = false;
-    this.#el('.confirmation').hidden = true;
-    this.#el('.lanceur').setAttribute('aria-expanded', 'true');
-    this.#el('textarea').focus();
-  }
-
-  #fermer(): void {
-    this.#el('.panneau').hidden = true;
-    this.#el('.lanceur').setAttribute('aria-expanded', 'false');
-    this.#el('.lanceur').focus();
-  }
-
-  /** La Capture à joindre, telle que l'aperçu la montre (flous compris), ou rien. */
-  async #capturePrete() {
-    await this.#captureEnCours;
-    const caseCapture = this.#el<HTMLInputElement>('input[name="capture"]');
-    if (!caseCapture.checked || !this.#capture) return null;
-    return (await encoderCapture(this.#el<HTMLCanvasElement>('canvas'))) ?? 'trop_lourde';
-  }
-
-  /** Prend la Capture de la page, sur l'accord de l'Auteur (case cochée), et l'affiche. */
-  async #prendreCapture(): Promise<void> {
-    const etat = this.#el('.etat-capture');
-    const erreur = this.#el('.erreur');
-    const caseCapture = this.#el<HTMLInputElement>('input[name="capture"]');
-    erreur.hidden = true;
-    etat.hidden = false;
-    caseCapture.disabled = true;
-    try {
-      const prise = await capturerPage(this);
-      // L'Auteur a pu décocher la case pendant la capture : elle ne part pas.
-      if (!caseCapture.checked) return;
-      const apercu = this.#el<HTMLCanvasElement>('canvas');
-      apercu.width = prise.width;
-      apercu.height = prise.height;
-      const contexte = apercu.getContext('2d')!;
-      contexte.drawImage(prise, 0, 0);
-      this.#capture = contexte.getImageData(0, 0, prise.width, prise.height);
-      this.#el('.apercu').hidden = false;
-    } catch {
-      caseCapture.checked = false;
-      erreur.textContent = MESSAGES.captureEchouee;
-      erreur.hidden = false;
-    } finally {
-      etat.hidden = true;
-      caseCapture.disabled = false;
+  /** Writes the texts of the layout in the Widget's language. */
+  #localize(): void {
+    const messages = this.#messages;
+    for (const element of this.#root.querySelectorAll<HTMLElement>('[data-text]')) {
+      element.textContent = messages[element.dataset.text as TextKey];
+    }
+    for (const element of this.#root.querySelectorAll<HTMLElement>('[data-label]')) {
+      element.setAttribute('aria-label', messages[element.dataset.label as TextKey]);
+    }
+    for (const option of this.#el<HTMLSelectElement>('select').options) {
+      if (option.value) option.textContent = messages.feedbackTypes[option.value as FeedbackType];
     }
   }
 
-  #retirerCapture(): void {
+  #toggle(): void {
+    if (this.#el('.panel').hidden) this.#open();
+    else this.#close();
+  }
+
+  #open(): void {
+    this.#el('.panel').hidden = false;
+    this.#el('form').hidden = false;
+    this.#el('.confirmation').hidden = true;
+    this.#el('.launcher').setAttribute('aria-expanded', 'true');
+    this.#el('textarea').focus();
+  }
+
+  #close(): void {
+    this.#el('.panel').hidden = true;
+    this.#el('.launcher').setAttribute('aria-expanded', 'false');
+    this.#el('.launcher').focus();
+  }
+
+  /** The Capture to attach, as the preview shows it (blurs included), or nothing. */
+  async #readyCapture() {
+    await this.#captureInProgress;
+    const checkbox = this.#el<HTMLInputElement>('input[name="capture"]');
+    if (!checkbox.checked || !this.#capture) return null;
+    return (await encodeCapture(this.#el<HTMLCanvasElement>('canvas'))) ?? 'too_large';
+  }
+
+  /** Takes the page Capture, with the Author's consent (box checked), and shows it. */
+  async #takeCapture(): Promise<void> {
+    const status = this.#el('.capture-status');
+    const error = this.#el('.error');
+    const checkbox = this.#el<HTMLInputElement>('input[name="capture"]');
+    error.hidden = true;
+    status.hidden = false;
+    checkbox.disabled = true;
+    try {
+      const taken = await capturePage(this);
+      // The Author may have unchecked the box during the capture: it is not sent.
+      if (!checkbox.checked) return;
+      const preview = this.#el<HTMLCanvasElement>('canvas');
+      preview.width = taken.width;
+      preview.height = taken.height;
+      const context = preview.getContext('2d')!;
+      context.drawImage(taken, 0, 0);
+      this.#capture = context.getImageData(0, 0, taken.width, taken.height);
+      this.#el('.preview').hidden = false;
+    } catch {
+      checkbox.checked = false;
+      error.textContent = this.#messages.captureFailed;
+      error.hidden = false;
+    } finally {
+      status.hidden = true;
+      checkbox.disabled = false;
+    }
+  }
+
+  #removeCapture(): void {
     this.#capture = null;
     this.#el<HTMLInputElement>('input[name="capture"]').checked = false;
-    this.#el('.apercu').hidden = true;
-    const apercu = this.#el<HTMLCanvasElement>('canvas');
-    apercu.width = 0;
-    apercu.height = 0;
+    this.#el('.preview').hidden = true;
+    const preview = this.#el<HTMLCanvasElement>('canvas');
+    preview.width = 0;
+    preview.height = 0;
   }
 
   /**
-   * Floutage : l'Auteur trace un rectangle sur l'aperçu (souris, doigt ou stylet), la
-   * zone est floutée dans l'image qui partira ; « Retirer les flous » rend l'image
-   * d'origine (masques de l'hôte compris : eux ne se retirent pas).
+   * Blurring: the Author draws a rectangle on the preview (mouse, finger or pen), and
+   * the area is blurred in the image that will be sent; "Remove blurs" restores the
+   * original image (host masks included: those cannot be removed).
    */
-  #brancherFloutage(): void {
-    const apercu = this.#el<HTMLCanvasElement>('canvas');
+  #wireBlurring(): void {
+    const preview = this.#el<HTMLCanvasElement>('canvas');
     const selection = this.#el('.selection');
-    const pointDeLaCapture = (evenement: PointerEvent) => {
-      const boite = apercu.getBoundingClientRect();
-      const echelle = apercu.width / boite.width;
+    const capturePoint = (event: PointerEvent) => {
+      const box = preview.getBoundingClientRect();
+      const scale = preview.width / box.width;
       return {
-        x: Math.min(Math.max(0, (evenement.clientX - boite.left) * echelle), apercu.width),
-        y: Math.min(Math.max(0, (evenement.clientY - boite.top) * echelle), apercu.height),
+        x: Math.min(Math.max(0, (event.clientX - box.left) * scale), preview.width),
+        y: Math.min(Math.max(0, (event.clientY - box.top) * scale), preview.height),
       };
     };
     const rectangle = (a: { x: number; y: number }, b: { x: number; y: number }): Rectangle => ({
       x: Math.min(a.x, b.x),
       y: Math.min(a.y, b.y),
-      largeur: Math.abs(a.x - b.x),
-      hauteur: Math.abs(a.y - b.y),
+      width: Math.abs(a.x - b.x),
+      height: Math.abs(a.y - b.y),
     });
-    const montrer = (zone: Rectangle) => {
-      const echelle = apercu.getBoundingClientRect().width / apercu.width;
+    const show = (area: Rectangle) => {
+      const scale = preview.getBoundingClientRect().width / preview.width;
       Object.assign(selection.style, {
-        left: `${zone.x * echelle}px`,
-        top: `${zone.y * echelle}px`,
-        width: `${zone.largeur * echelle}px`,
-        height: `${zone.hauteur * echelle}px`,
+        left: `${area.x * scale}px`,
+        top: `${area.y * scale}px`,
+        width: `${area.width * scale}px`,
+        height: `${area.height * scale}px`,
       });
       selection.hidden = false;
     };
-    apercu.addEventListener('pointerdown', (evenement) => {
+    preview.addEventListener('pointerdown', (event) => {
       if (!this.#capture) return;
-      evenement.preventDefault();
-      apercu.setPointerCapture(evenement.pointerId);
-      this.#trace = pointDeLaCapture(evenement);
-      montrer(rectangle(this.#trace, this.#trace));
+      event.preventDefault();
+      preview.setPointerCapture(event.pointerId);
+      this.#drag = capturePoint(event);
+      show(rectangle(this.#drag, this.#drag));
     });
-    apercu.addEventListener('pointermove', (evenement) => {
-      if (this.#trace) montrer(rectangle(this.#trace, pointDeLaCapture(evenement)));
+    preview.addEventListener('pointermove', (event) => {
+      if (this.#drag) show(rectangle(this.#drag, capturePoint(event)));
     });
-    const terminer = (evenement: PointerEvent, flouter: boolean) => {
-      if (!this.#trace) return;
-      const zone = rectangle(this.#trace, pointDeLaCapture(evenement));
-      this.#trace = null;
+    const finish = (event: PointerEvent, blur: boolean) => {
+      if (!this.#drag) return;
+      const area = rectangle(this.#drag, capturePoint(event));
+      this.#drag = null;
       selection.hidden = true;
-      if (flouter && zone.largeur >= 4 && zone.hauteur >= 4) flouterZone(apercu, zone);
+      if (blur && area.width >= 4 && area.height >= 4) blurArea(preview, area);
     };
-    apercu.addEventListener('pointerup', (evenement) => terminer(evenement, true));
-    apercu.addEventListener('pointercancel', (evenement) => terminer(evenement, false));
-    this.#el('.retirer-flous').addEventListener('click', () => {
-      if (this.#capture) apercu.getContext('2d')!.putImageData(this.#capture, 0, 0);
+    preview.addEventListener('pointerup', (event) => finish(event, true));
+    preview.addEventListener('pointercancel', (event) => finish(event, false));
+    this.#el('.clear-blurs').addEventListener('click', () => {
+      if (this.#capture) preview.getContext('2d')!.putImageData(this.#capture, 0, 0);
     });
   }
 
-  async #soumettre(): Promise<void> {
+  async #submit(): Promise<void> {
+    const messages = this.#messages;
     const form = this.#el<HTMLFormElement>('form');
-    const texte = this.#el<HTMLTextAreaElement>('textarea');
+    const text = this.#el<HTMLTextAreaElement>('textarea');
     const email = this.#el<HTMLInputElement>('input[name="email"]');
-    const type = this.#el<HTMLSelectElement>('select').value as TypeRetour | '';
-    const erreur = this.#el('.erreur');
-    const bouton = this.#el<HTMLButtonElement>('.envoyer');
-    texte.setCustomValidity(texte.value.trim() ? '' : MESSAGES.texteVide);
+    const type = this.#el<HTMLSelectElement>('select').value as FeedbackType | '';
+    const error = this.#el('.error');
+    const button = this.#el<HTMLButtonElement>('.submit');
+    text.setCustomValidity(text.value.trim() ? '' : messages.textEmpty);
     if (!form.reportValidity()) return;
 
-    erreur.hidden = true;
-    bouton.disabled = true;
-    bouton.textContent = MESSAGES.soumissionEnCours;
-    const resultat = await this.#capturePrete().then(async (capture) =>
-      capture === 'trop_lourde'
-        ? ({ statut: 'erreur', message: MESSAGES.captureTropLourde } as const)
-        : posterRetour(
-            { cle: this.cle, api: this.api, auteur: this.#auteur, metadonnees: this.#metadonnees },
+    error.hidden = true;
+    button.disabled = true;
+    button.textContent = messages.submitting;
+    const result = await this.#readyCapture().then(async (capture) =>
+      capture === 'too_large'
+        ? ({ status: 'error', message: messages.captureTooLarge } as const)
+        : postFeedback(
             {
-              texte: texte.value,
+              publicKey: this.publicKey,
+              api: this.api,
+              author: this.#author,
+              metadata: this.#metadata,
+            },
+            {
+              text: text.value,
               ...(type ? { type } : {}),
               ...(email.value ? { email: email.value } : {}),
               ...(capture ? { capture } : {}),
             },
+            messages,
           ),
     );
-    bouton.disabled = false;
-    bouton.textContent = MESSAGES.envoyer;
+    button.disabled = false;
+    button.textContent = messages.submit;
 
-    if (resultat.statut === 'erreur') {
-      erreur.textContent = resultat.message;
-      erreur.hidden = false;
+    if (result.status === 'error') {
+      error.textContent = result.message;
+      error.hidden = false;
       return;
     }
     form.reset();
-    this.#retirerCapture();
+    this.#removeCapture();
     form.hidden = true;
     const confirmation = this.#el('.confirmation');
-    confirmation.textContent = MESSAGES.envoye;
+    confirmation.textContent = messages.sent;
     confirmation.hidden = false;
   }
 }

@@ -1,401 +1,407 @@
-import type { DestinationConfiguree, EnvoiASortir } from '@nudge/core';
+import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
-import { adaptateurGitHub } from './github.js';
+import { gitHubAdapter } from './github.js';
 import { resolveDestinationAdapter } from './index.js';
-import { ALERTE_EN_REVUE, ALERTE_SUSPENSION } from './test/alertes.js';
+import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import {
   GITHUB,
   ISSUE_URL,
-  JETON,
-  NOM_DEPOT,
-  PROPRIETAIRE,
-  type Enregistrement,
-} from './test/github-enregistrements.js';
+  TOKEN,
+  REPOSITORY_NAME,
+  OWNER,
+  type Recording,
+} from './test/github-recordings.js';
 
-const API_DEPOT = `https://api.github.com/repos/${PROPRIETAIRE}/${NOM_DEPOT}`;
+const REPOSITORY_API = `https://api.github.com/repos/${OWNER}/${REPOSITORY_NAME}`;
 
-const DESTINATION: DestinationConfiguree = {
+const DESTINATION: ConfiguredDestination = {
   id: '6f1c2a40-0000-4000-8000-000000000041',
-  projetId: '6f1c2a40-0000-4000-8000-000000000042',
-  nom: 'Issues boutique-web',
+  projectId: '6f1c2a40-0000-4000-8000-000000000042',
+  name: 'Issues shop-web',
   type: 'github',
-  config: { depot: `${PROPRIETAIRE}/${NOM_DEPOT}` },
-  secrets: { jeton: JETON },
+  config: { repository: `${OWNER}/${REPOSITORY_NAME}` },
+  secrets: { token: TOKEN },
 };
 
-const ENVOI: EnvoiASortir = {
-  envoiId: '6f1c2a40-0000-4000-8000-000000000043',
-  essai: false,
-  projet: { id: DESTINATION.projetId!, nom: 'Boutique' },
-  retour: {
+const DELIVERY: OutgoingDelivery = {
+  deliveryId: '6f1c2a40-0000-4000-8000-000000000043',
+  isTest: false,
+  project: { id: DESTINATION.projectId!, name: 'Shop' },
+  feedback: {
     id: '6f1c2a40-0000-4000-8000-000000000044',
-    texte: 'Le panier se vide quand je change de page.\nDepuis ce matin.',
+    text: 'The cart empties when I change pages.\nSince this morning.',
     source: 'widget',
-    typeRetenu: 'bug',
-    gravite: 'majeure',
-    incertain: false,
-    auteur: { id: 'u-42', email: 'ada@client.test', confiance: 'declaree' },
-    contexte: { url: 'https://boutique.test/panier' },
+    resolvedType: 'bug',
+    severity: 'major',
+    uncertain: false,
+    author: { id: 'u-42', email: 'ada@client.test', trust: 'declared' },
+    context: { url: 'https://shop.test/cart' },
     capture: null,
-    recuLe: new Date('2026-10-24T09:29:58.000Z'),
-    lienDashboard: 'https://nudge.exemple/retours/6f1c2a40-0000-4000-8000-000000000044',
+    receivedAt: new Date('2026-10-24T09:29:58.000Z'),
+    dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000044',
   },
 };
 
-interface RequeteRecue {
+interface ReceivedRequest {
   readonly url: string;
   readonly init: RequestInit;
-  readonly entetes: Headers;
-  readonly corps: string | null;
+  readonly headers: Headers;
+  readonly body: string | null;
 }
 
-type Reponse = Enregistrement | Error | 'bloque';
+type Reply = Recording | Error | 'hang';
 
-/** GitHub enregistré : rend les réponses données, dans l'ordre, et garde les requêtes. */
-function github(...reponses: Reponse[]) {
-  const requetes: RequeteRecue[] = [];
-  let suivante = 0;
+/** Recorded GitHub: returns the given responses, in order, and keeps the requests. */
+function github(...replies: Reply[]) {
+  const requests: ReceivedRequest[] = [];
+  let next = 0;
   const fetch = (async (url: string | URL, init: RequestInit = {}) => {
-    requetes.push({
+    requests.push({
       url: String(url),
       init,
-      entetes: new Headers(init.headers),
-      corps: init.body === undefined ? null : String(init.body),
+      headers: new Headers(init.headers),
+      body: init.body === undefined ? null : String(init.body),
     });
-    const reponse = reponses[Math.min(suivante++, reponses.length - 1)];
-    if (!reponse) throw new Error('Aucune réponse enregistrée');
-    if (reponse instanceof Error) throw reponse;
-    if (reponse === 'bloque') {
-      // Ne répond jamais : seul le délai de l'adaptateur (signal) l'interrompt.
+    const reply = replies[Math.min(next++, replies.length - 1)];
+    if (!reply) throw new Error('No recorded response');
+    if (reply instanceof Error) throw reply;
+    if (reply === 'hang') {
+      // Never answers: only the adapter's timeout (signal) interrupts it.
       return new Promise<Response>((_, reject) =>
         init.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
       );
     }
-    const texte = typeof reponse.corps === 'string';
-    return new Response(texte ? (reponse.corps as string) : JSON.stringify(reponse.corps), {
-      status: reponse.status,
+    const isText = typeof reply.body === 'string';
+    return new Response(isText ? (reply.body as string) : JSON.stringify(reply.body), {
+      status: reply.status,
       headers: {
-        'content-type': texte ? 'text/html' : 'application/json; charset=utf-8',
-        ...reponse.entetes,
+        'content-type': isText ? 'text/html' : 'application/json; charset=utf-8',
+        ...reply.headers,
       },
     });
   }) as typeof globalThis.fetch;
-  return { fetch, requetes };
+  return { fetch, requests };
 }
 
-const adaptateur = (fetch: typeof globalThis.fetch, delaiMs?: number) =>
-  adaptateurGitHub(DESTINATION, { fetch, delaiMs });
+const adapter = (fetch: typeof globalThis.fetch, timeoutMs?: number) =>
+  gitHubAdapter(DESTINATION, { fetch, timeoutMs });
 
-/** Ce que l'adaptateur poste à « Create an issue ». */
-interface CorpsIssue {
+/** What the adapter posts to "Create an issue". */
+interface IssueBody {
   readonly title: string;
   readonly body: string;
 }
 
-const corpsJson = (requete: RequeteRecue | undefined) => JSON.parse(requete!.corps!) as CorpsIssue;
+const jsonBody = (request: ReceivedRequest | undefined) => JSON.parse(request!.body!) as IssueBody;
 
-describe('Adaptateur GitHub Issues', () => {
-  it('crée une issue dans le dépôt configuré et rend son lien', async () => {
-    const { fetch, requetes } = github(GITHUB.issueCreee);
+describe('GitHub Issues adapter', () => {
+  it('creates an issue in the configured repository and returns its link', async () => {
+    const { fetch, requests } = github(GITHUB.issueCreated);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-      statut: 'livre',
-      lienExterne: ISSUE_URL,
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({
+      status: 'delivered',
+      externalUrl: ISSUE_URL,
     });
 
-    expect(requetes).toHaveLength(1);
-    const [requete] = requetes;
-    expect(requete?.url).toBe(`${API_DEPOT}/issues`);
-    expect(requete?.init.method).toBe('POST');
-    expect(requete?.init.redirect).toBe('manual');
-    expect(requete?.entetes.get('authorization')).toBe(`Bearer ${JETON}`);
-    expect(requete?.entetes.get('accept')).toBe('application/vnd.github+json');
-    expect(requete?.entetes.get('x-github-api-version')).toBe('2026-03-10');
-    // « Requests without a valid User-Agent header will be rejected. »
-    expect(requete?.entetes.get('user-agent')).toMatch(/^nudge/);
-    expect(requete?.entetes.get('content-type')).toBe('application/json');
-    const corps = corpsJson(requete);
-    expect(Object.keys(corps).sort()).toEqual(['body', 'title']);
-    expect(corps.title).toBe('Bug · Le panier se vide quand je change de page.');
-    expect(corps.body).toContain('Le panier se vide quand je change de page.\nDepuis ce matin.');
-    expect(corps.body).toContain('**Type** : Bug · **Gravité** : Majeure');
-    expect(corps.body).toContain(`[Voir le Retour dans nudge](<${ENVOI.retour.lienDashboard}>)`);
+    expect(requests).toHaveLength(1);
+    const [request] = requests;
+    expect(request?.url).toBe(`${REPOSITORY_API}/issues`);
+    expect(request?.init.method).toBe('POST');
+    expect(request?.init.redirect).toBe('manual');
+    expect(request?.headers.get('authorization')).toBe(`Bearer ${TOKEN}`);
+    expect(request?.headers.get('accept')).toBe('application/vnd.github+json');
+    expect(request?.headers.get('x-github-api-version')).toBe('2026-03-10');
+    // "Requests without a valid User-Agent header will be rejected."
+    expect(request?.headers.get('user-agent')).toMatch(/^nudge/);
+    expect(request?.headers.get('content-type')).toBe('application/json');
+    const body = jsonBody(request);
+    expect(Object.keys(body).sort()).toEqual(['body', 'title']);
+    expect(body.title).toBe('Bug · The cart empties when I change pages.');
+    expect(body.body).toContain('The cart empties when I change pages.\nSince this morning.');
+    expect(body.body).toContain('**Type**: Bug · **Severity**: Major');
+    expect(body.body).toContain(
+      `[View the feedback in nudge](<${DELIVERY.feedback.dashboardUrl}>)`,
+    );
   });
 
   it.each([
-    ['401 identifiants invalides', 'auth', GITHUB.identifiantsInvalides],
-    ['403 permission refusée', 'auth', GITHUB.permissionRefusee],
-    // Dépôt inconnu ou hors de portée du jeton, issues désactivées : chaque Envoi
-    // échouerait, la Destination est Suspendue (D21).
-    ['404 dépôt introuvable', 'auth', GITHUB.introuvable],
-    ['410 issues désactivées', 'auth', GITHUB.issuesDesactivees],
-    ['400 requête invalide', 'permanent', GITHUB.requeteInvalide],
-    ['422 validation échouée', 'permanent', GITHUB.validationEchouee],
-    // Une limite de débit n'est pas un refus, même en 403.
-    ['403 limite primaire', 'transient', GITHUB.limitePrimaire],
-    ['403 limite secondaire', 'transient', GITHUB.limiteSecondaire],
-    ['429 limite secondaire', 'transient', GITHUB.limite429],
-    ['503 indisponible', 'transient', GITHUB.indisponible],
-  ] as const)('classe une réponse %s : %s', async (_, classe, enregistrement) => {
-    const { fetch, requetes } = github(enregistrement);
+    ['401 bad credentials', 'auth', GITHUB.badCredentials],
+    ['403 permission denied', 'auth', GITHUB.permissionDenied],
+    // Unknown repository or out of the token's reach, issues disabled: every Delivery
+    // would fail, the Destination is Suspended (D21).
+    ['404 repository not found', 'auth', GITHUB.notFound],
+    ['410 issues disabled', 'auth', GITHUB.issuesDisabled],
+    ['400 invalid request', 'permanent', GITHUB.invalidRequest],
+    ['422 validation failed', 'permanent', GITHUB.validationFailed],
+    // A rate limit is not a refusal, even as a 403.
+    ['403 primary rate limit', 'transient', GITHUB.primaryRateLimit],
+    ['403 secondary rate limit', 'transient', GITHUB.secondaryRateLimit],
+    ['429 secondary rate limit', 'transient', GITHUB.rateLimit429],
+    ['503 unavailable', 'transient', GITHUB.unavailable],
+  ] as const)('classifies a %s response: %s', async (_, failureClass, recording) => {
+    const { fetch, requests } = github(recording);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-      statut: 'echec',
-      classe,
-      message: expect.stringContaining(String(enregistrement.status)),
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass,
+      message: expect.stringContaining(String(recording.status)),
     });
-    expect(requetes).toHaveLength(1);
+    expect(requests).toHaveLength(1);
   });
 
-  it('reprend le message de GitHub, sans jamais le jeton', async () => {
-    const { fetch } = github(GITHUB.identifiantsInvalides);
+  it("carries GitHub's message over, never the token", async () => {
+    const { fetch } = github(GITHUB.badCredentials);
 
-    const resultat = await adaptateur(fetch).send(ENVOI);
+    const result = await adapter(fetch).send(DELIVERY);
 
-    expect(resultat).toMatchObject({ message: expect.stringContaining('Bad credentials') });
-    expect(JSON.stringify(resultat)).not.toContain(JETON);
+    expect(result).toMatchObject({ message: expect.stringContaining('Bad credentials') });
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
   });
 
-  it('un dépôt renommé ou transféré (3xx, non suivi) refuse la Destination', async () => {
-    const { fetch, requetes } = github(GITHUB.deplace);
+  it('a renamed or transferred repository (3xx, not followed) rejects the Destination', async () => {
+    const { fetch, requests } = github(GITHUB.moved);
 
-    expect(await adaptateur(fetch).send(ENVOI)).toEqual({
-      statut: 'echec',
-      classe: 'auth',
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass: 'auth',
       message: expect.stringContaining('301'),
     });
-    expect(requetes[0]?.init.redirect).toBe('manual');
+    expect(requests[0]?.init.redirect).toBe('manual');
   });
 
-  it('une erreur réseau ou un délai dépassé est transitoire', async () => {
-    expect(await adaptateur(github(new TypeError('fetch failed')).fetch).send(ENVOI)).toMatchObject(
-      { statut: 'echec', classe: 'transient', message: 'fetch failed' },
+  it('a network error or a timeout is transient', async () => {
+    expect(await adapter(github(new TypeError('fetch failed')).fetch).send(DELIVERY)).toMatchObject(
+      { status: 'failed', failureClass: 'transient', message: 'fetch failed' },
     );
-    expect(await adaptateur(github('bloque').fetch, 50).send(ENVOI)).toMatchObject({
-      statut: 'echec',
-      classe: 'transient',
+    expect(await adapter(github('hang').fetch, 50).send(DELIVERY)).toMatchObject({
+      status: 'failed',
+      failureClass: 'transient',
     });
   });
 
-  describe('alerte (Destination d’alerte)', () => {
-    /** Sans `linkify` : seuls les liens que le markdown écrit (un lien nu reste lisible). */
+  describe('alert (Alert destination)', () => {
+    /** Without `linkify`: only the links the markdown writes (a bare link stays readable). */
     const md = new MarkdownIt({ html: true });
-    const jetons = (corps: string) =>
-      md.parse(corps, {}).flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
 
-    it('crée une issue de l’alerte, avec le lien vers le dashboard', async () => {
-      const { fetch, requetes } = github(GITHUB.issueCreee);
+    it('creates an issue for the alert, with the link to the dashboard', async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toEqual({
-        statut: 'livre',
-        lienExterne: ISSUE_URL,
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
       });
 
-      expect(requetes[0]?.url).toBe(`${API_DEPOT}/issues`);
-      const corps = corpsJson(requetes[0]);
-      expect(corps.title).toBe('Retour en revue · @\u200beveryone *Boutique*');
-      expect(corps.body).toContain('influencer le Triage');
-      expect(corps.body).toContain(
-        `**Retour** : ${ALERTE_EN_REVUE.retour.id.replaceAll('-', '\\-')}`,
+      expect(requests[0]?.url).toBe(`${REPOSITORY_API}/issues`);
+      const body = jsonBody(requests[0]);
+      expect(body.title).toBe('Feedback in review · @​everyone *Shop*');
+      expect(body.body).toContain('influence Triage');
+      expect(body.body).toContain(
+        `**Feedback**: ${IN_REVIEW_ALERT.feedback.id.replaceAll('-', '\\-')}`,
       );
-      const liens = jetons(corps.body).filter((j) => j.type === 'link_open');
-      expect(liens.map((j) => j.attrGet('href'))).toEqual([ALERTE_EN_REVUE.lienDashboard]);
+      const links = tokens(body.body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([IN_REVIEW_ALERT.dashboardUrl]);
     });
 
-    it('rend littéraux les noms et le refus de la cible : ni lien masqué, ni HTML, ni mention', async () => {
-      const { fetch, requetes } = github(GITHUB.issueCreee);
+    it("makes the names and the target's refusal literal: no hidden link, HTML or mention", async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated);
 
-      await adaptateur(fetch).alerter(ALERTE_SUSPENSION);
+      await adapter(fetch).alert(SUSPENSION_ALERT);
 
-      const { title, body } = corpsJson(requetes[0]);
-      expect(title).toBe('Destination suspendue · Linear [prod](https://piege.test)');
-      const types = jetons(body).map((j) => j.type);
+      const { title, body } = jsonBody(requests[0]);
+      expect(title).toBe('Destination suspended · Linear [prod](https://trap.test)');
+      const types = tokens(body).map((t) => t.type);
       expect(types).not.toContain('link_open');
       expect(types).not.toContain('html_inline');
       expect(body).not.toMatch(/@here/);
-      const texte = jetons(body)
-        .filter((j) => j.type === 'text' || j.type === 'code_inline')
-        .map((j) => j.content)
+      const text = tokens(body)
+        .filter((t) => t.type === 'text' || t.type === 'code_inline')
+        .map((t) => t.content)
         .join('');
-      expect(texte).toContain('Linear [prod](https://piege.test)');
-      expect(texte).toContain('HTTP 401 : <!channel> @\u200bhere `jeton` refusé');
+      expect(text).toContain('Linear [prod](https://trap.test)');
+      expect(text).toContain('HTTP 401: <!channel> @​here `token` rejected');
     });
 
-    it('classe un refus comme un Envoi : dépôt introuvable = auth', async () => {
-      const { fetch } = github(GITHUB.introuvable);
+    it('classifies a refusal like a Delivery: repository not found = auth', async () => {
+      const { fetch } = github(GITHUB.notFound);
 
-      expect(await adaptateur(fetch).alerter(ALERTE_EN_REVUE)).toMatchObject({
-        statut: 'echec',
-        classe: 'auth',
+      expect(await adapter(fetch).alert(IN_REVIEW_ALERT)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
       });
     });
   });
 
   describe('healthCheck', () => {
-    it('lit le dépôt avec le jeton, sans rien créer ; issues ouvertes : joignable', async () => {
-      const { fetch, requetes } = github(GITHUB.depot);
+    it('reads the repository with the token, creating nothing; issues enabled: reachable', async () => {
+      const { fetch, requests } = github(GITHUB.repository);
 
-      expect(await adaptateur(fetch).healthCheck()).toEqual({ joignable: true });
+      expect(await adapter(fetch).healthCheck()).toEqual({ reachable: true });
 
-      expect(requetes).toHaveLength(1);
-      expect(requetes[0]?.url).toBe(API_DEPOT);
-      expect(requetes[0]?.init.method ?? 'GET').toBe('GET');
-      expect(requetes[0]?.corps).toBeNull();
-      expect(requetes[0]?.entetes.get('authorization')).toBe(`Bearer ${JETON}`);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(REPOSITORY_API);
+      expect(requests[0]?.init.method ?? 'GET').toBe('GET');
+      expect(requests[0]?.body).toBeNull();
+      expect(requests[0]?.headers.get('authorization')).toBe(`Bearer ${TOKEN}`);
     });
 
     it.each([
-      ['aux issues désactivées', { has_issues: false }],
-      ['archivé', { archived: true }],
-    ])('un dépôt %s refuse la Destination (auth)', async (_, champs) => {
-      const depot = { ...GITHUB.depot, corps: { ...GITHUB.depot.corps, ...champs } };
+      ['with issues disabled', { has_issues: false }],
+      ['archived', { archived: true }],
+    ])('a repository %s rejects the Destination (auth)', async (_, fields) => {
+      const repository = { ...GITHUB.repository, body: { ...GITHUB.repository.body, ...fields } };
 
-      expect(await adaptateur(github(depot).fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe: 'auth',
-        message: expect.stringContaining(`${PROPRIETAIRE}/${NOM_DEPOT}`),
+      expect(await adapter(github(repository).fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass: 'auth',
+        message: expect.stringContaining(`${OWNER}/${REPOSITORY_NAME}`),
       });
     });
 
     it.each([
-      ['401 identifiants invalides', 'auth', GITHUB.identifiantsInvalides],
-      ['404 dépôt introuvable', 'auth', GITHUB.introuvable],
-      ['301 dépôt déplacé', 'auth', GITHUB.deplace],
-      ['403 limite primaire', 'transient', GITHUB.limitePrimaire],
-      ['503 indisponible', 'transient', GITHUB.indisponible],
-    ] as const)('une réponse %s le rend injoignable (%s)', async (_, classe, enregistrement) => {
-      expect(await adaptateur(github(enregistrement).fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe,
-        message: expect.stringContaining(String(enregistrement.status)),
+      ['401 bad credentials', 'auth', GITHUB.badCredentials],
+      ['404 repository not found', 'auth', GITHUB.notFound],
+      ['301 repository moved', 'auth', GITHUB.moved],
+      ['403 primary rate limit', 'transient', GITHUB.primaryRateLimit],
+      ['503 unavailable', 'transient', GITHUB.unavailable],
+    ] as const)('a %s response makes it unreachable (%s)', async (_, failureClass, recording) => {
+      expect(await adapter(github(recording).fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass,
+        message: expect.stringContaining(String(recording.status)),
       });
     });
 
-    it('une erreur réseau le rend injoignable (transient)', async () => {
-      expect(await adaptateur(github(new TypeError('fetch failed')).fetch).healthCheck()).toEqual({
-        joignable: false,
-        classe: 'transient',
+    it('a network error makes it unreachable (transient)', async () => {
+      expect(await adapter(github(new TypeError('fetch failed')).fetch).healthCheck()).toEqual({
+        reachable: false,
+        failureClass: 'transient',
         message: 'fetch failed',
       });
     });
   });
 
-  it('marque le Retour d’essai et le Verdict incertain ; sans Gravité ni lien du dashboard', async () => {
-    const { fetch, requetes } = github(GITHUB.issueCreee);
-    const retour = { ...ENVOI.retour, gravite: null, incertain: true, lienDashboard: null };
+  it('marks the test Feedback and the uncertain Verdict; without Severity or dashboard link', async () => {
+    const { fetch, requests } = github(GITHUB.issueCreated);
+    const feedback = { ...DELIVERY.feedback, severity: null, uncertain: true, dashboardUrl: null };
 
-    await adaptateur(fetch).send({ ...ENVOI, essai: true, retour });
+    await adapter(fetch).send({ ...DELIVERY, isTest: true, feedback });
 
-    const corps = corpsJson(requetes[0]);
-    expect(corps.title).toBe('Essai · Bug · Le panier se vide quand je change de page.');
-    expect(corps.body).toContain('**Gravité** : Non évaluée');
-    expect(corps.body).toContain('**Verdict incertain**');
-    expect(corps.body).not.toContain('Voir le Retour');
+    const body = jsonBody(requests[0]);
+    expect(body.title).toBe('Test · Bug · The cart empties when I change pages.');
+    expect(body.body).toContain('**Severity**: Not assessed');
+    expect(body.body).toContain('**Uncertain verdict**');
+    expect(body.body).not.toContain('View the feedback');
   });
 
-  describe('encodage du texte de l’Auteur', () => {
-    const MALVEILLANT = [
-      '@everyone merci @octocat et @garage-sh/maintainers',
-      'Voir #1, garage-sh/nudge#2, GH-3 et a5c3785ed8d6a35868bc169f07e40e889087fd2e',
-      '[cliquez](https://piege.test/connexion) ![pixel](https://piege.test/p.png) https://piege.test/direct',
-      '<img src=x onerror=alert(1)> <details><summary>ouvrir</summary></details>',
-      '# Titre',
+  describe("encoding of the Author's text", () => {
+    const MALICIOUS = [
+      '@everyone thanks @octocat and @garage-sh/maintainers',
+      'See #1, garage-sh/nudge#2, GH-3 and a5c3785ed8d6a35868bc169f07e40e889087fd2e',
+      '[click](https://trap.test/login) ![pixel](https://trap.test/p.png) https://trap.test/direct',
+      '<img src=x onerror=alert(1)> <details><summary>open</summary></details>',
+      '# Title',
       '```',
-      'fin du bloc ?',
+      'end of block?',
       '````js',
       '~~~',
-      '    indenté',
-      '- [ ] liste',
+      '    indented',
+      '- [ ] list',
     ].join('\n');
 
     const md = new MarkdownIt({ html: true, linkify: true });
 
-    async function issue(texte: string, projet = ENVOI.projet) {
-      const { fetch, requetes } = github(GITHUB.issueCreee);
-      await adaptateur(fetch).send({ ...ENVOI, projet, retour: { ...ENVOI.retour, texte } });
-      return corpsJson(requetes[0]);
+    async function issue(text: string, project = DELIVERY.project) {
+      const { fetch, requests } = github(GITHUB.issueCreated);
+      await adapter(fetch).send({
+        ...DELIVERY,
+        project,
+        feedback: { ...DELIVERY.feedback, text },
+      });
+      return jsonBody(requests[0]);
     }
 
-    /** Les jetons markdown-it (CommonMark, HTML et liens nus reconnus) du corps. */
-    const jetons = (corps: string) =>
-      md.parse(corps, {}).flatMap((jeton) => [jeton, ...(jeton.children ?? [])]);
+    /** The markdown-it tokens (CommonMark, HTML and bare links recognized) of the body. */
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
 
-    it('rend le texte dans un bloc de code qu’il ne peut pas refermer, tel quel', async () => {
-      const { body } = await issue(MALVEILLANT);
+    it('renders the text in a code block it cannot close, as is', async () => {
+      const { body } = await issue(MALICIOUS);
 
-      const [premier] = md.parse(body, {});
-      expect(premier?.type).toBe('fence');
-      expect(premier?.content).toBe(`${MALVEILLANT}\n`);
-      // Un bloc de code est littéral (spec GFM, « Fenced code blocks ») : ni mention, ni
-      // référence d'issue, ni lien, ni image, ni HTML.
-      expect(jetons(body).filter((j) => j.type === 'fence')).toHaveLength(1);
+      const [first] = md.parse(body, {});
+      expect(first?.type).toBe('fence');
+      expect(first?.content).toBe(`${MALICIOUS}\n`);
+      // A code block is literal (GFM spec, "Fenced code blocks"): no mention, issue
+      // reference, link, image or HTML.
+      expect(tokens(body).filter((t) => t.type === 'fence')).toHaveLength(1);
     });
 
-    it('ne laisse ni lien, ni image, ni HTML hors du lien vers nudge', async () => {
-      const { body } = await issue(MALVEILLANT);
+    it('leaves no link, image or HTML besides the link to nudge', async () => {
+      const { body } = await issue(MALICIOUS);
 
-      const types = jetons(body).map((j) => j.type);
+      const types = tokens(body).map((t) => t.type);
       expect(types).not.toContain('image');
       expect(types).not.toContain('html_block');
       expect(types).not.toContain('html_inline');
-      const liens = jetons(body).filter((j) => j.type === 'link_open');
-      expect(liens.map((j) => j.attrGet('href'))).toEqual([ENVOI.retour.lienDashboard]);
+      const links = tokens(body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([DELIVERY.feedback.dashboardUrl]);
     });
 
-    it('garde les retours à la ligne et l’indentation ; normalise les fins de ligne', async () => {
+    it('keeps line breaks and indentation; normalizes line endings', async () => {
       const { body } = await issue('a\r\n  b\rc');
 
       expect(md.parse(body, {})[0]?.content).toBe('a\n  b\nc\n');
     });
 
-    it('tronque un texte trop long pour une issue, bloc de code compris', async () => {
+    it('truncates a text too long for an issue, code block included', async () => {
       const { body } = await issue('a'.repeat(70_000));
 
       expect(body.length).toBeLessThanOrEqual(65_536);
-      const [premier] = md.parse(body, {});
-      expect(premier?.type).toBe('fence');
-      expect(premier?.content.endsWith('…\n')).toBe(true);
+      const [first] = md.parse(body, {});
+      expect(first?.type).toBe('fence');
+      expect(first?.content.endsWith('…\n')).toBe(true);
     });
 
-    it('reste sous la limite même quand la clôture s’allonge (longue suite d’accents graves)', async () => {
-      const texte = `${'`'.repeat(40_000)}\n${'a'.repeat(40_000)}`;
-      const { body } = await issue(texte);
+    it('stays under the limit even when the fence grows (long run of backticks)', async () => {
+      const text = `${'`'.repeat(40_000)}\n${'a'.repeat(40_000)}`;
+      const { body } = await issue(text);
 
       expect(body.length).toBeLessThanOrEqual(65_536);
-      const [premier] = md.parse(body, {});
-      expect(premier?.type).toBe('fence');
-      expect(md.parse(body, {}).filter((j) => j.type === 'fence')).toHaveLength(1);
+      const [first] = md.parse(body, {});
+      expect(first?.type).toBe('fence');
+      expect(md.parse(body, {}).filter((t) => t.type === 'fence')).toHaveLength(1);
     });
 
-    it('coupe les mentions du titre, qui reprend la première ligne', async () => {
-      const { title } = await issue('@everyone @octocat le panier se vide');
+    it('breaks the mentions of the title, which takes the first line', async () => {
+      const { title } = await issue('@everyone @octocat the cart empties');
 
       expect(title).not.toMatch(/@(everyone|octocat)/);
-      expect(title.replaceAll('\u200b', '')).toBe('Bug · @everyone @octocat le panier se vide');
+      expect(title.replaceAll('​', '')).toBe('Bug · @everyone @octocat the cart empties');
     });
 
-    it('échappe le nom du Projet : ni lien, ni mention', async () => {
-      const { body } = await issue('Bonjour', {
-        ...ENVOI.projet,
-        nom: '[Boutique](https://piege.test) @garage-sh/maintainers',
+    it('escapes the Project name: no link, no mention', async () => {
+      const { body } = await issue('Hello', {
+        ...DELIVERY.project,
+        name: '[Shop](https://trap.test) @garage-sh/maintainers',
       });
 
-      const liens = jetons(body).filter((j) => j.type === 'link_open');
-      expect(liens.map((j) => j.attrGet('href'))).toEqual([ENVOI.retour.lienDashboard]);
-      const texte = jetons(body)
-        .filter((j) => j.type === 'text')
-        .map((j) => j.content)
+      const links = tokens(body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([DELIVERY.feedback.dashboardUrl]);
+      const text = tokens(body)
+        .filter((t) => t.type === 'text')
+        .map((t) => t.content)
         .join('');
-      expect(texte).toContain('[Boutique](https://piege.test)');
-      expect(texte).not.toContain('@garage-sh');
+      expect(text).toContain('[Shop](https://trap.test)');
+      expect(text).not.toContain('@garage-sh');
     });
   });
 
-  it('est enregistré pour le type « github » dans le registre des adaptateurs', () => {
-    const resolu = resolveDestinationAdapter(DESTINATION);
+  it('is registered for the "github" type in the adapter registry', () => {
+    const resolved = resolveDestinationAdapter(DESTINATION);
 
-    expect(typeof resolu.send).toBe('function');
-    expect(typeof resolu.healthCheck).toBe('function');
+    expect(typeof resolved.send).toBe('function');
+    expect(typeof resolved.healthCheck).toBe('function');
   });
 });

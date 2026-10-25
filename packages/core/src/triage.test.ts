@@ -1,55 +1,55 @@
 import { describe, expect, it } from 'vitest';
 import { buildTriageState, renderVerdict, type TriageAnswers } from './triage.js';
 
-/** Réponses du Juge : un bug majeur, avec la confiance donnée pour le Type et la Gravité. */
-function reponses(confiance: { type: number; gravite: number }): TriageAnswers {
+/** Judge answers: a major bug, with the given confidence for the Type and the Severity. */
+function judgeAnswers(confidence: { type: number; severity: number }): TriageAnswers {
   return {
     type: {
       kind: 'choice',
       choice: 'bug',
-      distribution: { bug: 0.7, suggestion: 0.1, avis: 0.1, question: 0.1 },
-      confidence: confiance.type,
+      distribution: { bug: 0.7, suggestion: 0.1, opinion: 0.1, question: 0.1 },
+      confidence: confidence.type,
     },
-    indesirable: { kind: 'noul', probability: 0.05 },
+    junk: { kind: 'noul', probability: 0.05 },
     manipulation: { kind: 'noul', probability: 0.05 },
-    gravite: {
+    severity: {
       kind: 'score',
-      level: 'majeure',
+      level: 'major',
       value: 0.66,
-      distribution: { cosmetique: 0.1, mineure: 0.2, majeure: 0.4, bloquante: 0.3 },
-      confidence: confiance.gravite,
+      distribution: { cosmetic: 0.1, minor: 0.2, major: 0.4, blocking: 0.3 },
+      confidence: confidence.severity,
     },
   };
 }
 
-describe('Verdict Incertain', () => {
-  it('un Type incertain cède au Type déclaré par l’Auteur', () => {
-    const verdict = renderVerdict(reponses({ type: 0.3, gravite: 0.9 }), 'question');
+describe('Uncertain Verdict', () => {
+  it('an uncertain Type yields to the Type declared by the Author', () => {
+    const verdict = renderVerdict(judgeAnswers({ type: 0.3, severity: 0.9 }), 'question');
 
-    expect(verdict).toMatchObject({ typeRetenu: 'question', gravite: 'majeure', incertain: true });
+    expect(verdict).toMatchObject({ resolvedType: 'question', severity: 'major', uncertain: true });
   });
 
-  it('une Gravité incertaine marque le Verdict sans écraser un Type sûr', () => {
-    const verdict = renderVerdict(reponses({ type: 0.9, gravite: 0.3 }), 'question');
+  it('an uncertain Severity flags the Verdict without overriding a confident Type', () => {
+    const verdict = renderVerdict(judgeAnswers({ type: 0.9, severity: 0.3 }), 'question');
 
-    expect(verdict).toMatchObject({ typeRetenu: 'bug', gravite: 'majeure', incertain: true });
+    expect(verdict).toMatchObject({ resolvedType: 'bug', severity: 'major', uncertain: true });
   });
 });
 
-describe('State envoyé au Juge', () => {
-  it('ne transmet de l’URL de la page que l’origine et le chemin', () => {
+describe('State sent to the Judge', () => {
+  it('passes on only the origin and path of the page URL', () => {
     const state = buildTriageState({
-      texte: 'Le virement échoue',
-      typeDeclare: null,
-      contexte: {
-        url: 'https://alice:secret@banque.exemple/virements/nouveau?iban=FR76123&jeton=abc#etape-2',
+      text: 'The transfer fails',
+      declaredType: null,
+      context: {
+        url: 'https://alice:secret@bank.example/transfers/new?iban=FR76123&token=abc#step-2',
       },
-      descriptionProjet: null,
+      projectDescription: null,
     });
 
     expect(state).toEqual({
-      texte: 'Le virement échoue',
-      url: 'https://banque.exemple/virements/nouveau',
+      text: 'The transfer fails',
+      url: 'https://bank.example/transfers/new',
     });
   });
 });

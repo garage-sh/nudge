@@ -1,293 +1,297 @@
 import {
-  presenterAlerte,
-  type ClasseEchec,
+  presentAlert,
+  type FailureClass,
   type DestinationAdapter,
-  type DestinationConfiguree,
-  type EnvoiASortir,
-  type ResultatEnvoi,
+  type ConfiguredDestination,
+  type OutgoingDelivery,
+  type DeliveryResult,
 } from '@nudge/core';
 import {
-  LIBELLES_GRAVITE,
-  LIBELLES_TYPE,
-  definitionLinear,
-  nomFichierCapture,
-  type SecretsLinear,
+  SEVERITY_LABELS,
+  FEEDBACK_TYPE_LABELS,
+  linearDefinition,
+  captureFileName,
+  type LinearSecrets,
 } from '@nudge/shared';
-import { lireCapture, type ImageCapture } from './capture.js';
+import { readCapture, type CaptureImage } from './capture.js';
 import {
-  DELAI_HTTP_PAR_DEFAUT_MS,
-  EXTRAIT_MAX,
-  classerStatut,
-  echecHttp,
-  messageErreur,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  EXCERPT_MAX,
+  classifyStatus,
+  httpFailure,
+  errorMessage,
 } from './http.js';
-import { alerteEnMarkdown, echapperPonctuation, lienSur } from './markdown.js';
-import { titreAvecType, tronquer } from './texte.js';
+import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
+import { titleWithType, truncate } from './text.js';
 
-export interface OptionsLinear {
+export interface LinearOptions {
   readonly fetch?: typeof globalThis.fetch;
-  /** Délai de réponse de Linear, au-delà duquel l'appel est un échec transitoire. */
-  readonly delaiMs?: number;
-  /** Équipe et labels déjà lus, par Destination (tests : un cache neuf). */
-  readonly equipes?: Map<string, EquipeLue>;
+  /** Linear response timeout, beyond which the call is a transient failure. */
+  readonly timeoutMs?: number;
+  /** Team and labels already read, per Destination (tests: a fresh cache). */
+  readonly teams?: Map<string, LoadedTeam>;
 }
 
-/** L'équipe d'une Destination, telle que lue dans Linear : son id et ses labels par nom. */
-export interface EquipeLue {
+/** A Destination's team, as read from Linear: its id and its labels by name. */
+export interface LoadedTeam {
   readonly id: string;
-  /** Id de chaque label applicable, par nom en minuscules. */
+  /** Id of each applicable label, by lowercase name. */
   readonly labels: ReadonlyMap<string, string>;
 }
 
-const EQUIPES_PAR_DESTINATION = new Map<string, EquipeLue>();
+const TEAMS_BY_DESTINATION = new Map<string, LoadedTeam>();
 
 /** https://linear.app/developers/graphql */
-const POINT_D_APPEL = 'https://api.linear.app/graphql';
+const ENDPOINT = 'https://api.linear.app/graphql';
 
 /**
- * L'équipe par sa clé, et les labels qu'une issue de cette équipe peut porter : les
- * siens et ceux de l'espace de travail (`team` nulle).
+ * The team by its key, and the labels an issue of this team can carry: its own and
+ * the workspace's (`team` null).
  */
-const REQUETE_EQUIPE = `query EquipeNudge($equipe: String!) {
-  teams(filter: { key: { eqIgnoreCase: $equipe } }) { nodes { id key } }
+const TEAM_QUERY = `query NudgeTeam($team: String!) {
+  teams(filter: { key: { eqIgnoreCase: $team } }) { nodes { id key } }
   issueLabels(
     first: 250
-    filter: { or: [{ team: { key: { eqIgnoreCase: $equipe } } }, { team: { null: true } }] }
+    filter: { or: [{ team: { key: { eqIgnoreCase: $team } } }, { team: { null: true } }] }
   ) { nodes { id name isGroup } }
 }`;
 
 /** https://linear.app/developers/how-to-upload-a-file-to-linear */
-const MUTATION_FICHIER = `mutation FichierNudge($contentType: String!, $filename: String!, $size: Int!) {
+const FILE_MUTATION = `mutation NudgeFile($contentType: String!, $filename: String!, $size: Int!) {
   fileUpload(contentType: $contentType, filename: $filename, size: $size) {
     success
     uploadFile { uploadUrl assetUrl headers { key value } }
   }
 }`;
 
-const MUTATION_ISSUE = `mutation IssueNudge($entree: IssueCreateInput!) {
-  issueCreate(input: $entree) { success issue { id identifier url } }
+const ISSUE_MUTATION = `mutation NudgeIssue($input: IssueCreateInput!) {
+  issueCreate(input: $input) { success issue { id identifier url } }
 }`;
 
 /**
- * Linear : une issue par Envoi, créée par l'API GraphQL avec une clé d'API personnelle
- * (https://linear.app/developers/graphql).
+ * Linear: one issue per Delivery, created through the GraphQL API with a personal
+ * API key (https://linear.app/developers/graphql).
  */
-export function adaptateurLinear(
-  destination: DestinationConfiguree,
-  options: OptionsLinear = {},
+export function linearAdapter(
+  destination: ConfiguredDestination,
+  options: LinearOptions = {},
 ): DestinationAdapter {
-  const config = definitionLinear.config.parse(destination.config);
-  const cleApi = (destination.secrets as Partial<SecretsLinear>).cleApi;
-  if (!cleApi) throw new Error(`Linear ${destination.id} sans clé d'API`);
-  const authorization: string = cleApi;
+  const config = linearDefinition.config.parse(destination.config);
+  const apiKey = (destination.secrets as Partial<LinearSecrets>).apiKey;
+  if (!apiKey) throw new Error(`Linear ${destination.id} has no API key`);
+  const authorization: string = apiKey;
   const fetch = options.fetch ?? globalThis.fetch;
-  const delaiMs = options.delaiMs ?? DELAI_HTTP_PAR_DEFAUT_MS;
-  const equipes = options.equipes ?? EQUIPES_PAR_DESTINATION;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+  const teams = options.teams ?? TEAMS_BY_DESTINATION;
 
-  /** Un appel GraphQL : ses données, ou l'échec classé (jamais une exception). */
-  async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<Appel<T>> {
-    let reponse: Response;
+  /** A GraphQL call: its data, or the classified failure (never an exception). */
+  async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<Call<T>> {
+    let response: Response;
     try {
-      reponse = await fetch(POINT_D_APPEL, {
+      response = await fetch(ENDPOINT, {
         method: 'POST',
         redirect: 'manual',
-        signal: AbortSignal.timeout(delaiMs),
-        // Clé personnelle : « Authorization: <API_KEY> », sans « Bearer ».
+        signal: AbortSignal.timeout(timeoutMs),
+        // Personal key: "Authorization: <API_KEY>", without "Bearer".
         headers: { 'content-type': 'application/json', authorization },
         body: JSON.stringify({ query, variables }),
       });
-    } catch (erreur) {
-      return { ok: false, classe: 'transient', message: messageErreur(erreur) };
+    } catch (error) {
+      return { ok: false, failureClass: 'transient', message: errorMessage(error) };
     }
-    const corps = await corpsGraphQL<T>(reponse);
-    if (!reponse.ok && !corps?.errors?.length) return { ok: false, ...(await echecHttp(reponse)) };
-    await reponse.body?.cancel();
-    if (corps?.errors?.length) return { ok: false, ...echecGraphQL(reponse.status, corps.errors) };
-    if (!corps?.data) {
+    const body = await graphQLBody<T>(response);
+    if (!response.ok && !body?.errors?.length)
+      return { ok: false, ...(await httpFailure(response)) };
+    await response.body?.cancel();
+    if (body?.errors?.length) return { ok: false, ...graphQLFailure(response.status, body.errors) };
+    if (!body?.data) {
       return {
         ok: false,
-        classe: 'transient',
-        message: `Linear (HTTP ${reponse.status}) : réponse illisible`,
+        failureClass: 'transient',
+        message: `Linear (HTTP ${response.status}): unreadable response`,
       };
     }
-    return { ok: true, data: corps.data };
+    return { ok: true, data: body.data };
   }
 
-  /** Cache par Destination et par équipe : changer d'équipe ne reprend pas l'ancienne. */
-  const cleCache = `${destination.id}:${config.equipe}`;
+  /** Cache per Destination and per team: switching teams does not reuse the old one. */
+  const cacheKey = `${destination.id}:${config.team}`;
 
-  /** Lit l'équipe et ses labels dans Linear ; une équipe hors de portée de la clé est un refus. */
-  async function lireEquipe(): Promise<Appel<EquipeLue>> {
-    const appel = await graphql<DonneesEquipe>(REQUETE_EQUIPE, { equipe: config.equipe });
-    if (!appel.ok) return appel;
-    const [trouvee] = appel.data.teams.nodes;
-    if (!trouvee) {
-      return refus(`Équipe Linear « ${config.equipe} » introuvable avec cette clé d’API`);
+  /** Reads the team and its labels from Linear; a team out of the key's reach is a refusal. */
+  async function readTeam(): Promise<Call<LoadedTeam>> {
+    const call = await graphql<TeamData>(TEAM_QUERY, { team: config.team });
+    if (!call.ok) return call;
+    const [found] = call.data.teams.nodes;
+    if (!found) {
+      return refusal(`Linear team "${config.team}" not found with this API key`);
     }
     const labels = new Map<string, string>();
-    for (const label of appel.data.issueLabels.nodes) {
-      if (!label.isGroup) labels.set(cleLabel(label.name), label.id);
+    for (const label of call.data.issueLabels.nodes) {
+      if (!label.isGroup) labels.set(labelKey(label.name), label.id);
     }
-    const lue = { id: trouvee.id, labels };
-    equipes.set(cleCache, lue);
-    return { ok: true, data: lue };
+    const loaded = { id: found.id, labels };
+    teams.set(cacheKey, loaded);
+    return { ok: true, data: loaded };
   }
 
   /**
-   * L'équipe et les ids des labels nommés. L'équipe lue est gardée : elle n'est relue
-   * que si un nom manque (label créé depuis). Un nom toujours introuvable — ou un groupe
-   * de labels, qu'une issue ne porte pas — refuse la Destination : chaque Envoi échouerait.
+   * The team and the ids of the named labels. The team read is kept: it is only read
+   * again if a name is missing (label created since). A name still not found — or a
+   * label group, which an issue cannot carry — rejects the Destination: every Delivery
+   * would fail.
    */
-  async function resoudre(
-    noms: readonly string[],
-    { relire = false } = {},
-  ): Promise<Appel<EquipeEtLabels>> {
-    const connaitTout = (equipe: EquipeLue) =>
-      noms.every((nom) => equipe.labels.has(cleLabel(nom)));
-    const gardee = relire ? undefined : equipes.get(cleCache);
-    let equipe: EquipeLue;
-    if (gardee && connaitTout(gardee)) {
-      equipe = gardee;
+  async function resolve(
+    names: readonly string[],
+    { reread = false } = {},
+  ): Promise<Call<TeamAndLabels>> {
+    const knowsAll = (team: LoadedTeam) => names.every((name) => team.labels.has(labelKey(name)));
+    const kept = reread ? undefined : teams.get(cacheKey);
+    let team: LoadedTeam;
+    if (kept && knowsAll(kept)) {
+      team = kept;
     } else {
-      const lue = await lireEquipe();
-      if (!lue.ok) return lue;
-      equipe = lue.data;
+      const loaded = await readTeam();
+      if (!loaded.ok) return loaded;
+      team = loaded.data;
     }
-    const manquant = noms.find((nom) => !equipe.labels.has(cleLabel(nom)));
-    if (manquant !== undefined) {
-      return refus(`Label Linear « ${manquant} » introuvable dans l’équipe ${config.equipe}`);
+    const missing = names.find((name) => !team.labels.has(labelKey(name)));
+    if (missing !== undefined) {
+      return refusal(`Linear label "${missing}" not found in team ${config.team}`);
     }
     return {
       ok: true,
       data: {
-        equipeId: equipe.id,
-        labelIds: noms.map((nom) => equipe.labels.get(cleLabel(nom))!),
+        teamId: team.id,
+        labelIds: names.map((name) => team.labels.get(labelKey(name))!),
       },
     };
   }
 
   /**
-   * Téléverse l'image chez Linear (https://linear.app/developers/how-to-upload-a-file-to-linear) :
-   * `fileUpload` prépare une URL signée, un PUT y dépose l'image avec les en-têtes rendus,
-   * et l'`assetUrl` rendue la désigne dans la description. Un PUT refusé est passager :
-   * l'Envoi retenté demandera une nouvelle URL signée.
+   * Uploads the image to Linear (https://linear.app/developers/how-to-upload-a-file-to-linear):
+   * `fileUpload` prepares a signed URL, a PUT drops the image there with the returned
+   * headers, and the returned `assetUrl` points to it in the description. A rejected PUT
+   * is temporary: the retried Delivery will ask for a new signed URL.
    */
-  async function televerser(retourId: string, image: ImageCapture): Promise<Appel<string>> {
-    const preparation = await graphql<DonneesFichier>(MUTATION_FICHIER, {
+  async function upload(feedbackId: string, image: CaptureImage): Promise<Call<string>> {
+    const preparation = await graphql<FileData>(FILE_MUTATION, {
       contentType: image.contentType,
-      filename: nomFichierCapture(retourId, image.contentType),
-      size: image.octets.length,
+      filename: captureFileName(feedbackId, image.contentType),
+      size: image.bytes.length,
     });
     if (!preparation.ok) return preparation;
-    const fichier = preparation.data.fileUpload.uploadFile;
-    if (!preparation.data.fileUpload.success || !fichier) {
+    const file = preparation.data.fileUpload.uploadFile;
+    if (!preparation.data.fileUpload.success || !file) {
       return {
         ok: false,
-        classe: 'permanent',
-        message: 'Linear n’a pas préparé le téléversement de la Capture',
+        failureClass: 'permanent',
+        message: 'Linear did not prepare the Capture upload',
       };
     }
-    let reponse: Response;
+    let response: Response;
     try {
-      reponse = await fetch(fichier.uploadUrl, {
+      response = await fetch(file.uploadUrl, {
         method: 'PUT',
         redirect: 'manual',
-        signal: AbortSignal.timeout(delaiMs),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           'content-type': image.contentType,
           'cache-control': 'public, max-age=31536000',
-          ...Object.fromEntries(fichier.headers.map(({ key, value }) => [key, value])),
+          ...Object.fromEntries(file.headers.map(({ key, value }) => [key, value])),
         },
-        body: image.octets,
+        body: image.bytes,
       });
-    } catch (erreur) {
-      return { ok: false, classe: 'transient', message: messageErreur(erreur) };
+    } catch (error) {
+      return { ok: false, failureClass: 'transient', message: errorMessage(error) };
     }
-    await reponse.body?.cancel();
-    if (!reponse.ok) {
+    await response.body?.cancel();
+    if (!response.ok) {
       return {
         ok: false,
-        classe: 'transient',
-        message: `Linear : téléversement de la Capture refusé (HTTP ${reponse.status})`,
+        failureClass: 'transient',
+        message: `Linear: Capture upload refused (HTTP ${response.status})`,
       };
     }
-    return { ok: true, data: fichier.assetUrl };
+    return { ok: true, data: file.assetUrl };
   }
 
-  async function creerIssue(entree: {
+  async function createIssue(input: {
     teamId: string;
     title: string;
     description: string;
     labelIds: readonly string[];
-  }): Promise<ResultatEnvoi> {
-    const creation = await graphql<DonneesCreation>(MUTATION_ISSUE, { entree });
+  }): Promise<DeliveryResult> {
+    const creation = await graphql<CreationData>(ISSUE_MUTATION, { input });
     const issue = creation.ok ? creation.data.issueCreate.issue : null;
     if (!creation.ok || !creation.data.issueCreate.success || !issue) {
-      // Un label ou l'équipe a pu changer chez Linear : le prochain Envoi les relit.
-      equipes.delete(cleCache);
+      // A label or the team may have changed in Linear: the next Delivery reads them again.
+      teams.delete(cacheKey);
       return creation.ok
         ? {
-            statut: 'echec',
-            classe: 'permanent',
-            message: 'Linear n’a pas créé l’issue (success: false)',
+            status: 'failed',
+            failureClass: 'permanent',
+            message: 'Linear did not create the issue (success: false)',
           }
-        : echec(creation);
+        : failed(creation);
     }
-    return { statut: 'livre', lienExterne: issue.url };
+    return { status: 'delivered', externalUrl: issue.url };
   }
 
   return {
-    async send(envoi) {
-      const noms = [
-        config.labels.types[envoi.retour.typeRetenu],
-        envoi.retour.gravite ? config.labels.gravites[envoi.retour.gravite] : undefined,
-      ].filter((nom): nom is string => nom !== undefined);
-      const cible = await resoudre(noms);
-      if (!cible.ok) return echec(cible);
-      const capture = await lireCapture(envoi.retour.capture);
-      if (!capture.ok) return echec(capture);
+    async send(delivery) {
+      const names = [
+        config.labels.types[delivery.feedback.resolvedType],
+        delivery.feedback.severity
+          ? config.labels.severities[delivery.feedback.severity]
+          : undefined,
+      ].filter((name): name is string => name !== undefined);
+      const target = await resolve(names);
+      if (!target.ok) return failed(target);
+      const capture = await readCapture(delivery.feedback.capture);
+      if (!capture.ok) return failed(capture);
       let assetUrl: string | null = null;
       if (capture.image) {
-        const televersee = await televerser(envoi.retour.id, capture.image);
-        if (!televersee.ok) return echec(televersee);
-        assetUrl = televersee.data;
+        const uploaded = await upload(delivery.feedback.id, capture.image);
+        if (!uploaded.ok) return failed(uploaded);
+        assetUrl = uploaded.data;
       }
-      return creerIssue({
-        teamId: cible.data.equipeId,
-        title: titreAvecType(envoi, TITRE_MAX),
-        description: description(envoi, assetUrl),
-        labelIds: cible.data.labelIds,
+      return createIssue({
+        teamId: target.data.teamId,
+        title: titleWithType(delivery, TITLE_MAX),
+        description: description(delivery, assetUrl),
+        labelIds: target.data.labelIds,
       });
     },
-    /** Une issue dans l'équipe configurée, sans label : les labels sont ceux des Retours. */
-    async alerter(alerte) {
-      const cible = await resoudre([]);
-      if (!cible.ok) return echec(cible);
-      const { titre } = presenterAlerte(alerte);
-      return creerIssue({
-        teamId: cible.data.equipeId,
-        title: tronquer(titre, TITRE_MAX),
-        description: alerteEnMarkdown(alerte, texteEchappe),
+    /** An issue in the configured team, without labels: the labels are the Feedback's. */
+    async alert(alert) {
+      const target = await resolve([]);
+      if (!target.ok) return failed(target);
+      const { title } = presentAlert(alert);
+      return createIssue({
+        teamId: target.data.teamId,
+        title: truncate(title, TITLE_MAX),
+        description: alertToMarkdown(alert, escapedText),
         labelIds: [],
       });
     },
     /**
-     * Relit l'équipe et tous les labels configurés avec la clé, sans rien créer : la
-     * Destination n'est joignable que si chaque Envoi pourrait l'être.
+     * Reads the team and all the configured labels again with the key, creating nothing:
+     * the Destination is only reachable if every Delivery could be.
      */
     async healthCheck() {
-      const tous = [
+      const all = [
         ...Object.values(config.labels.types),
-        ...Object.values(config.labels.gravites),
+        ...Object.values(config.labels.severities),
       ];
-      const cible = await resoudre(tous, { relire: true });
-      if (!cible.ok) return { joignable: false, classe: cible.classe, message: cible.message };
-      return { joignable: true };
+      const target = await resolve(all, { reread: true });
+      if (!target.ok)
+        return { reachable: false, failureClass: target.failureClass, message: target.message };
+      return { reachable: true };
     },
   };
 }
 
-interface DonneesEquipe {
+interface TeamData {
   readonly teams: { readonly nodes: readonly { readonly id: string }[] };
   readonly issueLabels: {
     readonly nodes: readonly {
@@ -298,7 +302,7 @@ interface DonneesEquipe {
   };
 }
 
-interface DonneesFichier {
+interface FileData {
   readonly fileUpload: {
     readonly success: boolean;
     readonly uploadFile: {
@@ -309,79 +313,86 @@ interface DonneesFichier {
   };
 }
 
-interface DonneesCreation {
+interface CreationData {
   readonly issueCreate: {
     readonly success: boolean;
     readonly issue: { readonly url: string } | null;
   };
 }
 
-/** Longueur maximale du titre d'une issue (texte brut chez Linear), en unités UTF-16. */
-const TITRE_MAX = 120;
+/** Maximum length of an issue title (plain text on Linear), in UTF-16 units. */
+const TITLE_MAX = 120;
 
 /**
- * Description (markdown) : le texte de l'Auteur échappé, la Capture (image déjà
- * téléversée chez Linear, désignée par son `assetUrl`), puis un pied écrit par nudge.
+ * Description (markdown): the Author's escaped text, the Capture (image already
+ * uploaded to Linear, referenced by its `assetUrl`), then a footer written by nudge.
  */
-function description({ projet, retour }: EnvoiASortir, assetUrl: string | null): string {
-  const gravite = retour.gravite ? LIBELLES_GRAVITE[retour.gravite] : 'Non évaluée';
-  const pied = [
-    `**Projet** : ${echapperPonctuation(projet.nom)}`,
-    `**Type** : ${LIBELLES_TYPE[retour.typeRetenu]} · **Gravité** : ${gravite}`,
-    ...(retour.incertain
-      ? ['**Verdict incertain** : le Juge a hésité, vérifiez-le dans nudge.']
+function description({ project, feedback }: OutgoingDelivery, assetUrl: string | null): string {
+  const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
+  const footer = [
+    `**Project**: ${escapePunctuation(project.name)}`,
+    `**Type**: ${FEEDBACK_TYPE_LABELS[feedback.resolvedType]} · **Severity**: ${severity}`,
+    ...(feedback.uncertain
+      ? ['**Uncertain verdict**: the Judge hesitated, check it in nudge.']
       : []),
-    ...(lienSur(retour.lienDashboard)
-      ? [`[Voir le Retour dans nudge](<${retour.lienDashboard}>)`]
+    ...(isSafeLink(feedback.dashboardUrl)
+      ? [`[View the feedback in nudge](<${feedback.dashboardUrl}>)`]
       : []),
   ];
-  const capture = lienSur(assetUrl) ? [`![Capture de la page](<${assetUrl}>)`] : [];
-  return [texteEchappe(retour.texte), ...capture, '---', ...pied].join('\n\n');
+  const capture = isSafeLink(assetUrl) ? [`![Page capture](<${assetUrl}>)`] : [];
+  return [escapedText(feedback.text), ...capture, '---', ...footer].join('\n\n');
 }
 
 /**
- * Le texte de l'Auteur, affiché tel qu'il l'a écrit et jamais interprété : chaque
- * caractère de ponctuation ASCII est échappé d'une barre oblique inverse, ce que
- * CommonMark permet pour tous. Ni lien (même nu), ni image (que Linear irait chercher),
- * ni HTML, ni titre, liste ou mise en forme. Les lignes sont gardées par des retours à
- * la ligne forcés ; une indentation en tête de ligne, qui ferait un bloc de code,
- * devient des espaces insécables.
+ * The Author's text, shown as written and never interpreted: every ASCII punctuation
+ * character is escaped with a backslash, which CommonMark allows for all of them. No
+ * link (even bare), image (which Linear would fetch), HTML, heading, list or
+ * formatting. Lines are kept by hard line breaks; leading indentation, which would make
+ * a code block, becomes non-breaking spaces.
  */
-function texteEchappe(texte: string): string {
-  const paragraphes = texte
+function escapedText(text: string): string {
+  const paragraphs = text
     .split(/\r\n|\r|\n/)
-    .map((ligne) =>
-      echapperPonctuation(ligne.trimEnd()).replace(/^[ \t]+/, (indentation) =>
-        indentation.replaceAll('\t', '    ').replaceAll(' ', '\u00a0'),
+    .map((line) =>
+      escapePunctuation(line.trimEnd()).replace(/^[ \t]+/, (indentation) =>
+        indentation.replaceAll('\t', '    ').replaceAll(' ', ' '),
       ),
     )
     .join('\n')
     .split(/\n{2,}/)
-    .map((paragraphe) => paragraphe.split('\n').join('\\\n'))
-    .filter((paragraphe) => paragraphe.length > 0);
-  return paragraphes.length > 0 ? paragraphes.join('\n\n') : '_(texte vide)_';
+    .map((paragraph) => paragraph.split('\n').join('\\\n'))
+    .filter((paragraph) => paragraph.length > 0);
+  return paragraphs.length > 0 ? paragraphs.join('\n\n') : '_(empty text)_';
 }
 
-/** Un nom de label tel que Linear le compare : sans tenir compte de la casse. */
-const cleLabel = (nom: string) => nom.toLowerCase();
+/** A label name as Linear compares it: case-insensitively. */
+const labelKey = (name: string) => name.toLowerCase();
 
-type Echec = { readonly ok: false; readonly classe: ClasseEchec; readonly message: string };
-type Appel<T> = { readonly ok: true; readonly data: T } | Echec;
+type Failure = {
+  readonly ok: false;
+  readonly failureClass: FailureClass;
+  readonly message: string;
+};
+type Call<T> = { readonly ok: true; readonly data: T } | Failure;
 
-interface EquipeEtLabels {
-  readonly equipeId: string;
+interface TeamAndLabels {
+  readonly teamId: string;
   readonly labelIds: readonly string[];
 }
 
 /**
- * Une configuration que Linear refuse (équipe, label) : la Destination est Suspendue
- * comme pour une clé refusée, plutôt que chaque Envoi en échec.
+ * A configuration Linear refuses (team, label): the Destination is Suspended as for a
+ * rejected key, rather than each Delivery failing.
  */
-const refus = (message: string): Echec => ({ ok: false, classe: 'auth', message });
+const refusal = (message: string): Failure => ({ ok: false, failureClass: 'auth', message });
 
-const echec = ({ classe, message }: Echec): ResultatEnvoi => ({ statut: 'echec', classe, message });
+const failed = ({ failureClass, message }: Failure): DeliveryResult => ({
+  status: 'failed',
+  failureClass,
+  message,
+});
 
-interface ErreurGraphQL {
+interface GraphQLError {
   readonly message?: unknown;
   readonly extensions?: {
     readonly type?: unknown;
@@ -390,28 +401,28 @@ interface ErreurGraphQL {
   };
 }
 
-interface CorpsGraphQL<T> {
+interface GraphQLBody<T> {
   readonly data?: T | null;
-  readonly errors?: readonly ErreurGraphQL[];
+  readonly errors?: readonly GraphQLError[];
 }
 
-/** Le corps JSON d'une réponse, lu sur une copie (le corps reste lisible), ou `null`. */
-async function corpsGraphQL<T>(reponse: Response): Promise<CorpsGraphQL<T> | null> {
+/** The JSON body of a response, read from a clone (the body stays readable), or `null`. */
+async function graphQLBody<T>(response: Response): Promise<GraphQLBody<T> | null> {
   try {
-    const corps = (await reponse.clone().json()) as unknown;
-    return corps && typeof corps === 'object' ? (corps as CorpsGraphQL<T>) : null;
+    const body = (await response.clone().json()) as unknown;
+    return body && typeof body === 'object' ? (body as GraphQLBody<T>) : null;
   } catch {
     return null;
   }
 }
 
 /**
- * Types d'erreur de l'API Linear (`extensions.type`, ou `extensions.code` ramené à la
- * même forme : RATELIMITED, AUTHENTICATION_ERROR…), d'après le SDK Linear
+ * Error types of the Linear API (`extensions.type`, or `extensions.code` brought to the
+ * same shape: RATELIMITED, AUTHENTICATION_ERROR…), per the Linear SDK
  * (https://github.com/linear/linear/blob/master/packages/sdk/src/error.ts).
  */
-const TYPES_AUTH = new Set(['authentication error', 'forbidden']);
-const TYPES_TRANSITOIRES = new Set([
+const AUTH_TYPES = new Set(['authentication error', 'forbidden']);
+const TRANSIENT_TYPES = new Set([
   'ratelimited',
   'internal error',
   'lock timeout',
@@ -419,38 +430,38 @@ const TYPES_TRANSITOIRES = new Set([
   'bootstrap error',
 ]);
 
-const typeErreur = ({ extensions }: ErreurGraphQL): string => {
-  const brut = typeof extensions?.type === 'string' ? extensions.type : extensions?.code;
-  return typeof brut === 'string' ? brut.toLowerCase().replaceAll('_', ' ') : '';
+const errorType = ({ extensions }: GraphQLError): string => {
+  const raw = typeof extensions?.type === 'string' ? extensions.type : extensions?.code;
+  return typeof raw === 'string' ? raw.toLowerCase().replaceAll('_', ' ') : '';
 };
 
 /**
- * Classe d'une réponse portant des erreurs GraphQL : une clé refusée (« authentication
- * error », « forbidden ») refuse la Destination ; une limite de débit (HTTP 400, code
- * RATELIMITED, https://linear.app/developers/rate-limiting) ou une erreur interne est
- * passagère ; tout autre refus vise cette issue (entrée invalide…). Plusieurs erreurs :
- * la plus grave l'emporte.
+ * Class of a response carrying GraphQL errors: a rejected key ("authentication
+ * error", "forbidden") rejects the Destination; a rate limit (HTTP 400, code
+ * RATELIMITED, https://linear.app/developers/rate-limiting) or an internal error is
+ * temporary; any other refusal targets this issue (invalid input…). Several errors:
+ * the most severe wins.
  */
-function echecGraphQL(
+function graphQLFailure(
   status: number,
-  erreurs: readonly ErreurGraphQL[],
-): { classe: ClasseEchec; message: string } {
-  const classes = erreurs.map((erreur): ClasseEchec => {
-    const type = typeErreur(erreur);
-    if (TYPES_AUTH.has(type)) return 'auth';
-    if (TYPES_TRANSITOIRES.has(type)) return 'transient';
-    return status < 300 ? 'permanent' : classerStatut(status);
+  errors: readonly GraphQLError[],
+): { failureClass: FailureClass; message: string } {
+  const classes = errors.map((error): FailureClass => {
+    const type = errorType(error);
+    if (AUTH_TYPES.has(type)) return 'auth';
+    if (TRANSIENT_TYPES.has(type)) return 'transient';
+    return status < 300 ? 'permanent' : classifyStatus(status);
   });
-  const classe = classes.includes('auth')
+  const failureClass = classes.includes('auth')
     ? 'auth'
     : classes.includes('transient')
       ? 'transient'
       : 'permanent';
-  const messages = erreurs.map(({ message, extensions }) =>
-    String(extensions?.userPresentableMessage ?? message ?? 'erreur sans message'),
+  const messages = errors.map(({ message, extensions }) =>
+    String(extensions?.userPresentableMessage ?? message ?? 'error without a message'),
   );
   return {
-    classe,
-    message: tronquer(`Linear (HTTP ${status}) : ${messages.join(' ; ')}`, EXTRAIT_MAX),
+    failureClass,
+    message: truncate(`Linear (HTTP ${status}): ${messages.join('; ')}`, EXCERPT_MAX),
   };
 }

@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Signaler une faille de sécurité
+  - name: Report a security vulnerability
     url: https://github.com/garage-sh/nudge/security/advisories/new
-    about: En privé, jamais dans une issue publique.
+    about: Privately, never in a public issue.

@@ -5,33 +5,33 @@ import {
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
-import type { MembreVu } from '@nudge/shared';
+import type { MemberView } from '@nudge/shared';
 import type { Request } from 'express';
 import { readSessionCookie } from './session-cookie.js';
 import { SessionsService } from './sessions.service.js';
 
-export type MembreRequest = Request & { membre: MembreVu };
+export type MemberRequest = Request & { member: MemberView };
 
 /**
- * Exige une session de Membre (cookie `nudge_session`) : 401 `session_requise` sinon.
- * Tout contrôleur du dashboard hors setup, connexion et invitation le porte.
+ * Requires a Member session (`nudge_session` cookie): 401 `session_required` otherwise.
+ * Every dashboard controller except setup, sign in and invitation carries it.
  */
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(private readonly sessions: SessionsService) {}
 
-  async canActivate(contexte: ExecutionContext): Promise<boolean> {
-    const requete = contexte.switchToHttp().getRequest<MembreRequest>();
-    const jeton = readSessionCookie(requete);
-    const membre = jeton ? await this.sessions.resolve(jeton) : null;
-    if (!membre) throw new UnauthorizedException({ erreur: 'session_requise' });
-    requete.membre = membre;
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<MemberRequest>();
+    const token = readSessionCookie(request);
+    const member = token ? await this.sessions.resolve(token) : null;
+    if (!member) throw new UnauthorizedException({ error: 'session_required' });
+    request.member = member;
     return true;
   }
 }
 
-/** Le Membre connecté, posé par `SessionGuard`. */
-export const MembreCourant = createParamDecorator(
-  (_: unknown, contexte: ExecutionContext): MembreVu =>
-    contexte.switchToHttp().getRequest<MembreRequest>().membre,
+/** The signed-in Member, set by `SessionGuard`. */
+export const CurrentMember = createParamDecorator(
+  (_: unknown, context: ExecutionContext): MemberView =>
+    context.switchToHttp().getRequest<MemberRequest>().member,
 );

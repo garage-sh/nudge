@@ -9,18 +9,18 @@ import type { Request } from 'express';
 import { RateLimiter } from '../../infra/rate-limiter.js';
 
 /**
- * Freine la force brute sur les routes publiques qui hachent un mot de passe
- * (setup, connexion, invitation) : 10 tentatives par minute, par route et par IP.
- * Derrière un proxy, l'IP n'est la bonne que si `trust proxy` est réglé.
+ * Slows down brute force on the public routes that hash a password (setup, sign in,
+ * invitation): 10 attempts per minute, per route and per IP. Behind a proxy, the IP is
+ * only the right one if `trust proxy` is set.
  */
 @Injectable()
 export class AuthThrottleGuard implements CanActivate {
-  private readonly limiteur = new RateLimiter({ limit: 10, windowMs: 60_000 });
+  private readonly limiter = new RateLimiter({ limit: 10, windowMs: 60_000 });
 
-  canActivate(contexte: ExecutionContext): boolean {
-    const requete = contexte.switchToHttp().getRequest<Request>();
-    const route = `${contexte.getClass().name}.${contexte.getHandler().name}`;
-    if (this.limiteur.consume(`${route}:${requete.ip ?? 'inconnue'}`)) return true;
-    throw new HttpException({ erreur: 'trop_de_tentatives' }, HttpStatus.TOO_MANY_REQUESTS);
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<Request>();
+    const route = `${context.getClass().name}.${context.getHandler().name}`;
+    if (this.limiter.consume(`${route}:${request.ip ?? 'unknown'}`)) return true;
+    throw new HttpException({ error: 'too_many_attempts' }, HttpStatus.TOO_MANY_REQUESTS);
   }
 }

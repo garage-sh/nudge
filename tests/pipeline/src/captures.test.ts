@@ -1,198 +1,201 @@
-import type { StockageCaptures } from '@nudge/stockage';
+import type { CaptureStorage } from '@nudge/storage';
 import {
-  OCTETS_CAPTURE_MAX,
-  urlCapture,
+  CAPTURE_MAX_BYTES,
+  captureUrl,
   type ApiErrorBody,
-  type PageRetours,
-  type RetourDetailVu,
+  type FeedbackPage,
+  type FeedbackDetailView,
 } from '@nudge/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
 
-const ORIGINE = 'https://boutique.exemple';
+const ORIGIN = 'https://shop.example';
 
-/** Une image PNG de 1 × 1 pixel. */
+/** A 1 × 1 pixel PNG image. */
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64',
 );
-const SIGNATURE_PNG = PNG.subarray(0, 8);
-const SIGNATURE_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const PNG_SIGNATURE = PNG.subarray(0, 8);
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
-const capturePng = { contentType: 'image/png', data: PNG.toString('base64') } as const;
+const pngCapture = { contentType: 'image/png', data: PNG.toString('base64') } as const;
 
 describe('Captures', () => {
   let pipeline: Pipeline;
-  let clePublique: string;
-  let cleSecrete: string;
-  let membre: DashboardClient;
+  let publicKey: string;
+  let secretKey: string;
+  let member: DashboardClient;
 
   beforeAll(async () => {
     pipeline = await startPipeline();
-    ({ clePublique, cleSecrete } = await pipeline.createProjet({
-      nom: 'Boutique',
-      originesAutorisees: [ORIGINE],
+    ({ publicKey, secretKey } = await pipeline.createProject({
+      name: 'Shop',
+      allowedOrigins: [ORIGIN],
     }));
-    membre = await pipeline.signIn();
+    member = await pipeline.signIn();
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  async function posterAvecCapture(texte: string, capture: object = capturePng) {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, { texte, capture });
-    expect(reponse.status).toBe(202);
-    const { id } = (await reponse.json()) as { id: string };
+  async function postWithCapture(text: string, capture: object = pngCapture) {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, { text, capture });
+    expect(response.status).toBe(202);
+    const { id } = (await response.json()) as { id: string };
     return id;
   }
 
-  it('stocke la Capture jointe par le Widget et la montre au Membre, octet pour octet', async () => {
-    const id = await posterAvecCapture('Le panier déborde de l’écran');
+  it('stores the Capture attached by the Widget and shows it to the Member, byte for byte', async () => {
+    const id = await postWithCapture('The cart overflows the screen');
 
-    const detail = await membre.get<RetourDetailVu>(`/api/retours/${id}`);
-    expect(detail.body.capture).toEqual({ contentType: 'image/png', octets: PNG.length });
-    const image = await membre.telecharger(urlCapture(id));
+    const detail = await member.get<FeedbackDetailView>(`/api/feedbacks/${id}`);
+    expect(detail.body.capture).toEqual({ contentType: 'image/png', bytes: PNG.length });
+    const image = await member.download(captureUrl(id));
     expect(image.status).toBe(200);
-    expect(image.enTetes.get('content-type')).toBe('image/png');
-    expect(image.enTetes.get('x-content-type-options')).toBe('nosniff');
-    expect(image.octets).toEqual(new Uint8Array(PNG));
+    expect(image.headers.get('content-type')).toBe('image/png');
+    expect(image.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(image.bytes).toEqual(new Uint8Array(PNG));
   });
 
-  it('accepte aussi une Capture postée avec la clé secrète', async () => {
-    const reponse = await pipeline.postRetour(cleSecrete, {
-      texte: 'Capture envoyée par le backend',
-      capture: { contentType: 'image/jpeg', data: SIGNATURE_JPEG.toString('base64') },
+  it('also accepts a Capture posted with the secret key', async () => {
+    const response = await pipeline.postFeedback(secretKey, {
+      text: 'Capture sent by the backend',
+      capture: { contentType: 'image/jpeg', data: JPEG_SIGNATURE.toString('base64') },
     });
-    expect(reponse.status).toBe(202);
-    const { id } = (await reponse.json()) as { id: string };
+    expect(response.status).toBe(202);
+    const { id } = (await response.json()) as { id: string };
 
-    expect((await membre.get<RetourDetailVu>(`/api/retours/${id}`)).body.capture).toEqual({
+    expect((await member.get<FeedbackDetailView>(`/api/feedbacks/${id}`)).body.capture).toEqual({
       contentType: 'image/jpeg',
-      octets: SIGNATURE_JPEG.length,
+      bytes: JPEG_SIGNATURE.length,
     });
   });
 
-  it('un Retour sans Capture n’en montre aucune', async () => {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, { texte: 'Sans image' });
-    const { id } = (await reponse.json()) as { id: string };
+  it('a Feedback without a Capture shows none', async () => {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, { text: 'No image' });
+    const { id } = (await response.json()) as { id: string };
 
-    expect((await membre.get<RetourDetailVu>(`/api/retours/${id}`)).body.capture).toBeNull();
-    const image = await membre.telecharger(urlCapture(id));
+    expect((await member.get<FeedbackDetailView>(`/api/feedbacks/${id}`)).body.capture).toBeNull();
+    const image = await member.download(captureUrl(id));
     expect(image.status).toBe(404);
-    expect(image.json<ApiErrorBody>()).toEqual({ erreur: 'capture_introuvable' });
+    expect(image.json<ApiErrorBody>()).toEqual({ error: 'capture_not_found' });
   });
 
-  it('ne montre la Capture qu’à un Membre connecté', async () => {
-    const id = await posterAvecCapture('Réservé aux Membres');
+  it('shows the Capture only to a signed-in Member', async () => {
+    const id = await postWithCapture('Members only');
 
-    expect((await pipeline.dashboard().telecharger(urlCapture(id))).status).toBe(401);
+    expect((await pipeline.dashboard().download(captureUrl(id))).status).toBe(401);
   });
 
-  it('ne transmet jamais la Capture au Juge', async () => {
-    const texte = 'Le logo est pixelisé sur mobile';
-    const id = await posterAvecCapture(texte);
-    await pipeline.waitForRetour(id, (retour) => retour.etat !== 'recu');
+  it('never sends the Capture to the Judge', async () => {
+    const text = 'The logo is pixelated on mobile';
+    const id = await postWithCapture(text);
+    await pipeline.waitForFeedback(id, (feedback) => feedback.state !== 'received');
 
-    const requetes = pipeline.juge.requests.filter((requete) => requete.state.texte === texte);
-    expect(requetes).toHaveLength(1);
-    const brut = JSON.stringify(requetes);
-    expect(brut).not.toContain(capturePng.data);
-    expect(brut).not.toMatch(/capture/i);
+    const requests = pipeline.judge.requests.filter((request) => request.state.text === text);
+    expect(requests).toHaveLength(1);
+    const raw = JSON.stringify(requests);
+    expect(raw).not.toContain(pngCapture.data);
+    expect(raw).not.toMatch(/capture/i);
   });
 
-  it('joint la Capture à chaque Envoi, et rien à un Retour qui n’en a pas', async () => {
-    const { projet, clePublique: cle } = await pipeline.createProjet({
-      nom: 'Dispatch des Captures',
-      originesAutorisees: [ORIGINE],
+  it('attaches the Capture to each Delivery, and nothing to a Feedback that has none', async () => {
+    const { project, publicKey: key } = await pipeline.createProject({
+      name: 'Capture dispatch',
+      allowedOrigins: [ORIGIN],
     });
-    const { fake } = await pipeline.createDestination(projet.id);
-    const avec = (await (
-      await pipeline.postRetourWidget(cle, ORIGINE, { texte: 'Avec Capture', capture: capturePng })
+    const { fake } = await pipeline.createDestination(project.id);
+    const withCapture = (await (
+      await pipeline.postWidgetFeedback(key, ORIGIN, { text: 'With Capture', capture: pngCapture })
     ).json()) as { id: string };
-    const sans = (await (
-      await pipeline.postRetourWidget(cle, ORIGINE, { texte: 'Sans Capture' })
+    const withoutCapture = (await (
+      await pipeline.postWidgetFeedback(key, ORIGIN, { text: 'Without Capture' })
     ).json()) as { id: string };
-    await pipeline.waitForRetour(avec.id, (retour) => retour.etat === 'dispatche');
-    await pipeline.waitForRetour(sans.id, (retour) => retour.etat === 'dispatche');
-    await expect.poll(() => fake.envois.length).toBe(2);
+    await pipeline.waitForFeedback(withCapture.id, (feedback) => feedback.state === 'dispatched');
+    await pipeline.waitForFeedback(
+      withoutCapture.id,
+      (feedback) => feedback.state === 'dispatched',
+    );
+    await expect.poll(() => fake.deliveries.length).toBe(2);
 
-    const envoiAvec = fake.envois.find((envoi) => envoi.retour.id === avec.id)!;
-    const envoiSans = fake.envois.find((envoi) => envoi.retour.id === sans.id)!;
-    expect(envoiAvec.retour.capture).toMatchObject({
+    const deliveryWith = fake.deliveries.find((d) => d.feedback.id === withCapture.id)!;
+    const deliveryWithout = fake.deliveries.find((d) => d.feedback.id === withoutCapture.id)!;
+    expect(deliveryWith.feedback.capture).toMatchObject({
       contentType: 'image/png',
-      octets: PNG.length,
+      bytes: PNG.length,
     });
-    expect(await envoiAvec.retour.capture!.lire()).toEqual(new Uint8Array(PNG));
-    expect(envoiSans.retour.capture).toBeNull();
+    expect(await deliveryWith.feedback.capture!.read()).toEqual(new Uint8Array(PNG));
+    expect(deliveryWithout.feedback.capture).toBeNull();
   });
 
   it.each([
-    ['un format non pris en charge', { contentType: 'image/gif', data: 'R0lGODlhAQABAAAAACw=' }],
+    ['an unsupported format', { contentType: 'image/gif', data: 'R0lGODlhAQABAAAAACw=' }],
     [
-      'un PNG annoncé qui n’en est pas un',
-      { contentType: 'image/png', data: SIGNATURE_JPEG.toString('base64') },
+      'a declared PNG that is not one',
+      { contentType: 'image/png', data: JPEG_SIGNATURE.toString('base64') },
     ],
     [
-      'du HTML déguisé en image',
+      'HTML disguised as an image',
       {
         contentType: 'image/png',
         data: Buffer.from('<script>alert(1)</script>').toString('base64'),
       },
     ],
-    ['un contenu qui n’est pas du base64', { contentType: 'image/png', data: 'pas du base64 !' }],
-    ['une Capture vide', { contentType: 'image/png', data: '' }],
+    ['content that is not base64', { contentType: 'image/png', data: 'not base64 at all' }],
+    ['an empty Capture', { contentType: 'image/png', data: '' }],
     [
-      'une Capture trop lourde',
+      'a too heavy Capture',
       {
         contentType: 'image/png',
-        data: Buffer.concat([SIGNATURE_PNG, Buffer.alloc(OCTETS_CAPTURE_MAX)]).toString('base64'),
+        data: Buffer.concat([PNG_SIGNATURE, Buffer.alloc(CAPTURE_MAX_BYTES)]).toString('base64'),
       },
     ],
-  ])('refuse %s, sans rien enregistrer', async (_cas, capture) => {
-    const texte = `Capture refusée ${crypto.randomUUID()}`;
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, { texte, capture });
+  ])('refuses %s, without recording anything', async (_case, capture) => {
+    const text = `Capture refused ${crypto.randomUUID()}`;
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, { text, capture });
 
-    expect(reponse.status).toBe(400);
-    const corps = (await reponse.json()) as ApiErrorBody;
-    expect(corps.erreur).toBe('retour_invalide');
-    expect(corps.details?.every((detail) => detail.chemin.startsWith('capture'))).toBe(true);
-    const page = await membre.get<PageRetours>('/api/retours?limite=100');
-    expect(page.body.retours.some((retour) => retour.apercu === texte)).toBe(false);
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error).toBe('invalid_feedback');
+    expect(body.details?.every((detail) => detail.path.startsWith('capture'))).toBe(true);
+    const page = await member.get<FeedbackPage>('/api/feedbacks?limit=100');
+    expect(page.body.feedbacks.some((feedback) => feedback.preview === text)).toBe(false);
   });
 });
 
-describe('Captures, stockage indisponible', () => {
+describe('Captures, storage unavailable', () => {
   let pipeline: Pipeline;
 
-  const stockageEnPanne: StockageCaptures = {
-    enregistrer: () => Promise.reject(new Error('disque plein')),
-    lire: () => Promise.reject(new Error('disque illisible')),
-    supprimer: () => Promise.resolve(),
+  const brokenStorage: CaptureStorage = {
+    save: () => Promise.reject(new Error('disk full')),
+    read: () => Promise.reject(new Error('disk unreadable')),
+    delete: () => Promise.resolve(),
   };
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ stockage: stockageEnPanne });
+    pipeline = await startPipeline({ storage: brokenStorage });
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  it('refuse le Retour plutôt que de perdre sa Capture en silence', async () => {
-    const { projet, clePublique } = await pipeline.createProjet({
-      nom: 'Stockage en panne',
-      originesAutorisees: [ORIGINE],
+  it('refuses the Feedback rather than silently losing its Capture', async () => {
+    const { project, publicKey } = await pipeline.createProject({
+      name: 'Broken storage',
+      allowedOrigins: [ORIGIN],
     });
 
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte: 'Ma Capture ne sera pas perdue',
-      capture: capturePng,
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'My Capture will not be lost',
+      capture: pngCapture,
     });
 
-    expect(reponse.status).toBe(500);
-    const membre = await pipeline.signIn();
-    const page = await membre.get<PageRetours>(`/api/retours?projet=${projet.id}`);
-    expect(page.body.retours).toEqual([]);
+    expect(response.status).toBe(500);
+    const member = await pipeline.signIn();
+    const page = await member.get<FeedbackPage>(`/api/feedbacks?project=${project.id}`);
+    expect(page.body.feedbacks).toEqual([]);
   });
 });

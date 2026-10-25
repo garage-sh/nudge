@@ -1,0 +1,105 @@
+import { randomUUID } from 'node:crypto';
+import type { FailureClass } from '@nudge/shared';
+
+/**
+ * Member alerts: what a Destination adapter receives when the Instance's Alert
+ * destination must warn that a Feedback awaits review or that a Destination is
+ * Suspended. An alert never carries a Feedback's text: a Feedback In review is
+ * suspected of Manipulation, it is read in the dashboard.
+ */
+
+interface AlertBase {
+  /** Stable from one attempt to the next: a receiver uses it to ignore a duplicate. */
+  readonly id: string;
+  /** Sample alert from the "test" button. */
+  readonly isTest: boolean;
+  /** When the reported event happened. */
+  readonly at: Date;
+  readonly project: { readonly id: string; readonly name: string };
+  /** Where to act in the dashboard; `null` without `NUDGE_DASHBOARD_URL` (D12). */
+  readonly dashboardUrl: string | null;
+}
+
+/** A Feedback suspected of Manipulation awaits a Member's decision. */
+export interface FeedbackInReviewAlert extends AlertBase {
+  readonly event: 'feedback_in_review';
+  readonly feedback: { readonly id: string };
+}
+
+/** A Destination has just become Suspended; its Deliveries are held. */
+export interface DestinationSuspendedAlert extends AlertBase {
+  readonly event: 'destination_suspended';
+  readonly destination: {
+    readonly id: string;
+    readonly name: string;
+    /** `auth`: credentials refused; `transient`: repeated failures. */
+    readonly failureClass: Exclude<FailureClass, 'permanent'>;
+    /** The last refusal, as the target worded it: external text, to encode. */
+    readonly message: string;
+  };
+}
+
+export type Alert = FeedbackInReviewAlert | DestinationSuspendedAlert;
+export type AlertEvent = Alert['event'];
+
+/** An alert put into words, shared by the adapters that write a message. */
+export interface PresentedAlert {
+  /** Short title, in plain text (the name of the Project or the Destination is in it). */
+  readonly title: string;
+  /** What happened and what is expected of the Member, in plain text written by nudge. */
+  readonly summary: string;
+  /**
+   * Details in plain text, to be encoded by each adapter for its target; `long`: a text
+   * that deserves the full width (the target's refusal).
+   */
+  readonly details: readonly {
+    readonly label: string;
+    readonly value: string;
+    readonly long?: boolean;
+  }[];
+}
+
+/**
+ * The text of an alert, identical for every target: each adapter only encodes it
+ * (escaping, mentions, length limits).
+ */
+export function presentAlert(alert: Alert): PresentedAlert {
+  const testPrefix = alert.isTest ? 'Test · ' : '';
+  if (alert.event === 'feedback_in_review') {
+    return {
+      title: `${testPrefix}Feedback in review · ${alert.project.name}`,
+      summary:
+        'A Feedback seems to try to influence Triage: it goes to no Destination until a Member approves or rejects it.',
+      details: [
+        { label: 'Project', value: alert.project.name },
+        { label: 'Feedback', value: alert.feedback.id },
+      ],
+    };
+  }
+  const { destination } = alert;
+  return {
+    title: `${testPrefix}Destination suspended · ${destination.name}`,
+    summary:
+      destination.failureClass === 'auth'
+        ? 'The Destination refuses nudge’s credentials: its Deliveries are held until it accepts them again.'
+        : 'The Destination fails repeatedly: its Deliveries are held, and nudge probes it until it responds.',
+    details: [
+      { label: 'Project', value: alert.project.name },
+      { label: 'Destination', value: destination.name },
+      { label: 'Last refusal', value: destination.message, long: true },
+    ],
+  };
+}
+
+/** The sample alert sent by the Alert destination's "test" button. */
+export function testAlert(now = new Date()): FeedbackInReviewAlert {
+  return {
+    event: 'feedback_in_review',
+    id: randomUUID(),
+    isTest: true,
+    at: now,
+    project: { id: randomUUID(), name: 'Sample project' },
+    feedback: { id: randomUUID() },
+    dashboardUrl: null,
+  };
+}

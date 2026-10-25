@@ -1,20 +1,20 @@
 import { z } from 'zod';
 import {
-  GRAVITES,
-  TYPES_RETOUR,
-  type ClasseEchec,
-  type EtatDestination,
-  type Gravite,
-  type TypeRetour,
-} from '../domaine.js';
-import type { DefinitionDestination } from './definition.js';
-import { definitionDiscord } from './discord.js';
-import { definitionGitHub } from './github.js';
-import { definitionLinear } from './linear.js';
-import { definitionSlack } from './slack.js';
-import { definitionWebhook } from './webhook.js';
+  SEVERITIES,
+  FEEDBACK_TYPES,
+  type FailureClass,
+  type DestinationState,
+  type Severity,
+  type FeedbackType,
+} from '../domain.js';
+import type { DestinationDefinition } from './definition.js';
+import { discordDefinition } from './discord.js';
+import { gitHubDefinition } from './github.js';
+import { linearDefinition } from './linear.js';
+import { slackDefinition } from './slack.js';
+import { webhookDefinition } from './webhook.js';
 
-export { schemaUrlHttp, type DefinitionDestination } from './definition.js';
+export { httpUrlSchema, type DestinationDefinition } from './definition.js';
 export * from './discord.js';
 export * from './github.js';
 export * from './linear.js';
@@ -22,131 +22,130 @@ export * from './slack.js';
 export * from './webhook.js';
 
 /**
- * Types de Destination de l'Instance. Ajouter un type : sa définition (config,
- * secrets) dans un fichier voisin, enregistrée ici ; son adaptateur dans
- * `@nudge/destinations` ; son formulaire dans le dashboard. Le type est une clé
- * texte en base : aucune migration.
+ * The Instance's Destination types. Adding a type: its definition (config, secrets)
+ * in a sibling file, registered here; its adapter in `@nudge/destinations`; its form
+ * in the dashboard. The type is a text key in the database: no migration.
  */
-export const DEFINITIONS_DESTINATION = {
-  webhook: definitionWebhook,
-  discord: definitionDiscord,
-  linear: definitionLinear,
-  slack: definitionSlack,
-  github: definitionGitHub,
-} as const satisfies Record<string, DefinitionDestination>;
+export const DESTINATION_DEFINITIONS = {
+  webhook: webhookDefinition,
+  discord: discordDefinition,
+  linear: linearDefinition,
+  slack: slackDefinition,
+  github: gitHubDefinition,
+} as const satisfies Record<string, DestinationDefinition>;
 
-export type TypeDestination = keyof typeof DEFINITIONS_DESTINATION;
-export const TYPES_DESTINATION = Object.keys(DEFINITIONS_DESTINATION) as [
-  TypeDestination,
-  ...TypeDestination[],
+export type DestinationType = keyof typeof DESTINATION_DEFINITIONS;
+export const DESTINATION_TYPES = Object.keys(DESTINATION_DEFINITIONS) as [
+  DestinationType,
+  ...DestinationType[],
 ];
 
-export const estTypeDestination = (valeur: string): valeur is TypeDestination =>
-  Object.hasOwn(DEFINITIONS_DESTINATION, valeur);
+export const isDestinationType = (value: string): value is DestinationType =>
+  Object.hasOwn(DESTINATION_DEFINITIONS, value);
 
-export const LIMITES_DESTINATION = { nom: 100, secret: 4000 } as const;
+export const DESTINATION_LIMITS = { name: 100, secret: 4000 } as const;
 
-/** Filtre d'une Destination : au moins un Type retenu, Gravité minimale facultative. */
-export const schemaFiltre = z.strictObject({
+/** A Destination's Filter: at least one accepted Type, optional minimum Severity. */
+export const filterSchema = z.strictObject({
   types: z
-    .array(z.enum(TYPES_RETOUR))
-    .min(1, { message: 'Retenez au moins un Type' })
-    .transform((types) => TYPES_RETOUR.filter((type) => types.includes(type))),
-  graviteMinimale: z.enum(GRAVITES).nullable(),
+    .array(z.enum(FEEDBACK_TYPES))
+    .min(1, { message: 'Select at least one Type' })
+    .transform((types) => FEEDBACK_TYPES.filter((type) => types.includes(type))),
+  minimumSeverity: z.enum(SEVERITIES).nullable(),
 });
-export type FiltreSaisi = z.input<typeof schemaFiltre>;
+export type FilterInput = z.input<typeof filterSchema>;
 
-/** Le Filtre d'une Destination créée sans en préciser : tout Retour Trié lui est envoyé. */
-export const FILTRE_TOUT: FiltreVu = { types: TYPES_RETOUR, graviteMinimale: null };
+/** The Filter of a Destination created without one: every Triaged Feedback is sent to it. */
+export const FILTER_ALL: FilterView = { types: FEEDBACK_TYPES, minimumSeverity: null };
 
-const nomDestination = z.string().trim().min(1).max(LIMITES_DESTINATION.nom);
-
-/**
- * Valeurs des secrets saisis. Dans une modification : une clé absente garde le
- * secret enregistré, `null` l'efface.
- */
-const valeursSecrets = z.record(z.string(), z.string().max(LIMITES_DESTINATION.secret));
+const destinationName = z.string().trim().min(1).max(DESTINATION_LIMITS.name);
 
 /**
- * Création d'une Destination. `config` et `secrets` sont ensuite validés par l'api
- * selon le schéma du type (`DEFINITIONS_DESTINATION[type]`).
+ * Values of the entered secrets. In an update: an absent key keeps the stored secret,
+ * `null` clears it.
  */
-export const schemaNouvelleDestination = z.strictObject({
-  type: z.enum(TYPES_DESTINATION),
-  nom: nomDestination,
-  filtre: schemaFiltre.optional(),
+const secretValues = z.record(z.string(), z.string().max(DESTINATION_LIMITS.secret));
+
+/**
+ * Creation of a Destination. `config` and `secrets` are then validated by the api
+ * against the type's schema (`DESTINATION_DEFINITIONS[type]`).
+ */
+export const newDestinationSchema = z.strictObject({
+  type: z.enum(DESTINATION_TYPES),
+  name: destinationName,
+  filter: filterSchema.optional(),
   config: z.record(z.string(), z.unknown()),
-  secrets: valeursSecrets.optional(),
+  secrets: secretValues.optional(),
 });
-export type NouvelleDestination = z.input<typeof schemaNouvelleDestination>;
+export type NewDestination = z.input<typeof newDestinationSchema>;
 
-/** Modification : le type ne change pas ; `config`, si présente, est remplacée en entier. */
-export const schemaModificationDestination = z.strictObject({
-  nom: nomDestination.optional(),
-  filtre: schemaFiltre.optional(),
+/** Update: the type does not change; `config`, if present, is replaced as a whole. */
+export const destinationUpdateSchema = z.strictObject({
+  name: destinationName.optional(),
+  filter: filterSchema.optional(),
   config: z.record(z.string(), z.unknown()).optional(),
-  secrets: z.record(z.string(), z.string().max(LIMITES_DESTINATION.secret).nullable()).optional(),
+  secrets: z.record(z.string(), z.string().max(DESTINATION_LIMITS.secret).nullable()).optional(),
 });
-export type ModificationDestination = z.input<typeof schemaModificationDestination>;
+export type DestinationUpdate = z.input<typeof destinationUpdateSchema>;
 
-export interface FiltreVu {
-  readonly types: readonly TypeRetour[];
-  readonly graviteMinimale: Gravite | null;
+export interface FilterView {
+  readonly types: readonly FeedbackType[];
+  readonly minimumSeverity: Severity | null;
 }
 
-/** Une Destination telle que le dashboard la lit : jamais la valeur d'un secret. */
-export interface DestinationVu {
+/** A Destination as the dashboard reads it: never the value of a secret. */
+export interface DestinationView {
   readonly id: string;
-  readonly projetId: string;
-  readonly nom: string;
+  readonly projectId: string;
+  readonly name: string;
   /**
-   * Un `TypeDestination` en principe ; une chaîne quelconque pour une Destination
-   * d'un type que cette Instance ne sert plus (le dashboard la liste sans l'éditer).
+   * A `DestinationType` in principle; any string for a Destination of a type this
+   * Instance no longer serves (the dashboard lists it without editing it).
    */
   readonly type: string;
   readonly config: Readonly<Record<string, unknown>>;
-  readonly filtre: FiltreVu;
-  readonly etat: EtatDestination;
-  /** Noms des secrets enregistrés (chiffrés). */
+  readonly filter: FilterView;
+  readonly state: DestinationState;
+  /** Names of the stored (encrypted) secrets. */
   readonly secrets: readonly string[];
   readonly createdAt: string;
 }
 
-/** Réponse d'une création, ou d'une régénération des secrets générés par l'Instance. */
-export interface DestinationAvecSecretsGeneres {
-  readonly destination: DestinationVu;
-  /** Lisibles cette seule fois (secret de signature du webhook…). */
-  readonly secretsGeneres: Readonly<Record<string, string>>;
+/** Response to a creation, or to a regeneration of the secrets generated by the Instance. */
+export interface DestinationWithGeneratedSecrets {
+  readonly destination: DestinationView;
+  /** Readable this one time only (the webhook's signing secret…). */
+  readonly generatedSecrets: Readonly<Record<string, string>>;
 }
 
 /**
- * Destination d'alerte de l'Instance : un type de Destination, sa config et ses
- * secrets, sans nom ni Filtre. Pour le même type, une clé de `secrets` absente garde
- * le secret enregistré et `null` l'efface ; changer de type repart de zéro.
+ * The Instance's Alert destination: a Destination type, its config and its secrets,
+ * with no name and no Filter. For the same type, an absent `secrets` key keeps the
+ * stored secret and `null` clears it; changing the type starts from scratch.
  */
-export const schemaDestinationAlerte = z.strictObject({
-  type: z.enum(TYPES_DESTINATION),
+export const alertDestinationSchema = z.strictObject({
+  type: z.enum(DESTINATION_TYPES),
   config: z.record(z.string(), z.unknown()),
-  secrets: z.record(z.string(), z.string().max(LIMITES_DESTINATION.secret).nullable()).optional(),
+  secrets: z.record(z.string(), z.string().max(DESTINATION_LIMITS.secret).nullable()).optional(),
 });
-export type DestinationAlerteSaisie = z.input<typeof schemaDestinationAlerte>;
+export type AlertDestinationInput = z.input<typeof alertDestinationSchema>;
 
-/** La Destination d'alerte telle que le dashboard la lit : jamais la valeur d'un secret. */
-export interface DestinationAlerteVu {
-  /** Un `TypeDestination` en principe (voir `DestinationVu.type`). */
+/** The Alert destination as the dashboard reads it: never the value of a secret. */
+export interface AlertDestinationView {
+  /** A `DestinationType` in principle (see `DestinationView.type`). */
   readonly type: string;
   readonly config: Readonly<Record<string, unknown>>;
-  /** Noms des secrets enregistrés (chiffrés). */
+  /** Names of the stored (encrypted) secrets. */
   readonly secrets: readonly string[];
 }
 
-/** Réponse d'un enregistrement : les secrets générés à cette occasion, lisibles cette seule fois. */
-export interface DestinationAlerteAvecSecretsGeneres {
-  readonly destination: DestinationAlerteVu;
-  readonly secretsGeneres: Readonly<Record<string, string>>;
+/** Response to a save: the secrets generated on that occasion, readable this one time only. */
+export interface AlertDestinationWithGeneratedSecrets {
+  readonly destination: AlertDestinationView;
+  readonly generatedSecrets: Readonly<Record<string, string>>;
 }
 
-/** Résultat du bouton « tester » : un Retour d'exemple envoyé, sans Envoi enregistré. */
-export type ResultatTestDestination =
-  | { readonly statut: 'livre'; readonly lienExterne: string | null }
-  | { readonly statut: 'echec'; readonly classe: ClasseEchec; readonly message: string };
+/** Result of the "test" button: a sample Feedback sent, with no Delivery recorded. */
+export type DestinationTestResult =
+  | { readonly status: 'delivered'; readonly externalUrl: string | null }
+  | { readonly status: 'failed'; readonly failureClass: FailureClass; readonly message: string };

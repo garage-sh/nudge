@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Adaptateurs de Destination (webhook, Discord, Linear, Slack, GitHub Issues).",
+  "description": "Destination adapters (webhook, Discord, Linear, Slack, GitHub Issues).",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

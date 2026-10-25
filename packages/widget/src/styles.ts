@@ -1,9 +1,8 @@
 /**
- * Styles du Widget, confinés à son Shadow DOM : les sélecteurs de l'hôte n'y entrent
- * pas, et ceux-ci n'en sortent pas. Seules les propriétés héritées traversent la
- * frontière ; chaque élément fixe donc les siennes (police, couleur, taille en `px`,
- * jamais en `rem`, qui suit la racine de l'hôte). `--nudge-accent` est le seul
- * réglage ouvert à l'hôte.
+ * Widget styles, confined to its Shadow DOM: the host's selectors do not get in, and
+ * these do not get out. Only inherited properties cross the boundary; every element
+ * therefore sets its own (font, color, size in `px`, never `rem`, which follows the
+ * host's root). `--nudge-accent` is the only setting open to the host.
  */
 export const STYLES = `
 :host {
@@ -13,7 +12,7 @@ export const STYLES = `
   bottom: 20px;
   z-index: 2147483647;
 }
-.racine, .racine * {
+.root, .root * {
   box-sizing: border-box;
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -26,7 +25,7 @@ export const STYLES = `
   text-align: left;
   color: #1f2328;
 }
-.racine {
+.root {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -44,18 +43,18 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   outline: 2px solid var(--nudge-accent, #3b5bdb);
   outline-offset: 2px;
 }
-.lanceur, .envoyer {
+.launcher, .submit {
   background: var(--nudge-accent, #3b5bdb);
   color: #ffffff;
   font-weight: 600;
 }
-.lanceur {
+.launcher {
   border-radius: 999px;
   padding: 10px 18px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
-.envoyer:disabled { opacity: 0.6; cursor: progress; }
-.panneau {
+.submit:disabled { opacity: 0.6; cursor: progress; }
+.panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -67,10 +66,10 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   background: #ffffff;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
-.panneau[hidden], form[hidden], [hidden] { display: none; }
-.entete { display: flex; align-items: center; justify-content: space-between; }
+.panel[hidden], form[hidden], [hidden] { display: none; }
+.header { display: flex; align-items: center; justify-content: space-between; }
 h2 { font-size: 16px; line-height: 24px; font-weight: 600; }
-.fermer { padding: 2px 8px; font-size: 18px; color: #57606a; }
+.close { padding: 2px 8px; font-size: 18px; color: #57606a; }
 form { display: flex; flex-direction: column; gap: 6px; }
 label { display: block; font-weight: 600; margin-top: 6px; }
 textarea, select, input {
@@ -82,13 +81,13 @@ textarea, select, input {
   background: #ffffff;
 }
 textarea { resize: vertical; min-height: 96px; }
-.envoyer { margin-top: 10px; align-self: flex-end; }
+.submit { margin-top: 10px; align-self: flex-end; }
 .option { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
 .option input { display: inline-block; width: auto; margin: 0; padding: 0; }
-.etat-capture, .aide { color: #57606a; font-size: 13px; line-height: 18px; }
-.apercu { display: flex; flex-direction: column; gap: 6px; }
-.apercu[hidden] { display: none; }
-.cadre { position: relative; }
+.capture-status, .help { color: #57606a; font-size: 13px; line-height: 18px; }
+.preview { display: flex; flex-direction: column; gap: 6px; }
+.preview[hidden] { display: none; }
+.frame { position: relative; }
 canvas {
   display: block;
   width: 100%;
@@ -104,7 +103,7 @@ canvas {
   background: rgba(59, 91, 219, 0.15);
   pointer-events: none;
 }
-.retirer-flous { align-self: flex-start; padding: 4px 10px; border-color: #d0d7de; font-size: 13px; }
-.erreur { color: #cf222e; }
+.clear-blurs { align-self: flex-start; padding: 4px 10px; border-color: #d0d7de; font-size: 13px; }
+.error { color: #cf222e; }
 .confirmation { color: #1a7f37; }
 `;

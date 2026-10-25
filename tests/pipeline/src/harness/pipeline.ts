@@ -2,42 +2,42 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApi, type LimitesWidget, type TrustProxy } from '@nudge/api';
+import { createApi, type WidgetLimits, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
   TRIAGE_QUEUE,
-  type ActionRevue,
+  type ReviewAction,
   type DestinationAdapterResolver,
-  type Filtre,
-  type ResultatRevue,
-  type SeuilsTriage,
+  type Filter,
+  type ReviewResult,
+  type TriageThresholds,
 } from '@nudge/core';
 import {
-  chiffrerSecretsDestination,
+  encryptDestinationSecrets,
   connectDb,
   createDestination,
-  DESTINATION_ALERTE_ID,
-  createProjet,
+  ALERT_DESTINATION_ID,
+  createProject,
   destinations,
-  envois,
-  parametresInstance,
-  readRetour,
-  retours,
+  deliveries,
+  instanceSettings,
+  readFeedback,
+  feedbacks,
   runMigrations,
   type DestinationRow,
-  type Projet,
-  type RetourLu,
+  type Project,
+  type LoadedFeedback,
 } from '@nudge/database';
-import type { ConfigJuge } from '@nudge/judge';
-import { resolveDestinationAdapter as adaptateursReels } from '@nudge/destinations';
-import type { EtatRetour, RetourEntrant } from '@nudge/shared';
-import { stockageDisque, type StockageCaptures } from '@nudge/stockage';
+import type { JudgeConfig } from '@nudge/judge';
+import { resolveDestinationAdapter as realAdapters } from '@nudge/destinations';
+import type { FeedbackState, FeedbackInput } from '@nudge/shared';
+import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
-  type OptionsBalayage,
-  type OptionsPurge,
-  type OptionsSuspension,
+  type SweepOptions,
+  type PurgeOptions,
+  type SuspensionOptions,
   type Suspension,
 } from '@nudge/worker';
 import { Queue, QueueEvents } from 'bullmq';
@@ -47,196 +47,196 @@ import { Client } from 'pg';
 import { inject } from 'vitest';
 import { DashboardClient } from './dashboard-client.js';
 import { FakeDestination } from './fake-destination.js';
-import { FakeJuge } from './fake-juge.js';
+import { FakeJudge } from './fake-judge.js';
 
 export interface PipelineOptions {
   /**
-   * `null` : worker en mode dégradé, sans Juge. `'instance'` : le Juge choisi pour
-   * l'Instance (paramètres en base, puis `jugeParDefaut`), comme en production.
-   * Par défaut, un `FakeJuge`.
+   * `null`: worker in degraded mode, without a Judge. `'instance'`: the Judge chosen for
+   * the Instance (settings in the database, then `defaultJudge`), as in production.
+   * By default, a `FakeJudge`.
    */
-  readonly juge?: FakeJuge | null | 'instance';
-  /** Avec `juge: 'instance'` : le Juge des variables `NUDGE_JUDGE_*`. */
-  readonly jugeParDefaut?: ConfigJuge;
-  /** Seuils de la politique de Verdict du worker ; ceux par défaut sinon. */
-  readonly seuilsTriage?: SeuilsTriage;
-  /** Délai de réponse du Juge avant abandon et retry ; celui du worker sinon. */
-  readonly delaiJugeMs?: number;
-  /** Balayage des Retours restés Reçu ; celui du worker (5 min) sinon. */
-  readonly balayage?: OptionsBalayage;
+  readonly judge?: FakeJudge | null | 'instance';
+  /** With `judge: 'instance'`: the Judge of the `NUDGE_JUDGE_*` variables. */
+  readonly defaultJudge?: JudgeConfig;
+  /** Thresholds of the worker's Verdict policy; the default ones otherwise. */
+  readonly triageThresholds?: TriageThresholds;
+  /** How long the Judge may take to answer before abort and retry; the worker's otherwise. */
+  readonly judgeTimeoutMs?: number;
+  /** Sweep of Feedback left Received; the worker's (5 min) otherwise. */
+  readonly sweep?: SweepOptions;
   /**
-   * `'reelles'` : les adaptateurs de `@nudge/destinations` (webhook…), contre de vrais
-   * récepteurs. Par défaut, chaque Destination est servie par sa `FakeDestination`.
+   * `'real'`: the adapters of `@nudge/destinations` (webhook…), against real
+   * receivers. By default, each Destination is served by its `FakeDestination`.
    */
-  readonly destinations?: 'fakes' | 'reelles';
-  /** Seuil, refroidissement et sonde de la Suspension ; ceux du worker sinon. */
-  readonly suspension?: OptionsSuspension;
-  /** URL publique du dashboard (`NUDGE_DASHBOARD_URL`) : liens des Envois et des alertes. */
+  readonly destinations?: 'fakes' | 'real';
+  /** Suspension threshold, cooldown and probe; the worker's otherwise. */
+  readonly suspension?: SuspensionOptions;
+  /** Public URL of the dashboard (`NUDGE_DASHBOARD_URL`): links in Deliveries and alerts. */
   readonly dashboardUrl?: string;
-  /** Répliques du worker sur les mêmes queues et la même base (1 par défaut). */
-  readonly repliquesWorker?: number;
-  /** Rate limit de l'ingestion par clé publique ; celui de l'api sinon. */
-  readonly limitesWidget?: LimitesWidget;
-  /** Réglage `trust proxy` de l'api (`NUDGE_TRUST_PROXY`) ; aucun proxy sinon. */
+  /** Worker replicas on the same queues and the same database (1 by default). */
+  readonly workerReplicas?: number;
+  /** Ingestion rate limit per public key; the api's otherwise. */
+  readonly widgetLimits?: WidgetLimits;
+  /** The api's `trust proxy` setting (`NUDGE_TRUST_PROXY`); no proxy otherwise. */
   readonly trustProxy?: TrustProxy;
   /**
-   * Stockage des Captures, partagé par l'api et le worker ; par défaut, un disque
-   * local dans un dossier temporaire propre au pipeline, supprimé à l'arrêt.
+   * Capture storage, shared by the api and the worker; by default, a local disk
+   * in a temporary dir owned by the pipeline, removed on stop.
    */
-  readonly stockage?: StockageCaptures;
-  /** Période de la purge de rétention ; celle du worker sinon. */
-  readonly purge?: OptionsPurge;
+  readonly storage?: CaptureStorage;
+  /** Period of the retention purge; the worker's otherwise. */
+  readonly purge?: PurgeOptions;
 }
 
 export interface Pipeline {
-  /** URL de base de l'api démarrée. */
+  /** Base URL of the started api. */
   readonly url: string;
-  /** Le Juge branché sur le worker (lève si le pipeline tourne sans Juge). */
-  readonly juge: FakeJuge;
+  /** The Judge plugged into the worker (throws if the pipeline runs without a Judge). */
+  readonly judge: FakeJudge;
   /**
-   * La `FakeDestination` qui sert la Destination d'alerte de l'Instance, quel que soit
-   * le type configuré par le dashboard (`PUT /api/instance/alerte`).
+   * The `FakeDestination` that serves the Instance's Alert destination, whatever
+   * type the dashboard configured (`PUT /api/instance/alert-destination`).
    */
-  readonly fakeAlerte: FakeDestination;
-  /** Chaque passage d'une Destination en Suspendue signalé par le worker, dans l'ordre. */
+  readonly fakeAlert: FakeDestination;
+  /** Every switch of a Destination to Suspended reported by the worker, in order. */
   readonly suspensions: readonly Suspension[];
-  /** Le Projet est créé directement en base (seed) ; ses clés sont rendues en clair. */
-  createProjet(donnees: {
-    nom: string;
+  /** The Project is created directly in the database (seed); its keys are returned in clear. */
+  createProject(data: {
+    name: string;
     description?: string | null;
-    originesAutorisees?: readonly string[];
-  }): Promise<{ projet: Projet; clePublique: string; cleSecrete: string }>;
+    allowedOrigins?: readonly string[];
+  }): Promise<{ project: Project; publicKey: string; secretKey: string }>;
   /**
-   * Une Destination du Projet créée directement en base (seed), servie par une
-   * `FakeDestination` qui lui est propre. Sans Filtre, elle retient tout Retour Trié.
+   * A Destination of the Project created directly in the database (seed), served by
+   * its own `FakeDestination`. Without a Filter, it accepts every Triaged Feedback.
    */
   createDestination(
-    projetId: string,
-    donnees?: { nom?: string; config?: Record<string, unknown>; filtre?: Filtre },
+    projectId: string,
+    data?: { name?: string; config?: Record<string, unknown>; filter?: Filter },
   ): Promise<{ destination: DestinationRow; fake: FakeDestination }>;
-  /** La `FakeDestination` qui sert cette Destination (créée par le dashboard, par exemple). */
+  /** The `FakeDestination` that serves this Destination (created by the dashboard, for example). */
   fakeDestination(destinationId: string): FakeDestination;
-  /** La ligne d'une Destination telle qu'en base (secrets chiffrés), ou `null`. */
-  ligneDestination(destinationId: string): Promise<DestinationRow | null>;
+  /** A Destination's row as stored (encrypted secrets), or `null`. */
+  destinationRow(destinationId: string): Promise<DestinationRow | null>;
   /**
-   * Chiffre les secrets d'une Destination avec une autre clé d'Instance : ils ne se
-   * déchiffrent plus, comme après un changement de `NUDGE_ENCRYPTION_KEY`.
+   * Encrypts a Destination's secrets with another Instance key: they no longer
+   * decrypt, as after a change of `NUDGE_ENCRYPTION_KEY`.
    */
-  rendreSecretsIndechiffrables(destinationId: string): Promise<void>;
+  makeSecretsUndecryptable(destinationId: string): Promise<void>;
   /**
-   * Suspend une Destination comme après un refus de ses identifiants, sans appel
-   * sortant ; la sonde ne la teste pas avant une heure.
+   * Suspends a Destination as after its credentials were refused, without any
+   * outgoing call; the probe does not test it for an hour.
    */
-  suspendre(destinationId: string): Promise<void>;
+  suspend(destinationId: string): Promise<void>;
   /**
-   * Remet une Destination Suspendue en active sans libérer ses Envois retenus, comme un
-   * worker arrêté entre la réactivation et la remise en queue.
+   * Sets a Suspended Destination back to active without releasing its held Deliveries,
+   * like a worker stopped between the reactivation and the re-enqueue.
    */
-  reactiverSansLiberer(destinationId: string): Promise<void>;
-  /** Un navigateur anonyme sur l'API du dashboard (il garde son cookie de session). */
+  reactivateWithoutReleasing(destinationId: string): Promise<void>;
+  /** An anonymous browser on the dashboard API (it keeps its session cookie). */
   dashboard(): DashboardClient;
   /**
-   * Un navigateur connecté : le premier appel crée le premier Membre par le
-   * setup, les suivants se connectent avec ses identifiants (`MEMBRE_PAR_DEFAUT`).
+   * A signed-in browser: the first call creates the first Member through the
+   * setup, the next ones sign in with its credentials (`DEFAULT_MEMBER`).
    */
   signIn(): Promise<DashboardClient>;
   /**
-   * Enregistre un Retour Reçu sans le mettre en queue, comme si la mise en queue
-   * avait échoué après l'insertion. Rend son id.
+   * Records a Received Feedback without enqueuing it, as if the enqueue had failed
+   * after the insert. Returns its id.
    */
-  insererRetourSansTriage(projetId: string, donnees: { texte: string }): Promise<string>;
+  insertFeedbackWithoutTriage(projectId: string, data: { text: string }): Promise<string>;
   /**
-   * Enregistre un Envoi en attente du Retour vers la Destination sans le mettre en
-   * queue, comme si Redis était tombé entre le commit et la mise en queue. Rend son id.
+   * Records a pending Delivery of the Feedback to the Destination without enqueuing it,
+   * as if Redis had gone down between the commit and the enqueue. Returns its id.
    */
-  insererEnvoiSansDispatch(retourId: string, destinationId: string): Promise<string>;
-  /** Recule la date de création d'un Retour de `jours` jours, comme s'il était ancien. */
-  vieillirRetour(retourId: string, jours: number): Promise<void>;
-  /** POST /v1/retours avec la clé secrète du Projet. */
-  postRetour(cleSecrete: string, corps: RetourEntrant | Record<string, unknown>): Promise<Response>;
+  insertDeliveryWithoutDispatch(feedbackId: string, destinationId: string): Promise<string>;
+  /** Moves a Feedback's creation date back by `days` days, as if it were old. */
+  ageFeedback(feedbackId: string, days: number): Promise<void>;
+  /** POST /v1/feedbacks with the Project's secret key. */
+  postFeedback(secretKey: string, body: FeedbackInput | Record<string, unknown>): Promise<Response>;
   /**
-   * POST /v1/retours avec la clé publique du Projet, comme le Widget depuis une page
-   * de l'origine `origine` (`null` : sans en-tête Origin).
+   * POST /v1/feedbacks with the Project's public key, like the Widget from a page
+   * of origin `origin` (`null`: without an Origin header).
    */
-  postRetourWidget(
-    clePublique: string,
-    origine: string | null,
-    corps: RetourEntrant | Record<string, unknown>,
+  postWidgetFeedback(
+    publicKey: string,
+    origin: string | null,
+    body: FeedbackInput | Record<string, unknown>,
   ): Promise<Response>;
   /**
-   * Transition de revue (valider, rejeter, réhabiliter) telle que le dashboard la
-   * déclenche : `POST /api/retours/:id/revue`, par le Membre de `signIn()`.
+   * Review transition (approve, reject, reinstate) as the dashboard triggers it:
+   * `POST /api/feedbacks/:id/review`, by the Member of `signIn()`.
    */
-  revoir(retourId: string, action: ActionRevue): Promise<ResultatRevue>;
+  review(feedbackId: string, action: ReviewAction): Promise<ReviewResult>;
   /**
-   * Remet en queue le job de Triage d'un Retour (nouvel id de job, comme un job
-   * rejoué) et attend qu'il soit traité.
+   * Re-enqueues a Feedback's Triage job (new job id, like a replayed job) and
+   * waits until it is processed.
    */
-  rejouerTriage(retourId: string): Promise<void>;
-  /** Remet en queue le job de Dispatch d'un Envoi et attend qu'il soit traité. */
-  rejouerDispatch(envoiId: string): Promise<void>;
+  replayTriage(feedbackId: string): Promise<void>;
+  /** Re-enqueues a Delivery's Dispatch job and waits until it is processed. */
+  replayDispatch(deliveryId: string): Promise<void>;
   /**
-   * Fait échouer toute mise en queue dans la queue `nom` (l'api comme le worker), comme
-   * un Redis qui refuse les écritures. Rend la fonction qui la répare.
+   * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
+   * a Redis that refuses writes. Returns the function that repairs it.
    */
-  casserMiseEnQueue(nom: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE): Promise<() => Promise<void>>;
-  /** La ligne des paramètres d'Instance telle qu'en base (secrets chiffrés), ou `null`. */
-  parametresInstance(): Promise<typeof parametresInstance.$inferSelect | null>;
-  /** Le Retour tel qu'un Membre le lit (état, Verdict, Envois), ou `null`. */
-  readRetour(id: string): Promise<RetourLu | null>;
-  /** Attend que le Retour satisfasse `condition` (5 s par défaut) et le rend. */
-  waitForRetour(
+  breakEnqueue(name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE): Promise<() => Promise<void>>;
+  /** The instance settings row as stored (encrypted secrets), or `null`. */
+  instanceSettings(): Promise<typeof instanceSettings.$inferSelect | null>;
+  /** The Feedback as a Member reads it (state, Verdict, Deliveries), or `null`. */
+  readFeedback(id: string): Promise<LoadedFeedback | null>;
+  /** Waits until the Feedback satisfies `condition` (5 s by default) and returns it. */
+  waitForFeedback(
     id: string,
-    condition: (retour: RetourLu) => boolean,
-    delaiMs?: number,
-  ): Promise<RetourLu>;
+    condition: (feedback: LoadedFeedback) => boolean,
+    timeoutMs?: number,
+  ): Promise<LoadedFeedback>;
   stop(): Promise<void>;
 }
 
-/** Identifiants du Membre que `signIn()` crée au setup. */
-export const MEMBRE_PAR_DEFAUT = {
-  email: 'premier@nudge.test',
-  motDePasse: 'mot-de-passe-du-premier-membre',
+/** Credentials of the Member that `signIn()` creates at setup. */
+export const DEFAULT_MEMBER = {
+  email: 'first@nudge.test',
+  password: 'first-member-password',
 } as const;
 
 /**
- * `pool.end()` rend la main avant que les sockets soient fermées : un
- * `DROP … WITH (FORCE)` immédiat couperait des connexions en cours de fermeture
- * (erreur non rattrapée côté `pg`). On réessaie un DROP simple tant que la base
- * est encore « en cours d'utilisation » (55006).
+ * `pool.end()` returns before the sockets are closed: an immediate
+ * `DROP … WITH (FORCE)` would cut connections being closed (uncaught error
+ * on the `pg` side). A plain DROP is retried while the database is still
+ * "in use" (55006).
  */
-async function dropDatabase(admin: Client, nomBase: string): Promise<void> {
-  for (let essai = 0; essai < 40; essai += 1) {
+async function dropDatabase(admin: Client, dbName: string): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
-      await admin.query(`DROP DATABASE IF EXISTS "${nomBase}"`);
+      await admin.query(`DROP DATABASE IF EXISTS "${dbName}"`);
       return;
-    } catch (erreur) {
-      if ((erreur as { code?: string }).code !== '55006') throw erreur;
+    } catch (error) {
+      if ((error as { code?: string }).code !== '55006') throw error;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
-  throw new Error(`Base ${nomBase} toujours utilisée après l'arrêt du pipeline`);
+  throw new Error(`Database ${dbName} still in use after the pipeline stopped`);
 }
 
 /**
- * Démarre un pipeline réel et isolé : une base Postgres neuve migrée, un
- * préfixe de queues propre, l'api (écoutant sur un port libre) et le worker.
+ * Starts a real, isolated pipeline: a fresh migrated Postgres database, its own
+ * queue prefix, the api (listening on a free port) and the worker.
  */
 export async function startPipeline(options: PipelineOptions = {}): Promise<Pipeline> {
-  const suffixe = randomUUID().replaceAll('-', '');
-  const nomBase = `nudge_${suffixe}`;
-  const urlAdmin = inject('postgresUrl');
+  const suffix = randomUUID().replaceAll('-', '');
+  const dbName = `nudge_${suffix}`;
+  const adminUrl = inject('postgresUrl');
   const redisUrl = inject('redisUrl');
 
-  const admin = new Client({ connectionString: urlAdmin });
+  const admin = new Client({ connectionString: adminUrl });
   await admin.connect();
-  await admin.query(`CREATE DATABASE "${nomBase}"`);
-  const databaseUrl = new URL(urlAdmin);
-  databaseUrl.pathname = `/${nomBase}`;
+  await admin.query(`CREATE DATABASE "${dbName}"`);
+  const databaseUrl = new URL(adminUrl);
+  databaseUrl.pathname = `/${dbName}`;
   await runMigrations(databaseUrl.toString());
 
-  const juge = options.juge === undefined ? new FakeJuge() : options.juge;
-  const fakeJuge = juge === 'instance' ? null : juge;
+  const judge = options.judge === undefined ? new FakeJudge() : options.judge;
+  const fakeJudge = judge === 'instance' ? null : judge;
   const fakes = new Map<string, FakeDestination>();
   const fakeFor = (destinationId: string) => {
     let fake = fakes.get(destinationId);
@@ -247,47 +247,45 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     return fake;
   };
 
-  const dossierCaptures = await mkdtemp(join(tmpdir(), 'nudge-captures-'));
-  const stockageCaptures = options.stockage ?? stockageDisque(dossierCaptures);
+  const capturesDir = await mkdtemp(join(tmpdir(), 'nudge-captures-'));
+  const captureStorage = options.storage ?? diskStorage(capturesDir);
   const suspensions: Suspension[] = [];
-  const cleChiffrement = randomBytes(32).toString('base64');
-  const cipher = createSecretCipher(cleChiffrement);
+  const encryptionKey = randomBytes(32).toString('base64');
+  const cipher = createSecretCipher(encryptionKey);
   const resolveDestinationAdapter: DestinationAdapterResolver =
-    options.destinations === 'reelles'
-      ? adaptateursReels
-      : (destination) => fakeFor(destination.id);
+    options.destinations === 'real' ? realAdapters : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,
-    queuePrefix: `nudge-test-${suffixe}`,
-    cleChiffrement,
-    // Retries rapides : les tests d'échecs transitoires restent courts.
+    queuePrefix: `nudge-test-${suffix}`,
+    encryptionKey,
+    // Fast retries: transient-failure tests stay short.
     retryPolicy: { attempts: 8, backoffDelayMs: 10 },
     logger: ['error', 'warn'] as ('error' | 'warn')[],
-    stockageCaptures,
+    captureStorage,
   };
   const workerOptions = {
     ...infra,
-    ...(juge === 'instance' ? { jugeParDefaut: options.jugeParDefaut ?? null } : { juge }),
-    ...(options.seuilsTriage ? { seuilsTriage: options.seuilsTriage } : {}),
-    ...(options.delaiJugeMs ? { delaiJugeMs: options.delaiJugeMs } : {}),
-    ...(options.balayage ? { balayage: options.balayage } : {}),
+    ...(judge === 'instance' ? { defaultJudge: options.defaultJudge ?? null } : { judge }),
+    ...(options.triageThresholds ? { triageThresholds: options.triageThresholds } : {}),
+    ...(options.judgeTimeoutMs ? { judgeTimeoutMs: options.judgeTimeoutMs } : {}),
+    ...(options.sweep ? { sweep: options.sweep } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
     ...(options.purge ? { purge: options.purge } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
-    surSuspension: (suspension) => {
+    onSuspension: (suspension) => {
       suspensions.push(suspension);
     },
     resolveDestinationAdapter,
   } satisfies Parameters<typeof createWorker>[0];
   const workers = await Promise.all(
-    Array.from({ length: options.repliquesWorker ?? 1 }, () => createWorker(workerOptions)),
+    Array.from({ length: options.workerReplicas ?? 1 }, () => createWorker(workerOptions)),
   );
   const api = await createApi({
     ...infra,
     sessionCookieSecure: false,
     resolveDestinationAdapter,
-    ...(options.limitesWidget ? { limitesWidget: options.limitesWidget } : {}),
+    ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
   });
   await api.listen(0, '127.0.0.1');
@@ -298,160 +296,157 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     [TRIAGE_QUEUE]: new Queue(TRIAGE_QUEUE, { connection: redis, prefix: infra.queuePrefix }),
     [DISPATCH_QUEUE]: new Queue(DISPATCH_QUEUE, { connection: redis, prefix: infra.queuePrefix }),
   };
-  const rejouer = async (nom: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE, data: object) => {
-    const evenements = new QueueEvents(nom, {
+  const replay = async (name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE, data: object) => {
+    const events = new QueueEvents(name, {
       connection: { host: redis.options.host, port: redis.options.port },
       prefix: infra.queuePrefix,
     });
     try {
-      await evenements.waitUntilReady();
-      const job = await queues[nom].add(nom, data, { jobId: `rejeu-${randomUUID()}` });
-      await job.waitUntilFinished(evenements, 10_000);
+      await events.waitUntilReady();
+      const job = await queues[name].add(name, data, { jobId: `replay-${randomUUID()}` });
+      await job.waitUntilFinished(events, 10_000);
     } finally {
-      await evenements.close();
+      await events.close();
     }
   };
 
-  let membre: DashboardClient | undefined;
+  let member: DashboardClient | undefined;
   const pipeline: Pipeline = {
     url,
-    get juge() {
-      if (!fakeJuge) throw new Error('Ce pipeline tourne sans FakeJuge');
-      return fakeJuge;
+    get judge() {
+      if (!fakeJudge) throw new Error('This pipeline runs without a FakeJudge');
+      return fakeJudge;
     },
-    fakeAlerte: fakeFor(DESTINATION_ALERTE_ID),
+    fakeAlert: fakeFor(ALERT_DESTINATION_ID),
     suspensions,
-    createProjet: (donnees) => createProjet(db, donnees),
-    async createDestination(projetId, donnees = {}) {
+    createProject: (data) => createProject(db, data),
+    async createDestination(projectId, data = {}) {
       const destination = await createDestination(db, cipher, {
-        projetId,
-        nom: donnees.nom ?? 'Destination de test',
+        projectId,
+        name: data.name ?? 'Test destination',
         type: 'fake',
-        config: donnees.config ?? {},
-        ...(donnees.filtre ? { filtre: donnees.filtre } : {}),
+        config: data.config ?? {},
+        ...(data.filter ? { filter: data.filter } : {}),
       });
       return { destination, fake: fakeFor(destination.id) };
     },
     fakeDestination: fakeFor,
-    async ligneDestination(destinationId) {
-      const [ligne] = await db
-        .select()
-        .from(destinations)
-        .where(eq(destinations.id, destinationId));
-      return ligne ?? null;
+    async destinationRow(destinationId) {
+      const [row] = await db.select().from(destinations).where(eq(destinations.id, destinationId));
+      return row ?? null;
     },
-    async rendreSecretsIndechiffrables(destinationId) {
-      const autreCle = createSecretCipher(randomBytes(32).toString('base64'));
+    async makeSecretsUndecryptable(destinationId) {
+      const otherKey = createSecretCipher(randomBytes(32).toString('base64'));
       await db
         .update(destinations)
         .set({
-          secretsChiffres: chiffrerSecretsDestination(autreCle, destinationId, { perdu: 'x' }),
+          encryptedSecrets: encryptDestinationSecrets(otherKey, destinationId, { lost: 'x' }),
         })
         .where(eq(destinations.id, destinationId));
     },
-    async suspendre(destinationId) {
+    async suspend(destinationId) {
       await db
         .update(destinations)
         .set({
-          etat: 'suspendue',
-          suspendueLe: sql`now()`,
-          motifSuspension: 'auth: suspendue par le test',
-          prochaineSondeLe: sql`now() + interval '1 hour'`,
+          state: 'suspended',
+          suspendedAt: sql`now()`,
+          suspensionReason: 'auth: suspended by the test',
+          nextProbeAt: sql`now() + interval '1 hour'`,
         })
         .where(eq(destinations.id, destinationId));
     },
-    async reactiverSansLiberer(destinationId) {
+    async reactivateWithoutReleasing(destinationId) {
       await db
         .update(destinations)
-        .set({ etat: 'active', suspendueLe: null, motifSuspension: null, prochaineSondeLe: null })
+        .set({ state: 'active', suspendedAt: null, suspensionReason: null, nextProbeAt: null })
         .where(eq(destinations.id, destinationId));
     },
     dashboard: () => new DashboardClient(url),
     async signIn() {
       const client = new DashboardClient(url);
-      const setup = await client.post('/api/setup', MEMBRE_PAR_DEFAUT);
+      const setup = await client.post('/api/setup', DEFAULT_MEMBER);
       if (setup.status === 201) return client;
-      const connexion = await client.post('/api/session', MEMBRE_PAR_DEFAUT);
-      if (connexion.status !== 200) {
-        throw new Error(`signIn : connexion refusée (${connexion.status})`);
+      const session = await client.post('/api/session', DEFAULT_MEMBER);
+      if (session.status !== 200) {
+        throw new Error(`signIn: sign-in refused (${session.status})`);
       }
       return client;
     },
-    async insererRetourSansTriage(projetId, { texte }) {
-      const [retour] = await db
-        .insert(retours)
-        .values({ projetId, source: 'api', texte })
-        .returning({ id: retours.id });
-      if (!retour) throw new Error('Retour non enregistré');
-      return retour.id;
+    async insertFeedbackWithoutTriage(projectId, { text }) {
+      const [feedback] = await db
+        .insert(feedbacks)
+        .values({ projectId, source: 'api', text })
+        .returning({ id: feedbacks.id });
+      if (!feedback) throw new Error('Feedback not recorded');
+      return feedback.id;
     },
-    async insererEnvoiSansDispatch(retourId, destinationId) {
-      const [envoi] = await db
-        .insert(envois)
-        .values({ retourId, destinationId })
-        .returning({ id: envois.id });
-      if (!envoi) throw new Error('Envoi non enregistré');
-      return envoi.id;
+    async insertDeliveryWithoutDispatch(feedbackId, destinationId) {
+      const [delivery] = await db
+        .insert(deliveries)
+        .values({ feedbackId, destinationId })
+        .returning({ id: deliveries.id });
+      if (!delivery) throw new Error('Delivery not recorded');
+      return delivery.id;
     },
-    async vieillirRetour(retourId, jours) {
+    async ageFeedback(feedbackId, days) {
       await db
-        .update(retours)
-        .set({ createdAt: sql`${retours.createdAt} - make_interval(days => ${jours})` })
-        .where(eq(retours.id, retourId));
+        .update(feedbacks)
+        .set({ createdAt: sql`${feedbacks.createdAt} - make_interval(days => ${days})` })
+        .where(eq(feedbacks.id, feedbackId));
     },
-    postRetour: (cleSecrete, corps) =>
-      fetch(`${url}/v1/retours`, {
+    postFeedback: (secretKey, body) =>
+      fetch(`${url}/v1/feedbacks`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${cleSecrete}` },
-        body: JSON.stringify(corps),
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secretKey}` },
+        body: JSON.stringify(body),
       }),
-    postRetourWidget: (clePublique, origine, corps) =>
-      fetch(`${url}/v1/retours`, {
+    postWidgetFeedback: (publicKey, origin, body) =>
+      fetch(`${url}/v1/feedbacks`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${clePublique}`,
-          ...(origine ? { origin: origine } : {}),
+          authorization: `Bearer ${publicKey}`,
+          ...(origin ? { origin } : {}),
         },
-        body: JSON.stringify(corps),
+        body: JSON.stringify(body),
       }),
-    async revoir(retourId, action) {
-      membre ??= await pipeline.signIn();
-      const { status, body } = await membre.post<{ etat: EtatRetour }>(
-        `/api/retours/${retourId}/revue`,
+    async review(feedbackId, action) {
+      member ??= await pipeline.signIn();
+      const { status, body } = await member.post<{ state: FeedbackState }>(
+        `/api/feedbacks/${feedbackId}/review`,
         { action },
       );
-      if (status === 200) return { statut: 'applique', etat: body.etat };
-      if (status === 409) return { statut: 'refuse', etat: body.etat };
-      if (status === 404) return { statut: 'introuvable' };
-      throw new Error(`revoir : réponse inattendue ${status} ${JSON.stringify(body)}`);
+      if (status === 200) return { status: 'applied', state: body.state };
+      if (status === 409) return { status: 'refused', state: body.state };
+      if (status === 404) return { status: 'not_found' };
+      throw new Error(`review: unexpected response ${status} ${JSON.stringify(body)}`);
     },
-    rejouerTriage: (retourId) => rejouer(TRIAGE_QUEUE, { retourId }),
-    rejouerDispatch: (envoiId) => rejouer(DISPATCH_QUEUE, { envoiId }),
-    async casserMiseEnQueue(nom) {
-      // Chaque ajout de job incrémente le compteur `id` de la queue : non numérique, il
-      // fait échouer l'ajout avant toute écriture.
-      const compteur = `${infra.queuePrefix}:${nom}:id`;
-      await redis.set(compteur, 'cassé');
+    replayTriage: (feedbackId) => replay(TRIAGE_QUEUE, { feedbackId }),
+    replayDispatch: (deliveryId) => replay(DISPATCH_QUEUE, { deliveryId }),
+    async breakEnqueue(name) {
+      // Each job add increments the queue's `id` counter: when it is not numeric, the
+      // add fails before any write.
+      const counter = `${infra.queuePrefix}:${name}:id`;
+      await redis.set(counter, 'broken');
       return async () => {
-        await redis.del(compteur);
+        await redis.del(counter);
       };
     },
-    async parametresInstance() {
-      const [ligne] = await db.select().from(parametresInstance);
-      return ligne ?? null;
+    async instanceSettings() {
+      const [row] = await db.select().from(instanceSettings);
+      return row ?? null;
     },
-    readRetour: (id) => readRetour(db, id),
-    async waitForRetour(id, condition, delaiMs = 5000) {
-      const limite = Date.now() + delaiMs;
-      let dernier: RetourLu | null = null;
-      while (Date.now() < limite) {
-        dernier = await readRetour(db, id);
-        if (dernier && condition(dernier)) return dernier;
+    readFeedback: (id) => readFeedback(db, id),
+    async waitForFeedback(id, condition, timeoutMs = 5000) {
+      const deadline = Date.now() + timeoutMs;
+      let last: LoadedFeedback | null = null;
+      while (Date.now() < deadline) {
+        last = await readFeedback(db, id);
+        if (last && condition(last)) return last;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       throw new Error(
-        `Retour ${id} : condition non atteinte en ${delaiMs} ms. Dernier état lu : ${JSON.stringify(dernier, null, 2)}`,
+        `Feedback ${id}: condition not met within ${timeoutMs} ms. Last state read: ${JSON.stringify(last, null, 2)}`,
       );
     },
     async stop() {
@@ -460,9 +455,9 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       await Promise.all(Object.values(queues).map((queue) => queue.close()));
       await redis.quit();
       await close();
-      await dropDatabase(admin, nomBase);
+      await dropDatabase(admin, dbName);
       await admin.end();
-      await rm(dossierCaptures, { recursive: true, force: true });
+      await rm(capturesDir, { recursive: true, force: true });
     },
   };
   return pipeline;

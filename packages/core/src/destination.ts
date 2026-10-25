@@ -1,161 +1,166 @@
 import { randomUUID } from 'node:crypto';
 import {
-  messageErreur,
-  type Auteur,
-  type ClasseEchec,
-  type ConfianceAuteur,
-  type Contexte,
-  type Gravite,
+  errorMessage,
+  type Author,
+  type FailureClass,
+  type AuthorTrust,
+  type Context,
+  type Severity,
   type Source,
-  type TypeCapture,
-  type TypeRetour,
+  type CaptureType,
+  type FeedbackType,
 } from '@nudge/shared';
-import type { Alerte } from './alerte.js';
+import type { Alert } from './alert.js';
 
-export type { ClasseEchec } from '@nudge/shared';
+export type { FailureClass } from '@nudge/shared';
 
 /**
- * Port Destination : contrat de chaque adapter (webhook, Discord, Linear…).
- * Un adapter est construit pour UNE Destination, avec sa configuration
- * déchiffrée, par un `DestinationAdapterResolver`.
+ * Destination port: the contract of every adapter (webhook, Discord, Linear…).
+ * An adapter is built for ONE Destination, with its decrypted configuration, by a
+ * `DestinationAdapterResolver`.
  */
 
 /**
- * La Capture jointe à un Retour, telle qu'un adapter la reçoit : l'image n'est lue
- * dans le stockage que par l'adapter qui la joint (webhook, Linear).
+ * The Capture attached to a Feedback, as an adapter receives it: the image is read from
+ * storage only by the adapter that attaches it (webhook, Linear).
  */
-export interface CaptureADispatcher {
-  readonly contentType: TypeCapture;
-  readonly octets: number;
-  /** L'image ; `null` si le stockage ne l'a plus. Lève si le stockage est injoignable. */
-  lire(): Promise<Uint8Array | null>;
+export interface CaptureToDispatch {
+  readonly contentType: CaptureType;
+  readonly bytes: number;
+  /** The image; `null` if storage no longer has it. Throws if storage is unreachable. */
+  read(): Promise<Uint8Array | null>;
 }
 
 /**
- * Un lien vers un écran du dashboard (`chemin` commence par `/`), d'après son URL
- * publique (`NUDGE_DASHBOARD_URL`, D12) ; `null` sans elle.
+ * A link to a dashboard screen (`path` starts with `/`), from its public URL
+ * (`NUDGE_DASHBOARD_URL`, D12); `null` without it.
  */
-export const lienDashboard = (base: string | null | undefined, chemin: string): string | null =>
-  base ? `${base.replace(/\/+$/, '')}${chemin}` : null;
+export const buildDashboardUrl = (base: string | null | undefined, path: string): string | null =>
+  base ? `${base.replace(/\/+$/, '')}${path}` : null;
 
-/** Ce qu'un adapter reçoit d'un Retour Trié. Le texte est brut : chaque adapter l'encode pour sa cible. */
-export interface RetourADispatcher {
+/** What an adapter receives of a Triaged Feedback. The text is raw: each adapter encodes it for its target. */
+export interface FeedbackToDispatch {
   readonly id: string;
-  readonly texte: string;
+  readonly text: string;
   readonly source: Source;
-  readonly typeRetenu: TypeRetour;
-  /** Absente en mode dégradé (sans Juge). */
-  readonly gravite: Gravite | null;
-  readonly incertain: boolean;
-  readonly auteur: (Auteur & { readonly confiance: ConfianceAuteur }) | null;
-  readonly contexte: Contexte;
-  /** `null` : pas de Capture. Jamais transmise au Juge, seulement aux Destinations. */
-  readonly capture: CaptureADispatcher | null;
-  readonly recuLe: Date;
-  /** « Voir le Retour » dans le dashboard ; `null` sans `NUDGE_DASHBOARD_URL` (D12). */
-  readonly lienDashboard: string | null;
+  readonly resolvedType: FeedbackType;
+  /** Absent in degraded mode (without a Judge). */
+  readonly severity: Severity | null;
+  readonly uncertain: boolean;
+  readonly author: (Author & { readonly trust: AuthorTrust }) | null;
+  readonly context: Context;
+  /** `null`: no Capture. Never sent to the Judge, only to Destinations. */
+  readonly capture: CaptureToDispatch | null;
+  readonly receivedAt: Date;
+  /** "View the Feedback" in the dashboard; `null` without `NUDGE_DASHBOARD_URL` (D12). */
+  readonly dashboardUrl: string | null;
 }
 
-export interface EnvoiASortir {
-  readonly envoiId: string;
-  readonly projet: { readonly id: string; readonly nom: string };
-  readonly retour: RetourADispatcher;
-  /** Retour d'exemple du bouton « tester » : aucun Envoi n'existe en base. */
-  readonly essai: boolean;
+export interface OutgoingDelivery {
+  readonly deliveryId: string;
+  readonly project: { readonly id: string; readonly name: string };
+  readonly feedback: FeedbackToDispatch;
+  /** Sample Feedback from the "test" button: no Delivery exists in the database. */
+  readonly isTest: boolean;
 }
 
-export type ResultatEnvoi =
-  | { readonly statut: 'livre'; readonly lienExterne: string | null }
-  | { readonly statut: 'echec'; readonly classe: ClasseEchec; readonly message: string };
+export type DeliveryResult =
+  | { readonly status: 'delivered'; readonly externalUrl: string | null }
+  | { readonly status: 'failed'; readonly failureClass: FailureClass; readonly message: string };
 
-export type SanteDestination =
-  | { readonly joignable: true }
-  | { readonly joignable: false; readonly classe: ClasseEchec; readonly message: string };
+export type DestinationHealth =
+  | { readonly reachable: true }
+  | { readonly reachable: false; readonly failureClass: FailureClass; readonly message: string };
 
 export interface DestinationAdapter {
-  send(envoi: EnvoiASortir): Promise<ResultatEnvoi>;
+  send(delivery: OutgoingDelivery): Promise<DeliveryResult>;
   /**
-   * Prévient les Membres (Destination d'alerte de l'Instance) : même cible, mêmes
-   * identifiants et même classification des échecs qu'un Envoi.
+   * Warns the Members (the Instance's Alert destination): same target, same credentials
+   * and same failure classification as a Delivery.
    */
-  alerter(alerte: Alerte): Promise<ResultatEnvoi>;
-  healthCheck(): Promise<SanteDestination>;
+  alert(alert: Alert): Promise<DeliveryResult>;
+  healthCheck(): Promise<DestinationHealth>;
 }
 
-/** Une Destination telle que lue en base, secrets déchiffrés. */
-export interface DestinationConfiguree {
+/** A Destination as read from the database, secrets decrypted. */
+export interface ConfiguredDestination {
   readonly id: string;
-  /** `null` : la Destination d'alerte, qui appartient à l'Instance et non à un Projet. */
-  readonly projetId: string | null;
-  readonly nom: string;
-  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
+  /** `null`: the Alert destination, which belongs to the Instance and not to a Project. */
+  readonly projectId: string | null;
+  readonly name: string;
+  /** Adapter key: `webhook`, `discord`, `linear`… */
   readonly type: string;
-  /** Configuration non secrète, validée à l'écriture par le schéma du type (`@nudge/shared`). */
+  /** Non-secret configuration, validated on write by the type's schema (`@nudge/shared`). */
   readonly config: Readonly<Record<string, unknown>>;
-  /** Secrets déchiffrés (jetons, secret de signature) : n'existent en clair qu'ici. */
+  /** Decrypted secrets (tokens, signing secret): they exist in clear only here. */
   readonly secrets: Readonly<Record<string, string>>;
 }
 
-export type DestinationAdapterResolver = (destination: DestinationConfiguree) => DestinationAdapter;
+export type DestinationAdapterResolver = (destination: ConfiguredDestination) => DestinationAdapter;
 
 /**
- * Envoie par l'adaptateur que rend `adaptateur()` : une exception, à sa construction
- * (type inconnu, secrets indéchiffrables) comme à l'envoi (réseau, bug), devient un
- * échec transitoire au lieu de remonter.
+ * Delivers through the adapter returned by `adapter()`: an exception, while building it
+ * (unknown type, undecryptable secrets) as while sending (network, bug), becomes a
+ * transient failure instead of propagating.
  */
-export async function envoyer(
-  adaptateur: () => DestinationAdapter,
-  envoi: EnvoiASortir,
-): Promise<ResultatEnvoi> {
-  return sansException(() => adaptateur().send(envoi));
+export async function deliver(
+  adapter: () => DestinationAdapter,
+  delivery: OutgoingDelivery,
+): Promise<DeliveryResult> {
+  return catchingExceptions(() => adapter().send(delivery));
 }
 
-/** `envoyer()` pour une alerte : une exception devient un échec transitoire. */
-export async function alerter(
-  adaptateur: () => DestinationAdapter,
-  alerte: Alerte,
-): Promise<ResultatEnvoi> {
-  return sansException(() => adaptateur().alerter(alerte));
+/** `deliver()` for an alert: an exception becomes a transient failure. */
+export async function sendAlert(
+  adapter: () => DestinationAdapter,
+  alert: Alert,
+): Promise<DeliveryResult> {
+  return catchingExceptions(() => adapter().alert(alert));
 }
 
-async function sansException(appel: () => Promise<ResultatEnvoi>): Promise<ResultatEnvoi> {
+async function catchingExceptions(call: () => Promise<DeliveryResult>): Promise<DeliveryResult> {
   try {
-    return await appel();
-  } catch (erreur) {
-    return echecDException(erreur);
+    return await call();
+  } catch (error) {
+    return failureFromException(error);
   }
 }
 
-/** Une exception levée pendant un envoi, rendue en échec transitoire. */
-export function echecDException(erreur: unknown): Extract<ResultatEnvoi, { statut: 'echec' }> {
+/** An exception thrown while sending, turned into a transient failure. */
+export function failureFromException(
+  error: unknown,
+): Extract<DeliveryResult, { status: 'failed' }> {
   return {
-    statut: 'echec',
-    classe: 'transient',
-    message: messageErreur(erreur),
+    status: 'failed',
+    failureClass: 'transient',
+    message: errorMessage(error),
   };
 }
 
 /**
- * Le Retour d'exemple que le bouton « tester » envoie à une Destination : il passe
- * par l'adaptateur comme un vrai, marqué `essai`, sans Envoi enregistré.
+ * The sample Feedback the "test" button sends to a Destination: it goes through the
+ * adapter like a real one, marked `isTest`, with no Delivery recorded.
  */
-export function envoiDEssai(projet: EnvoiASortir['projet'], maintenant = new Date()): EnvoiASortir {
+export function testDelivery(
+  project: OutgoingDelivery['project'],
+  now = new Date(),
+): OutgoingDelivery {
   return {
-    envoiId: randomUUID(),
-    projet,
-    essai: true,
-    retour: {
+    deliveryId: randomUUID(),
+    project,
+    isTest: true,
+    feedback: {
       id: randomUUID(),
-      texte: 'Retour d’exemple envoyé par nudge pour tester cette Destination.',
+      text: 'Sample feedback sent by nudge to test this Destination.',
       source: 'api',
-      typeRetenu: 'bug',
-      gravite: 'mineure',
-      incertain: false,
-      auteur: null,
-      contexte: {},
+      resolvedType: 'bug',
+      severity: 'minor',
+      uncertain: false,
+      author: null,
+      context: {},
       capture: null,
-      recuLe: maintenant,
-      lienDashboard: null,
+      receivedAt: now,
+      dashboardUrl: null,
     },
   };
 }

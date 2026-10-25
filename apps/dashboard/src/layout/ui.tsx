@@ -9,60 +9,42 @@ import {
 } from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../api/client.js';
+import { useT, type Messages } from '../i18n/index.js';
 
-/** Vrai tant que la media query correspond ; faux là où `matchMedia` n'existe pas. */
-export function useMediaQuery(requete: string): boolean {
+/** True while the media query matches; false where `matchMedia` does not exist. */
+export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
-    (prevenir: () => void) => {
+    (notify: () => void) => {
       if (typeof window.matchMedia !== 'function') return () => {};
-      const liste = window.matchMedia(requete);
-      liste.addEventListener('change', prevenir);
-      return () => liste.removeEventListener('change', prevenir);
+      const list = window.matchMedia(query);
+      list.addEventListener('change', notify);
+      return () => list.removeEventListener('change', notify);
     },
-    () => typeof window.matchMedia === 'function' && window.matchMedia(requete).matches,
+    () => typeof window.matchMedia === 'function' && window.matchMedia(query).matches,
     () => false,
   );
 }
 
-const MESSAGES: Record<string, string> = {
-  identifiants_invalides: 'Email ou mot de passe incorrect.',
-  setup_termine: 'Le premier compte existe déjà : connectez-vous.',
-  email_deja_utilise: 'Un Membre utilise déjà cet email.',
-  invitation_invalide: 'Ce lien d’invitation est invalide, expiré ou déjà utilisé.',
-  projet_introuvable: 'Ce Projet n’existe pas.',
-  retour_introuvable: 'Ce Retour n’existe pas.',
-  transition_refusee: 'Ce Retour a changé entre-temps : voici son état actuel.',
-  stockage_indisponible:
-    'La Capture n’a pas pu être effacée du stockage : le Retour est gardé. Réessayez plus tard.',
-  retour_non_trie: 'Ce Retour n’est pas encore trié : il n’a pas de Verdict à corriger.',
-  envoi_introuvable: 'Cet Envoi n’existe plus.',
-  envoi_non_rejouable:
-    'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
-  retour_non_redispatchable:
-    'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
-  destination_introuvable: 'Cette Destination n’existe plus.',
-  type_destination_inconnu: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
-  session_requise: 'Votre session a expiré : reconnectez-vous.',
-};
-
-/** Message lisible pour une erreur de l'API (code connu, détail des champs refusés) ou du réseau. */
-export function errorMessage(erreur: unknown): string {
-  if (!(erreur instanceof ApiError)) return 'L’Instance est injoignable. Réessayez.';
-  if (erreur.code === 'requete_invalide' && erreur.corps.details?.length) {
-    return erreur.corps.details.map((detail) => detail.message).join(' ');
+/** A readable message for an API error (known code, details of refused fields) or a network one. */
+export function errorMessage(error: unknown, t: Messages): string {
+  if (!(error instanceof ApiError)) return t.unreachable;
+  if (error.code === 'invalid_request' && error.body.details?.length) {
+    return error.body.details.map((detail) => detail.message).join(' ');
   }
-  return MESSAGES[erreur.code] ?? `Erreur inattendue (${erreur.code}).`;
+  const known: Readonly<Record<string, string | undefined>> = t.apiErrors;
+  return known[error.code] ?? t.unexpectedError(error.code);
 }
 
-/** L'erreur, en clair ; `onRetry` ajoute « Réessayer » (une lecture qui a échoué). */
-export function ErrorMessage({ erreur, onRetry }: { erreur: unknown; onRetry?: () => void }) {
-  if (!erreur) return null;
+/** The error, in plain words; `onRetry` adds "Retry" (a read that failed). */
+export function ErrorMessage({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const t = useT();
+  if (!error) return null;
   return (
-    <p role="alert" className="alerte">
-      <span>{errorMessage(erreur)}</span>
+    <p role="alert" className="alert">
+      <span>{errorMessage(error, t)}</span>
       {onRetry ? (
-        <button type="button" className="secondaire" onClick={onRetry}>
-          Réessayer
+        <button type="button" className="secondary" onClick={onRetry}>
+          {t.common.retry}
         </button>
       ) : null}
     </p>
@@ -70,22 +52,24 @@ export function ErrorMessage({ erreur, onRetry }: { erreur: unknown; onRetry?: (
 }
 
 /**
- * « Enregistré. », annoncé : une région `status` toujours présente, remplie après un
- * enregistrement réussi. Le formulaire l'efface dès qu'on le modifie (`reset` de la mutation).
+ * "Saved.", announced: an always-present `status` region, filled after a successful
+ * save. The form clears it as soon as it changes (the mutation's `reset`).
  */
-export function StatutEnregistrement({ enregistre }: { enregistre: boolean }) {
+export function SaveStatus({ saved }: { saved: boolean }) {
+  const t = useT();
   return (
-    <p role="status" className="statut-enregistrement">
-      {enregistre ? 'Enregistré.' : ''}
+    <p role="status" className="save-status">
+      {saved ? t.common.saved : ''}
     </p>
   );
 }
 
-/** Chargement : des silhouettes de lignes, annoncées comme « Chargement… ». */
+/** Loading: row skeletons, announced as "Loading…". */
 export function Loading() {
+  const t = useT();
   return (
-    <div className="chargement" aria-live="polite">
-      <span className="visuellement-cache">Chargement…</span>
+    <div className="loading" aria-live="polite">
+      <span className="visually-hidden">{t.common.loading}</span>
       <span aria-hidden="true" />
       <span aria-hidden="true" />
       <span aria-hidden="true" />
@@ -94,29 +78,29 @@ export function Loading() {
 }
 
 /**
- * En-tête d'un écran : le titre (seul `h1` de l'écran), un lien de retour facultatif
- * au-dessus, une description et les actions de l'écran à droite.
+ * A screen's header: the title (the screen's only `h1`), an optional back link above
+ * it, a description, and the screen's actions on the right.
  */
 export function PageHeader({
-  titre,
-  retour,
+  title,
+  back,
   description,
   actions,
 }: {
-  titre: ReactNode;
-  retour?: { to: string; libelle: string };
+  title: ReactNode;
+  back?: { to: string; label: string };
   description?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
-    <header className="entete-page">
+    <header className="page-header">
       <div>
-        {retour ? (
-          <Link to={retour.to} className="retour-lien">
-            ← {retour.libelle}
+        {back ? (
+          <Link to={back.to} className="back-link">
+            ← {back.label}
           </Link>
         ) : null}
-        <h1>{titre}</h1>
+        <h1>{title}</h1>
         {description ? <p className="description">{description}</p> : null}
       </div>
       {actions ? <div className="actions">{actions}</div> : null}
@@ -124,20 +108,20 @@ export function PageHeader({
   );
 }
 
-/** Rien à montrer : dit pourquoi et, quand il y en a une, propose l'action qui remplit l'écran. */
+/** Nothing to show: say why and, when there is one, offer the action that fills the screen. */
 export function EmptyState({
-  titre,
+  title,
   children,
   action,
 }: {
-  titre: string;
+  title: string;
   children?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <div className="vide">
+    <div className="empty">
       <p>
-        <strong>{titre}</strong>
+        <strong>{title}</strong>
       </p>
       {children ? <p>{children}</p> : null}
       {action}
@@ -145,83 +129,84 @@ export function EmptyState({
   );
 }
 
-/** Ton d'une pastille : la couleur sémantique d'un état (voir docs/design-system.md). */
-export type Ton = 'neutre' | 'succes' | 'revue' | 'danger' | 'retenu' | 'eteint';
+/** A pill's tone: the semantic color of a state (see docs/design-system.md). */
+export type Tone = 'neutral' | 'success' | 'review' | 'danger' | 'held' | 'off';
 
-/** Un État ou un Statut, en pastille colorée par son ton. */
-export function Pastille({
-  ton,
+/** A State or a Status, as a pill colored by its tone. */
+export function Pill({
+  tone,
   children,
   title,
 }: {
-  ton: Ton;
+  tone: Tone;
   children: ReactNode;
   title?: string;
 }) {
   return (
-    <span className={`badge pastille ton-${ton}`} title={title}>
+    <span className={`badge pill tone-${tone}`} title={title}>
       {children}
     </span>
   );
 }
 
-type FieldProps = InputHTMLAttributes<HTMLInputElement> & { libelle: string; aide?: ReactNode };
+type FieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: ReactNode };
 
-export function Field({ libelle, aide, id, ...input }: FieldProps) {
-  const genere = useId();
-  const identifiant = id ?? genere;
+export function Field({ label, help, id, ...input }: FieldProps) {
+  const generated = useId();
+  const fieldId = id ?? generated;
   return (
-    <div className="champ">
-      <label htmlFor={identifiant}>{libelle}</label>
-      <input id={identifiant} {...input} />
-      {aide ? <p className="aide">{aide}</p> : null}
+    <div className="field">
+      <label htmlFor={fieldId}>{label}</label>
+      <input id={fieldId} {...input} />
+      {help ? <p className="help">{help}</p> : null}
     </div>
   );
 }
 
 /**
- * Une clé ou un lien affiché en entier, avec un bouton de copie. Sans presse-papier
- * (origine http, refus du navigateur), le texte est sélectionné pour une copie à la main.
+ * A key or a link shown in full, with a copy button. Without a clipboard (http origin,
+ * refused by the browser), the text is selected for a manual copy.
  */
-export function CopyableValue({ valeur, libelle }: { valeur: string; libelle: string }) {
+export function CopyableValue({ value, label }: { value: string; label: string }) {
+  const t = useT();
   const code = useRef<HTMLElement>(null);
-  const [etat, setEtat] = useState<'repos' | 'copie' | 'manuelle'>('repos');
+  const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
   useEffect(() => {
-    if (etat !== 'copie') return;
-    const delai = setTimeout(() => setEtat('repos'), 2000);
-    return () => clearTimeout(delai);
-  }, [etat]);
-  const selectionner = () => {
+    if (state !== 'copied') return;
+    const timeout = setTimeout(() => setState('idle'), 2000);
+    return () => clearTimeout(timeout);
+  }, [state]);
+  const select = () => {
     const element = code.current;
     const selection = window.getSelection();
     if (!element || !selection) return;
-    const plage = document.createRange();
-    plage.selectNodeContents(element);
+    const range = document.createRange();
+    range.selectNodeContents(element);
     selection.removeAllRanges();
-    selection.addRange(plage);
+    selection.addRange(range);
   };
-  const copier = async () => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(valeur);
-      setEtat('copie');
+      await navigator.clipboard.writeText(value);
+      setState('copied');
     } catch {
-      selectionner();
-      setEtat('manuelle');
+      select();
+      setState('manual');
     }
   };
   return (
-    <div className="copiable">
-      <code ref={code} aria-label={libelle}>
-        {valeur}
+    <div className="copyable">
+      <code ref={code} aria-label={label}>
+        {value}
       </code>
-      <button type="button" className="secondaire" onClick={() => void copier()}>
-        {etat === 'copie' ? 'Copié' : 'Copier'}
+      <button type="button" className="secondary" onClick={() => void copy()}>
+        {state === 'copied' ? t.common.copied : t.common.copy}
       </button>
-      <span role="status" className={etat === 'manuelle' ? 'aide' : 'visuellement-cache'}>
-        {etat === 'copie'
-          ? 'Copié dans le presse-papier.'
-          : etat === 'manuelle'
-            ? 'Copie automatique impossible : le texte est sélectionné, copiez-le avec ⌘C ou Ctrl+C.'
+      <span role="status" className={state === 'manual' ? 'help' : 'visually-hidden'}>
+        {state === 'copied'
+          ? t.common.copiedToClipboard
+          : state === 'manual'
+            ? t.common.copyManually
             : ''}
       </span>
     </div>
@@ -229,36 +214,37 @@ export function CopyableValue({ valeur, libelle }: { valeur: string; libelle: st
 }
 
 /**
- * Rend le focus à un bouton quand ce qu'il a ouvert (un formulaire, une édition) se
- * referme : `ouvert` passe de vrai à faux. Renvoie la ref à poser sur ce bouton.
+ * Returns focus to a button when what it opened (a form, an edit) closes: `open`
+ * goes from true to false. Returns the ref to put on that button.
  */
-export function useFocusAuRetour(ouvert: boolean) {
-  const bouton = useRef<HTMLButtonElement>(null);
-  const etaitOuvert = useRef(ouvert);
+export function useReturnFocus(open: boolean) {
+  const button = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(open);
   useEffect(() => {
-    if (etaitOuvert.current && !ouvert) bouton.current?.focus();
-    etaitOuvert.current = ouvert;
-  }, [ouvert]);
-  return bouton;
+    if (wasOpen.current && !open) button.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
+  return button;
 }
 
 /**
- * La question d'une confirmation sur place, avec Confirmer et Annuler. Le focus va sur
- * Annuler (le choix sûr) ; Échap annule.
+ * The question of an in-place confirmation, with Confirm and Cancel. Focus goes to
+ * Cancel (the safe choice); Escape cancels.
  */
 export function Confirmation({
   question,
-  enCours,
+  pending,
   onConfirm,
-  onAnnuler,
+  onCancel,
 }: {
   question: string;
-  enCours?: boolean;
+  pending?: boolean;
   onConfirm: () => void;
-  onAnnuler: () => void;
+  onCancel: () => void;
 }) {
-  const annuler = useRef<HTMLButtonElement>(null);
-  useEffect(() => annuler.current?.focus(), []);
+  const t = useT();
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancel.current?.focus(), []);
   return (
     <div
       className="confirmation"
@@ -266,78 +252,73 @@ export function Confirmation({
       aria-label={question}
       onKeyDown={(e) => {
         if (e.key !== 'Escape') return;
-        // Échap ferme la confirmation, pas ce qui l'entoure (le volet d'un Retour).
+        // Escape closes the confirmation, not what surrounds it (a Feedback's pane).
         e.stopPropagation();
-        onAnnuler();
+        onCancel();
       }}
     >
       <span>{question}</span>
-      <button type="button" className="danger" disabled={enCours} onClick={onConfirm}>
-        Confirmer
+      <button type="button" className="danger" disabled={pending} onClick={onConfirm}>
+        {t.common.confirm}
       </button>
-      <button ref={annuler} type="button" className="secondaire" onClick={onAnnuler}>
-        Annuler
+      <button ref={cancel} type="button" className="secondary" onClick={onCancel}>
+        {t.common.cancel}
       </button>
     </div>
   );
 }
 
 /**
- * Action irréversible en deux temps : le bouton demande une confirmation sur place.
- * Fermée, la confirmation rend le focus au bouton d'origine.
+ * An irreversible action in two steps: the button asks for an in-place confirmation.
+ * Once closed, the confirmation returns focus to the original button.
  */
 export function ConfirmAction({
-  libelle,
+  label,
   question,
-  enCours,
+  pending,
   onConfirm,
 }: {
-  libelle: string;
+  label: string;
   question: string;
-  enCours?: boolean;
+  pending?: boolean;
   onConfirm: () => void;
 }) {
-  const [ouverte, setOuverte] = useState(false);
-  const declencheur = useRef<HTMLButtonElement>(null);
-  const aRendreLeFocus = useRef(false);
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const shouldReturnFocus = useRef(false);
   useEffect(() => {
-    if (!ouverte && aRendreLeFocus.current) {
-      aRendreLeFocus.current = false;
-      declencheur.current?.focus();
+    if (!open && shouldReturnFocus.current) {
+      shouldReturnFocus.current = false;
+      trigger.current?.focus();
     }
-  }, [ouverte]);
-  const fermer = () => {
-    aRendreLeFocus.current = true;
-    setOuverte(false);
+  }, [open]);
+  const close = () => {
+    shouldReturnFocus.current = true;
+    setOpen(false);
   };
-  if (!ouverte) {
+  if (!open) {
     return (
-      <button
-        ref={declencheur}
-        type="button"
-        className="secondaire"
-        onClick={() => setOuverte(true)}
-      >
-        {libelle}
+      <button ref={trigger} type="button" className="secondary" onClick={() => setOpen(true)}>
+        {label}
       </button>
     );
   }
   return (
     <Confirmation
       question={question}
-      enCours={enCours}
-      onAnnuler={fermer}
+      pending={pending}
+      onCancel={close}
       onConfirm={() => {
-        fermer();
+        close();
         onConfirm();
       }}
     />
   );
 }
 
-const estHttp = (valeur: string): boolean => {
+const isHttp = (value: string): boolean => {
   try {
-    const { protocol } = new URL(valeur);
+    const { protocol } = new URL(value);
     return protocol === 'http:' || protocol === 'https:';
   } catch {
     return false;
@@ -345,13 +326,13 @@ const estHttp = (valeur: string): boolean => {
 };
 
 /**
- * Une URL venue de l'extérieur (contexte d'un Retour, lien d'un Envoi) : un lien
- * seulement en http(s), sinon du texte — un `javascript:` ne devient jamais cliquable.
+ * A URL from outside (a Feedback's context, a Delivery's link): a link only for
+ * http(s), text otherwise — a `javascript:` URL never becomes clickable.
  */
-export function LienExterne({ href }: { href: string }) {
-  if (!estHttp(href)) return <span className="lien-brut">{href}</span>;
+export function ExternalLink({ href }: { href: string }) {
+  if (!isHttp(href)) return <span className="raw-link">{href}</span>;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="lien-brut">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="raw-link">
       {href}
     </a>
   );

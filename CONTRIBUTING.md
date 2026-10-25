@@ -1,28 +1,29 @@
-# Contribuer à nudge
+# Contributing to nudge
 
-Merci de votre intérêt. nudge est maintenu sur le temps libre de son auteur : une contribution bien préparée a plus de chances d'être relue vite.
+Thank you for your interest. nudge is maintained in its author's spare time: a well-prepared contribution has a better chance of being reviewed quickly.
 
-## Avant d'écrire du code
+## Before writing code
 
-- **Un bug** : ouvrez une issue avec le modèle « Bug », sauf s'il s'agit d'une faille de sécurité (voir [`SECURITY.md`](SECURITY.md)).
-- **Une fonctionnalité ou un changement de comportement** : ouvrez d'abord une issue pour en discuter. Une PR qui arrive sans discussion préalable risque d'être refusée, même si elle est bonne, quand elle ne va pas dans la direction du projet.
-- **Une correction de documentation ou de typo** : une PR directe suffit.
+- **A bug**: open an issue with the "Bug" template, unless it is a security vulnerability (see [`SECURITY.md`](SECURITY.md)).
+- **A feature or a behavior change**: open an issue to discuss it first. A PR that arrives without prior discussion may be declined, even if it is good, when it does not go in the project's direction.
+- **A documentation or typo fix**: a direct PR is enough.
 
-## Préparer son poste
+## Setting up your machine
 
-La procédure est dans la section [Développer](README.md#développer) du README : Node 26, Docker, `yarn install`, `yarn dev`.
+The procedure is in the [Development](README.md#development) section of the README: Node 26, Docker, `yarn install`, `yarn dev`.
 
 ## Conventions
 
-- **Le vocabulaire du domaine** est défini dans [`CONTEXT.md`](CONTEXT.md) : Retour, Verdict, Destination, Envoi… Le code, les tests, l'interface et les messages de commit l'emploient, en français.
-- **Les décisions d'architecture** sont dans [`docs/adr/`](docs/adr/). Une PR qui revient sur l'une d'elles le dit et propose un nouvel ADR.
-- **L'interface du dashboard** suit [`docs/design-system.md`](docs/design-system.md).
-- **Les commits** suivent les [Conventional Commits](https://www.conventionalcommits.org/fr/), en français : `feat(dashboard): …`, `fix(api): …`, `docs: …`. Les notes de version en sont tirées.
-- **Les tests** accompagnent chaque changement de comportement. Les tests du pipeline (`tests/pipeline`) démarrent Postgres et Redis avec testcontainers : Docker doit tourner.
+- **Language**: everything is written in English — code (identifiers, file names, comments, log and error messages, test names), database schema and migrations, docs and ADRs, commit messages, PRs, issues and review comments. The only exception is the French locale of the UI: French text appears only in the dashboard and widget `fr` locale files.
+- **The domain vocabulary** is defined in [`CONTEXT.md`](CONTEXT.md): Feedback, Verdict, Destination, Delivery… Code, tests, the interface and commit messages use it.
+- **Architecture decisions** live in [`docs/adr/`](docs/adr/). A PR that goes back on one of them says so and proposes a new ADR.
+- **The dashboard interface** follows [`docs/design-system.md`](docs/design-system.md).
+- **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/), in English: `feat(dashboard): …`, `fix(api): …`, `docs: …`. Release notes are generated from them.
+- **Tests** accompany every behavior change. The pipeline tests (`tests/pipeline`) start Postgres and Redis with testcontainers: Docker must be running.
 
-## Ouvrir une Pull Request
+## Opening a Pull Request
 
-Avant de pousser :
+Before pushing:
 
 ```bash
 yarn prettier --check .
@@ -31,8 +32,8 @@ yarn check-types
 yarn test
 ```
 
-La CI lance les mêmes vérifications, construit les images et cherche des secrets dans l'historique. Décrivez le problème, la solution et la façon de vérifier, puis liez l'issue (`Closes #12`).
+CI runs the same checks, builds the images and looks for secrets in the history. Describe the problem, the solution and how to verify it, then link the issue (`Closes #12`).
 
-## Licence des contributions
+## License of contributions
 
-nudge est publié sous [AGPL-3.0](LICENSE). En ouvrant une Pull Request, vous acceptez que votre contribution soit publiée sous cette même licence.
+nudge is released under [AGPL-3.0](LICENSE). By opening a Pull Request, you agree that your contribution is released under that same license.

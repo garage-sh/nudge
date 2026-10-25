@@ -1,4 +1,4 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import { resolutionSources } from '../../vitest.shared.mts';
+import { sourceResolution } from '../../vitest.shared.mts';
 
-export default mergeConfig(resolutionSources, defineConfig({ test: { name: '@nudge/sdk' } }));
+export default mergeConfig(sourceResolution, defineConfig({ test: { name: '@nudge/sdk' } }));

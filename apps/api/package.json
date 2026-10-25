@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Le serveur nudge : ingestion publique, API du dashboard et, selon NUDGE_ROLES, le worker.",
+  "description": "The nudge server: public ingestion, dashboard API and, according to NUDGE_ROLES, the worker.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -28,7 +28,7 @@
     "@nudge/database": "workspace:*",
     "@nudge/destinations": "workspace:*",
     "@nudge/shared": "workspace:*",
-    "@nudge/stockage": "workspace:*",
+    "@nudge/storage": "workspace:*",
     "@nudge/worker": "workspace:*",
     "bullmq": "^5.60.0",
     "cookie": "^1",

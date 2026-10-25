@@ -1,20 +1,20 @@
-import { API, CDN, CLE, expect, test } from './hote.js';
+import { API, CDN, PUBLIC_KEY, expect, test } from './host.js';
 
-test('le build ESM (npm) monte le Widget et envoie un Retour', async ({ page, hote, api }) => {
-  await hote.ouvrir({
+test('the ESM build (npm) mounts the Widget and sends Feedback', async ({ page, host, api }) => {
+  await host.open({
     integration: `<script type="module">
-  import { monterWidget } from '${CDN}/index.js';
-  monterWidget({ cle: '${CLE}', api: '${API}', metadonnees: { build: 'esm' } });
+  import { mountWidget } from '${CDN}/index.js';
+  mountWidget({ publicKey: '${PUBLIC_KEY}', api: '${API}', metadata: { build: 'esm' } });
 </script>`,
   });
 
-  await page.getByRole('button', { name: 'Laisser un retour' }).click();
-  await page.getByLabel('Votre message').fill('Depuis le module');
-  await page.getByRole('button', { name: 'Envoyer' }).click();
+  await page.getByRole('button', { name: 'Send feedback' }).click();
+  await page.getByLabel('Your message').fill('From the module');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 
-  await expect(page.getByRole('status')).toHaveText('Merci ! Votre retour a bien été envoyé.');
-  expect(api.requetes[0]).toMatchObject({
-    autorisation: `Bearer ${CLE}`,
-    corps: { texte: 'Depuis le module', contexte: { metadonnees: { build: 'esm' } } },
+  await expect(page.getByRole('status')).toHaveText('Thank you! Your feedback has been sent.');
+  expect(api.requests[0]).toMatchObject({
+    authorization: `Bearer ${PUBLIC_KEY}`,
+    body: { text: 'From the module', context: { metadata: { build: 'esm' } } },
   });
 });

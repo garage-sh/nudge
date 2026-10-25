@@ -6,60 +6,62 @@ import {
   requireEnv,
   type Env,
 } from '@nudge/core';
-import { configStockageFromEnv, type ConfigStockage } from '@nudge/stockage';
+import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import type { ApiOptions, TrustProxy } from './api.js';
-import { LIMITES_WIDGET_PAR_DEFAUT } from './ingestion/acces-widget.js';
+import { DEFAULT_WIDGET_LIMITS } from './ingestion/widget-access.js';
 
-/** Ce que l'environnement fixe de l'api ; `main.ts` y branche les adaptateurs. */
-export type ConfigApi = Required<
+/** What the environment sets for the api; `main.ts` plugs the adapters in. */
+export type ApiConfig = Required<
   Pick<
     ApiOptions,
     | 'databaseUrl'
     | 'redisUrl'
-    | 'cleChiffrement'
+    | 'encryptionKey'
     | 'sessionCookieSecure'
     | 'trustProxy'
-    | 'limitesWidget'
+    | 'widgetLimits'
   >
-> & { readonly port: number; readonly stockage: ConfigStockage };
+> & { readonly port: number; readonly storage: StorageConfig };
 
 /**
- * `NUDGE_TRUST_PROXY` tel qu'Express l'entend : `true`/`false`, un nombre de proxys
- * à traverser depuis la droite de `X-Forwarded-For`, ou des adresses et sous-réseaux
- * de confiance (`loopback, uniquelocal`, `10.0.0.0/8`). Absente : aucun proxy, l'IP
- * vue est celle de la connexion.
+ * `NUDGE_TRUST_PROXY` as Express understands it: `true`/`false`, a number of proxies to
+ * traverse from the right of `X-Forwarded-For`, or trusted addresses and subnets
+ * (`loopback, uniquelocal`, `10.0.0.0/8`). Absent: no proxy, the IP seen is the
+ * connection's.
  */
 function trustProxyFromEnv(env: Env): TrustProxy {
-  const valeur = optionalEnv(env, 'NUDGE_TRUST_PROXY');
-  if (valeur === null || valeur === 'false') return false;
-  if (valeur === 'true') return true;
-  if (/^\d+$/.test(valeur)) return Number(valeur);
-  return valeur;
+  const value = optionalEnv(env, 'NUDGE_TRUST_PROXY');
+  if (value === null || value === 'false') return false;
+  if (value === 'true') return true;
+  if (/^\d+$/.test(value)) return Number(value);
+  return value;
 }
 
 /**
- * La configuration de l'api, lue dans l'environnement (voir `.env.example`). Une
- * valeur invalide lève, pour échouer au démarrage plutôt qu'à la première requête.
+ * The api configuration, read from the environment (see `.env.example`). An invalid
+ * value throws, to fail at startup rather than on the first request.
  */
-export function configApiFromEnv(env: Env): ConfigApi {
-  const limites = LIMITES_WIDGET_PAR_DEFAUT;
+export function apiConfigFromEnv(env: Env): ApiConfig {
+  const limits = DEFAULT_WIDGET_LIMITS;
   return {
     port: integerEnv(env, 'NUDGE_API_PORT', 3000, { min: 1, max: 65_535 }),
     databaseUrl: requireEnv(env, 'DATABASE_URL'),
     redisUrl: requireEnv(env, 'REDIS_URL'),
-    cleChiffrement: requireEnv(env, ENCRYPTION_KEY_VARIABLE),
-    // Le même stockage que celui du worker : un volume partagé, ou un bucket S3.
-    stockage: configStockageFromEnv(env),
+    encryptionKey: requireEnv(env, ENCRYPTION_KEY_VARIABLE),
+    // The same storage as the worker's: a shared volume, or an S3 bucket.
+    storage: storageConfigFromEnv(env),
     sessionCookieSecure: booleanEnv(env, 'NUDGE_COOKIE_SECURE', true),
     trustProxy: trustProxyFromEnv(env),
-    limitesWidget: {
-      parIp: {
-        limit: integerEnv(env, 'NUDGE_WIDGET_LIMITE_IP', limites.parIp.limit, { min: 1 }),
-        windowMs: limites.parIp.windowMs,
+    widgetLimits: {
+      perIp: {
+        limit: integerEnv(env, 'NUDGE_WIDGET_RATE_LIMIT_IP', limits.perIp.limit, { min: 1 }),
+        windowMs: limits.perIp.windowMs,
       },
-      parProjet: {
-        limit: integerEnv(env, 'NUDGE_WIDGET_LIMITE_PROJET', limites.parProjet.limit, { min: 1 }),
-        windowMs: limites.parProjet.windowMs,
+      perProject: {
+        limit: integerEnv(env, 'NUDGE_WIDGET_RATE_LIMIT_PROJECT', limits.perProject.limit, {
+          min: 1,
+        }),
+        windowMs: limits.perProject.windowMs,
       },
     },
   };

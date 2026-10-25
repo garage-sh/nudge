@@ -1,27 +1,27 @@
-import { estTypeDestination, type TypeDestination } from '@nudge/shared';
-import { formulaireDiscord } from './discord.js';
-import { formulaireGitHub } from './github.js';
-import { formulaireLinear } from './linear.js';
-import { formulaireSlack } from './slack.js';
-import type { FormulaireTypeDestination } from './type-destination.js';
-import { formulaireWebhook } from './webhook.js';
+import { isDestinationType, type DestinationType } from '@nudge/shared';
+import { discordForm } from './discord.js';
+import { gitHubForm } from './github.js';
+import { linearForm } from './linear.js';
+import { slackForm } from './slack.js';
+import type { DestinationTypeForm } from './destination-type-form.js';
+import { webhookForm } from './webhook.js';
 
-export type { ChampsTypeProps, FormulaireTypeDestination } from './type-destination.js';
+export type { TypeFieldsProps, DestinationTypeForm } from './destination-type-form.js';
 
-/** Un formulaire par type de `DEFINITIONS_DESTINATION` : le compilateur exige chaque entrée. */
-export const FORMULAIRES_DESTINATION: {
-  readonly [T in TypeDestination]: FormulaireTypeDestination<T>;
+/** One form per type of `DESTINATION_DEFINITIONS`: the compiler requires each entry. */
+export const DESTINATION_FORMS: {
+  readonly [T in DestinationType]: DestinationTypeForm<T>;
 } = {
-  webhook: formulaireWebhook,
-  discord: formulaireDiscord,
-  linear: formulaireLinear,
-  slack: formulaireSlack,
-  github: formulaireGitHub,
+  webhook: webhookForm,
+  discord: discordForm,
+  linear: linearForm,
+  slack: slackForm,
+  github: gitHubForm,
 };
 
-/** Le formulaire de l'un des types, quel qu'il soit. */
-export type FormulaireDUnType = (typeof FORMULAIRES_DESTINATION)[TypeDestination];
+/** The form of any one of the types. */
+export type AnyDestinationTypeForm = (typeof DESTINATION_FORMS)[DestinationType];
 
-/** Le formulaire d'un type, ou `null` pour un type que ce dashboard ne connaît pas. */
-export const formulaireDe = (type: string): FormulaireDUnType | null =>
-  estTypeDestination(type) ? FORMULAIRES_DESTINATION[type] : null;
+/** A type's form, or `null` for a type this dashboard does not know. */
+export const formOf = (type: string): AnyDestinationTypeForm | null =>
+  isDestinationType(type) ? DESTINATION_FORMS[type] : null;

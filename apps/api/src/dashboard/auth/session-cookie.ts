@@ -1,37 +1,37 @@
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 
-export const COOKIE_SESSION = 'nudge_session';
+export const SESSION_COOKIE = 'nudge_session';
 
-/** Durée de vie d'une session ; au-delà, le Membre se reconnecte. */
-export const DUREE_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Lifetime of a session; beyond it, the Member signs in again. */
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface SessionCookieOptions {
-  /** `Secure` : le cookie ne circule qu'en HTTPS. À couper seulement en développement local. */
+  /** `Secure`: the cookie only travels over HTTPS. Turn off only for local development. */
   readonly secure: boolean;
 }
 
-export function readSessionCookie(requete: Request): string | null {
-  const entete = requete.headers.cookie;
-  if (!entete) return null;
-  return parse(entete)[COOKIE_SESSION] || null;
+export function readSessionCookie(request: Request): string | null {
+  const header = request.headers.cookie;
+  if (!header) return null;
+  return parse(header)[SESSION_COOKIE] || null;
 }
 
 /**
- * httpOnly : le script de la page ne lit jamais le jeton. SameSite=Lax : un site
- * tiers ne fait pas porter la session à un POST/PATCH/DELETE (CSRF).
+ * httpOnly: the page's script never reads the token. SameSite=Lax: a third-party site
+ * does not make a POST/PATCH/DELETE carry the session (CSRF).
  */
-const attributs = (options: SessionCookieOptions) =>
+const attributes = (options: SessionCookieOptions) =>
   ({ httpOnly: true, sameSite: 'lax', secure: options.secure, path: '/' }) as const;
 
 export function writeSessionCookie(
-  reponse: Response,
-  jeton: string,
+  response: Response,
+  token: string,
   options: SessionCookieOptions,
 ): void {
-  reponse.cookie(COOKIE_SESSION, jeton, { ...attributs(options), maxAge: DUREE_SESSION_MS });
+  response.cookie(SESSION_COOKIE, token, { ...attributes(options), maxAge: SESSION_TTL_MS });
 }
 
-export function clearSessionCookie(reponse: Response, options: SessionCookieOptions): void {
-  reponse.clearCookie(COOKIE_SESSION, attributs(options));
+export function clearSessionCookie(response: Response, options: SessionCookieOptions): void {
+  response.clearCookie(SESSION_COOKIE, attributes(options));
 }

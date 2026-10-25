@@ -1,18 +1,18 @@
-import type { ProjetVu } from '@nudge/shared';
+import type { ProjectView } from '@nudge/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type Pipeline } from './harness/index.js';
 
-const ORIGINE = 'https://boutique.exemple';
+const ORIGIN = 'https://shop.example';
 
-describe('Ingestion par clé publique (Widget)', () => {
+describe('Ingestion by public key (Widget)', () => {
   let pipeline: Pipeline;
-  let clePublique: string;
+  let publicKey: string;
 
   beforeAll(async () => {
     pipeline = await startPipeline();
-    ({ clePublique } = await pipeline.createProjet({
-      nom: 'Boutique',
-      originesAutorisees: [ORIGINE, 'http://localhost:5173'],
+    ({ publicKey } = await pipeline.createProject({
+      name: 'Shop',
+      allowedOrigins: [ORIGIN, 'http://localhost:5173'],
     }));
   });
 
@@ -20,122 +20,120 @@ describe('Ingestion par clé publique (Widget)', () => {
     await pipeline?.stop();
   });
 
-  it('enregistre un Retour de Source widget, Auteur déclaré, puis le trie', async () => {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte: 'Le bouton payer ne répond pas',
+  it('records a Feedback with the widget Source and a declared Author, then triages it', async () => {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'The pay button does not respond',
       type: 'bug',
-      auteur: { id: 'u-7', email: 'ada@exemple.test', nom: 'Ada' },
-      contexte: {
-        url: 'https://boutique.exemple/panier',
+      author: { id: 'u-7', email: 'ada@example.test', name: 'Ada' },
+      context: {
+        url: 'https://shop.example/cart',
         userAgent: 'Mozilla/5.0',
-        viewport: { largeur: 390, hauteur: 844 },
-        metadonnees: { version: '4.2.0' },
+        viewport: { width: 390, height: 844 },
+        metadata: { version: '4.2.0' },
       },
     });
 
-    expect(reponse.status).toBe(202);
-    expect(reponse.headers.get('access-control-allow-origin')).toBe(ORIGINE);
-    const { id } = (await reponse.json()) as { id: string };
+    expect(response.status).toBe(202);
+    expect(response.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+    const { id } = (await response.json()) as { id: string };
     expect(
-      await pipeline.waitForRetour(id, (r) => r.etat === 'dispatche' || r.etat === 'trie'),
+      await pipeline.waitForFeedback(id, (r) => r.state === 'dispatched' || r.state === 'triaged'),
     ).toMatchObject({
       source: 'widget',
-      texte: 'Le bouton payer ne répond pas',
-      typeDeclare: 'bug',
-      auteur: { id: 'u-7', email: 'ada@exemple.test', nom: 'Ada' },
-      confianceAuteur: 'declaree',
-      contexte: { url: 'https://boutique.exemple/panier', metadonnees: { version: '4.2.0' } },
+      text: 'The pay button does not respond',
+      declaredType: 'bug',
+      author: { id: 'u-7', email: 'ada@example.test', name: 'Ada' },
+      authorTrust: 'declared',
+      context: { url: 'https://shop.example/cart', metadata: { version: '4.2.0' } },
     });
   });
 
-  it('répond au preflight CORS du navigateur', async () => {
-    const reponse = await fetch(`${pipeline.url}/v1/retours`, {
+  it('answers the browser’s CORS preflight', async () => {
+    const response = await fetch(`${pipeline.url}/v1/feedbacks`, {
       method: 'OPTIONS',
       headers: {
-        origin: ORIGINE,
+        origin: ORIGIN,
         'access-control-request-method': 'POST',
         'access-control-request-headers': 'authorization, content-type',
       },
     });
 
-    expect(reponse.status).toBe(204);
-    expect(reponse.headers.get('access-control-allow-origin')).toBe(ORIGINE);
-    expect(reponse.headers.get('access-control-allow-methods')).toContain('POST');
-    expect(reponse.headers.get('access-control-allow-headers')?.toLowerCase()).toContain(
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+    expect(response.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(response.headers.get('access-control-allow-headers')?.toLowerCase()).toContain(
       'authorization',
     );
   });
 
   it.each([
-    ['une origine absente de la liste du Projet', 'https://pirate.exemple'],
-    ['une origine voisine (sous-domaine)', 'https://www.boutique.exemple'],
-    ['une origine au port différent', 'http://localhost:5174'],
-    ['une requête sans origine', null],
-  ])('refuse %s', async (_cas, origine) => {
-    const reponse = await pipeline.postRetourWidget(clePublique, origine, { texte: 'Bonjour' });
+    ['an origin missing from the Project’s list', 'https://pirate.example'],
+    ['a neighbouring origin (subdomain)', 'https://www.shop.example'],
+    ['an origin on a different port', 'http://localhost:5174'],
+    ['a request without an origin', null],
+  ])('refuses %s', async (_case, origin) => {
+    const response = await pipeline.postWidgetFeedback(publicKey, origin, { text: 'Hello' });
 
-    expect(reponse.status).toBe(403);
-    expect(await reponse.json()).toMatchObject({ erreur: 'origine_refusee' });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'origin_refused' });
   });
 
-  it('refuse une clé publique inconnue', async () => {
-    const reponse = await pipeline.postRetourWidget('nk_pub_inconnue', ORIGINE, {
-      texte: 'Bonjour',
+  it('refuses an unknown public key', async () => {
+    const response = await pipeline.postWidgetFeedback('nk_pub_unknown', ORIGIN, {
+      text: 'Hello',
     });
 
-    expect(reponse.status).toBe(401);
-    expect(await reponse.json()).toMatchObject({ erreur: 'cle_invalide' });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'invalid_key' });
   });
 
-  it('refuse un Retour malformé', async () => {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, { texte: '  ' });
+  it('refuses a malformed Feedback', async () => {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, { text: '  ' });
 
-    expect(reponse.status).toBe(400);
-    expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid_feedback' });
   });
 
   it.each([
-    ['dans l’Auteur', { auteur: { id: 'u-7', confiance: 'attestee' } }],
-    ['à la racine du Retour', { auteur: { id: 'u-7' }, confianceAuteur: 'attestee' }],
-  ])('refuse un navigateur qui prétend attester l’Auteur %s', async (_cas, champs) => {
-    const reponse = await pipeline.postRetourWidget(clePublique, ORIGINE, {
-      texte: 'Bonjour',
-      ...champs,
+    ['in the Author', { author: { id: 'u-7', trust: 'attested' } }],
+    ['at the root of the Feedback', { author: { id: 'u-7' }, authorTrust: 'attested' }],
+  ])('refuses a browser that claims to attest the Author %s', async (_case, fields) => {
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'Hello',
+      ...fields,
     });
 
-    expect(reponse.status).toBe(400);
-    expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid_feedback' });
   });
 
-  it('refuse l’ancienne clé publique après régénération, accepte la nouvelle', async () => {
-    const membre = await pipeline.signIn();
-    const { body } = await membre.post<{ projet: ProjetVu }>('/api/projets', {
-      nom: 'Régénérée',
-      originesAutorisees: [ORIGINE],
+  it('refuses the old public key after regeneration, accepts the new one', async () => {
+    const member = await pipeline.signIn();
+    const { body } = await member.post<{ project: ProjectView }>('/api/projects', {
+      name: 'Regenerated',
+      allowedOrigins: [ORIGIN],
     });
-    const ancienne = body.projet.clePublique;
+    const oldKey = body.project.publicKey;
 
-    const regeneration = await membre.post<ProjetVu>(`/api/projets/${body.projet.id}/cle-publique`);
+    const regeneration = await member.post<ProjectView>(
+      `/api/projects/${body.project.id}/public-key`,
+    );
 
-    const nouvelle = regeneration.body.clePublique;
-    expect((await pipeline.postRetourWidget(ancienne, ORIGINE, { texte: 'Ancienne' })).status).toBe(
-      401,
-    );
-    expect((await pipeline.postRetourWidget(nouvelle, ORIGINE, { texte: 'Nouvelle' })).status).toBe(
-      202,
-    );
+    const newKey = regeneration.body.publicKey;
+    expect((await pipeline.postWidgetFeedback(oldKey, ORIGIN, { text: 'Old' })).status).toBe(401);
+    expect((await pipeline.postWidgetFeedback(newKey, ORIGIN, { text: 'New' })).status).toBe(202);
   });
 });
 
-describe('Rate limit de l’ingestion par clé publique', () => {
-  describe('par Projet', () => {
+describe('Rate limit of ingestion by public key', () => {
+  describe('per Project', () => {
     let pipeline: Pipeline;
 
     beforeAll(async () => {
       pipeline = await startPipeline({
-        limitesWidget: {
-          parIp: { limit: 100, windowMs: 60_000 },
-          parProjet: { limit: 2, windowMs: 60_000 },
+        widgetLimits: {
+          perIp: { limit: 100, windowMs: 60_000 },
+          perProject: { limit: 2, windowMs: 60_000 },
         },
       });
     });
@@ -144,52 +142,52 @@ describe('Rate limit de l’ingestion par clé publique', () => {
       await pipeline?.stop();
     });
 
-    it('refuse au-delà de la limite du Projet, sans toucher aux autres Projets', async () => {
-      const { clePublique: inonde } = await pipeline.createProjet({
-        nom: 'Inondé',
-        originesAutorisees: [ORIGINE],
+    it('refuses beyond the Project’s limit, without affecting other Projects', async () => {
+      const { publicKey: flooded } = await pipeline.createProject({
+        name: 'Flooded',
+        allowedOrigins: [ORIGIN],
       });
-      const { clePublique: voisin } = await pipeline.createProjet({
-        nom: 'Voisin',
-        originesAutorisees: [ORIGINE],
+      const { publicKey: neighbour } = await pipeline.createProject({
+        name: 'Neighbour',
+        allowedOrigins: [ORIGIN],
       });
-      const poster = (cle: string) => pipeline.postRetourWidget(cle, ORIGINE, { texte: 'Encore' });
+      const post = (key: string) => pipeline.postWidgetFeedback(key, ORIGIN, { text: 'Again' });
 
-      const statuts = [(await poster(inonde)).status, (await poster(inonde)).status];
-      const refus = await poster(inonde);
+      const statuses = [(await post(flooded)).status, (await post(flooded)).status];
+      const refusal = await post(flooded);
 
-      expect(statuts).toEqual([202, 202]);
-      expect(refus.status).toBe(429);
-      expect(refus.headers.get('retry-after')).toMatch(/^\d+$/);
-      // Le Widget lit Retry-After depuis une autre origine : l'en-tête doit être exposé.
-      expect(refus.headers.get('access-control-allow-origin')).toBe(ORIGINE);
-      expect(refus.headers.get('access-control-expose-headers')).toMatch(/retry-after/i);
-      expect(await refus.json()).toMatchObject({ erreur: 'trop_de_retours' });
-      expect((await poster(voisin)).status).toBe(202);
+      expect(statuses).toEqual([202, 202]);
+      expect(refusal.status).toBe(429);
+      expect(refusal.headers.get('retry-after')).toMatch(/^\d+$/);
+      // The Widget reads Retry-After from another origin: the header must be exposed.
+      expect(refusal.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+      expect(refusal.headers.get('access-control-expose-headers')).toMatch(/retry-after/i);
+      expect(await refusal.json()).toMatchObject({ error: 'too_many_feedbacks' });
+      expect((await post(neighbour)).status).toBe(202);
     });
 
-    it('ne compte pas la clé secrète dans la limite du Widget', async () => {
-      const { clePublique, cleSecrete } = await pipeline.createProjet({
-        nom: 'Serveur',
-        originesAutorisees: [ORIGINE],
+    it('does not count the secret key against the Widget limit', async () => {
+      const { publicKey, secretKey } = await pipeline.createProject({
+        name: 'Server',
+        allowedOrigins: [ORIGIN],
       });
-      const widget = () => pipeline.postRetourWidget(clePublique, ORIGINE, { texte: 'Widget' });
+      const widget = () => pipeline.postWidgetFeedback(publicKey, ORIGIN, { text: 'Widget' });
       await widget();
       await widget();
 
       expect((await widget()).status).toBe(429);
-      expect((await pipeline.postRetour(cleSecrete, { texte: 'Serveur' })).status).toBe(202);
+      expect((await pipeline.postFeedback(secretKey, { text: 'Server' })).status).toBe(202);
     });
   });
 
-  describe('par IP', () => {
+  describe('per IP', () => {
     let pipeline: Pipeline;
 
     beforeAll(async () => {
       pipeline = await startPipeline({
-        limitesWidget: {
-          parIp: { limit: 2, windowMs: 60_000 },
-          parProjet: { limit: 100, windowMs: 60_000 },
+        widgetLimits: {
+          perIp: { limit: 2, windowMs: 60_000 },
+          perProject: { limit: 100, windowMs: 60_000 },
         },
       });
     });
@@ -198,85 +196,82 @@ describe('Rate limit de l’ingestion par clé publique', () => {
       await pipeline?.stop();
     });
 
-    it('refuse une IP au-delà de sa limite, tous Projets confondus', async () => {
+    it('refuses an IP beyond its limit, across all Projects', async () => {
       const [a, b] = await Promise.all(
-        ['A', 'B'].map((nom) => pipeline.createProjet({ nom, originesAutorisees: [ORIGINE] })),
+        ['A', 'B'].map((name) => pipeline.createProject({ name, allowedOrigins: [ORIGIN] })),
       );
-      const poster = (cle: string) => pipeline.postRetourWidget(cle, ORIGINE, { texte: 'Encore' });
+      const post = (key: string) => pipeline.postWidgetFeedback(key, ORIGIN, { text: 'Again' });
 
-      const statuts = [
-        (await poster(a!.clePublique)).status,
-        (await poster(b!.clePublique)).status,
-      ];
-      const refus = await poster(b!.clePublique);
+      const statuses = [(await post(a!.publicKey)).status, (await post(b!.publicKey)).status];
+      const refusal = await post(b!.publicKey);
 
-      expect(statuts).toEqual([202, 202]);
-      expect(refus.status).toBe(429);
-      expect(await refus.json()).toMatchObject({ erreur: 'trop_de_retours' });
+      expect(statuses).toEqual([202, 202]);
+      expect(refusal.status).toBe(429);
+      expect(await refusal.json()).toMatchObject({ error: 'too_many_feedbacks' });
     });
   });
 });
 
-describe('Rate limit par IP derrière un reverse proxy (`trust proxy`)', () => {
-  const posterDepuis = (pipeline: Pipeline, cle: string, ip: string) =>
-    fetch(`${pipeline.url}/v1/retours`, {
+describe('Per-IP rate limit behind a reverse proxy (`trust proxy`)', () => {
+  const postFrom = (pipeline: Pipeline, key: string, ip: string) =>
+    fetch(`${pipeline.url}/v1/feedbacks`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${cle}`,
-        origin: ORIGINE,
+        authorization: `Bearer ${key}`,
+        origin: ORIGIN,
         'x-forwarded-for': ip,
       },
-      body: JSON.stringify({ texte: 'Derrière le proxy' }),
+      body: JSON.stringify({ text: 'Behind the proxy' }),
     });
 
-  const limitesWidget = {
-    parIp: { limit: 1, windowMs: 60_000 },
-    parProjet: { limit: 100, windowMs: 60_000 },
+  const widgetLimits = {
+    perIp: { limit: 1, windowMs: 60_000 },
+    perProject: { limit: 100, windowMs: 60_000 },
   };
 
-  describe('avec un proxy de confiance', () => {
+  describe('with a trusted proxy', () => {
     let pipeline: Pipeline;
 
     beforeAll(async () => {
-      pipeline = await startPipeline({ limitesWidget, trustProxy: 1 });
+      pipeline = await startPipeline({ widgetLimits, trustProxy: 1 });
     });
 
     afterAll(async () => {
       await pipeline?.stop();
     });
 
-    it('compte chaque client par l’IP que le proxy transmet', async () => {
-      const { clePublique } = await pipeline.createProjet({
-        nom: 'Proxy',
-        originesAutorisees: [ORIGINE],
+    it('counts each client by the IP the proxy forwards', async () => {
+      const { publicKey } = await pipeline.createProject({
+        name: 'Proxy',
+        allowedOrigins: [ORIGIN],
       });
 
-      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(202);
-      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(429);
-      expect((await posterDepuis(pipeline, clePublique, '203.0.113.2')).status).toBe(202);
+      expect((await postFrom(pipeline, publicKey, '203.0.113.1')).status).toBe(202);
+      expect((await postFrom(pipeline, publicKey, '203.0.113.1')).status).toBe(429);
+      expect((await postFrom(pipeline, publicKey, '203.0.113.2')).status).toBe(202);
     });
   });
 
-  describe('sans proxy déclaré', () => {
+  describe('without a declared proxy', () => {
     let pipeline: Pipeline;
 
     beforeAll(async () => {
-      pipeline = await startPipeline({ limitesWidget });
+      pipeline = await startPipeline({ widgetLimits });
     });
 
     afterAll(async () => {
       await pipeline?.stop();
     });
 
-    it('ignore X-Forwarded-For : un client ne contourne pas sa limite en le changeant', async () => {
-      const { clePublique } = await pipeline.createProjet({
-        nom: 'Direct',
-        originesAutorisees: [ORIGINE],
+    it('ignores X-Forwarded-For: a client cannot bypass its limit by changing it', async () => {
+      const { publicKey } = await pipeline.createProject({
+        name: 'Direct',
+        allowedOrigins: [ORIGIN],
       });
 
-      expect((await posterDepuis(pipeline, clePublique, '203.0.113.1')).status).toBe(202);
-      expect((await posterDepuis(pipeline, clePublique, '203.0.113.2')).status).toBe(429);
+      expect((await postFrom(pipeline, publicKey, '203.0.113.1')).status).toBe(202);
+      expect((await postFrom(pipeline, publicKey, '203.0.113.2')).status).toBe(429);
     });
   });
 });

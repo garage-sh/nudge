@@ -1,37 +1,37 @@
-import type { DestinationConfiguree, DestinationAdapterResolver } from '@nudge/core';
-import { estTypeDestination, type TypeDestination } from '@nudge/shared';
-import { adaptateurDiscord } from './discord.js';
-import { adaptateurGitHub } from './github.js';
-import { adaptateurLinear } from './linear.js';
-import { adaptateurSlack } from './slack.js';
-import { adaptateurWebhook } from './webhook.js';
+import type { ConfiguredDestination, DestinationAdapterResolver } from '@nudge/core';
+import { isDestinationType, type DestinationType } from '@nudge/shared';
+import { discordAdapter } from './discord.js';
+import { gitHubAdapter } from './github.js';
+import { linearAdapter } from './linear.js';
+import { slackAdapter } from './slack.js';
+import { webhookAdapter } from './webhook.js';
 
-export { adaptateurDiscord, type OptionsDiscord } from './discord.js';
-export { adaptateurGitHub, type OptionsGitHub } from './github.js';
-export { adaptateurLinear, type OptionsLinear } from './linear.js';
-export { adaptateurSlack, type OptionsSlack } from './slack.js';
-export { adaptateurWebhook, type OptionsWebhook } from './webhook.js';
+export { discordAdapter, type DiscordOptions } from './discord.js';
+export { gitHubAdapter, type GitHubOptions } from './github.js';
+export { linearAdapter, type LinearOptions } from './linear.js';
+export { slackAdapter, type SlackOptions } from './slack.js';
+export { webhookAdapter, type WebhookOptions } from './webhook.js';
 
 /**
- * Registre des adaptateurs de Destination de l'Instance, un par type déclaré dans
- * `DEFINITIONS_DESTINATION` (@nudge/shared) : le compilateur exige une entrée par type.
+ * Registry of the Instance's Destination adapters, one per type declared in
+ * `DESTINATION_DEFINITIONS` (@nudge/shared): the compiler requires one entry per type.
  */
-export const DESTINATION_ADAPTERS: Readonly<Record<TypeDestination, DestinationAdapterResolver>> = {
-  webhook: (destination) => adaptateurWebhook(destination),
-  discord: (destination) => adaptateurDiscord(destination),
-  linear: (destination) => adaptateurLinear(destination),
-  slack: (destination) => adaptateurSlack(destination),
-  github: (destination) => adaptateurGitHub(destination),
+export const DESTINATION_ADAPTERS: Readonly<Record<DestinationType, DestinationAdapterResolver>> = {
+  webhook: (destination) => webhookAdapter(destination),
+  discord: (destination) => discordAdapter(destination),
+  linear: (destination) => linearAdapter(destination),
+  slack: (destination) => slackAdapter(destination),
+  github: (destination) => gitHubAdapter(destination),
 };
 
 export class UnknownDestinationTypeError extends Error {
   override readonly name = 'UnknownDestinationTypeError';
-  constructor(readonly destination: DestinationConfiguree) {
-    super(`Aucun adapter pour le type de Destination « ${destination.type} »`);
+  constructor(readonly destination: ConfiguredDestination) {
+    super(`No adapter for Destination type "${destination.type}"`);
   }
 }
 
 export const resolveDestinationAdapter: DestinationAdapterResolver = (destination) => {
-  if (!estTypeDestination(destination.type)) throw new UnknownDestinationTypeError(destination);
+  if (!isDestinationType(destination.type)) throw new UnknownDestinationTypeError(destination);
   return DESTINATION_ADAPTERS[destination.type](destination);
 };

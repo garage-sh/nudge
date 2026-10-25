@@ -1,77 +1,77 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type Pipeline } from './harness/index.js';
 
-describe('Ingestion par clé secrète', () => {
+describe('Ingestion by secret key', () => {
   let pipeline: Pipeline;
-  let cleSecrete: string;
+  let secretKey: string;
 
   beforeAll(async () => {
     pipeline = await startPipeline();
-    ({ cleSecrete } = await pipeline.createProjet({ nom: 'Ingestion' }));
+    ({ secretKey } = await pipeline.createProject({ name: 'Ingestion' }));
   });
 
   afterAll(async () => {
     await pipeline?.stop();
   });
 
-  it('refuse un appel sans clé secrète ou avec une clé inconnue', async () => {
-    const sansCle = await fetch(`${pipeline.url}/v1/retours`, {
+  it('refuses a call without a secret key or with an unknown key', async () => {
+    const withoutKey = await fetch(`${pipeline.url}/v1/feedbacks`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ texte: 'Bonjour' }),
+      body: JSON.stringify({ text: 'Hello' }),
     });
-    const cleInconnue = await pipeline.postRetour('nk_sec_inconnue', { texte: 'Bonjour' });
+    const unknownKey = await pipeline.postFeedback('nk_sec_unknown', { text: 'Hello' });
 
-    expect(sansCle.status).toBe(401);
-    expect(cleInconnue.status).toBe(401);
+    expect(withoutKey.status).toBe(401);
+    expect(unknownKey.status).toBe(401);
   });
 
   it.each([
-    ['un texte vide', { texte: '   ' }],
-    ['un texte trop long', { texte: 'a'.repeat(5001) }],
-    ['un champ inconnu', { texte: 'Bonjour', priorite: 'haute' }],
-    ['un Type inconnu', { texte: 'Bonjour', type: 'plainte' }],
-    ['une URL de contexte invalide', { texte: 'Bonjour', contexte: { url: 'pas une url' } }],
+    ['an empty text', { text: '   ' }],
+    ['a text that is too long', { text: 'a'.repeat(5001) }],
+    ['an unknown field', { text: 'Hello', priority: 'high' }],
+    ['an unknown Type', { text: 'Hello', type: 'complaint' }],
+    ['an invalid context URL', { text: 'Hello', context: { url: 'not a url' } }],
     [
-      'trop de métadonnées',
+      'too much metadata',
       {
-        texte: 'Bonjour',
-        contexte: {
-          metadonnees: Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, i])),
+        text: 'Hello',
+        context: {
+          metadata: Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, i])),
         },
       },
     ],
-  ])('refuse %s', async (_cas, corps) => {
-    const reponse = await pipeline.postRetour(cleSecrete, corps);
+  ])('refuses %s', async (_case, body) => {
+    const response = await pipeline.postFeedback(secretKey, body);
 
-    expect(reponse.status).toBe(400);
-    expect(await reponse.json()).toMatchObject({ erreur: 'retour_invalide' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid_feedback' });
   });
 
-  it('stocke le texte tel quel, sans ses caractères de contrôle, et marque l’Auteur comme attesté', async () => {
-    const reponse = await pipeline.postRetour(cleSecrete, {
-      texte: '  Ligne 1\u0000\u0007\nLigne 2\u001b\u009b',
+  it('stores the text as is, without its control characters, and marks the Author as attested', async () => {
+    const response = await pipeline.postFeedback(secretKey, {
+      text: '  Line 1\u0000\u0007\nLine 2\u001b\u009b',
       type: 'suggestion',
-      auteur: { id: 'u-42', email: 'ada@exemple.test', nom: 'Ada\u0008' },
-      contexte: {
+      author: { id: 'u-42', email: 'ada@example.test', name: 'Ada\u0008' },
+      context: {
         userAgent: 'Mozilla/5.0',
-        viewport: { largeur: 1280, hauteur: 800 },
-        metadonnees: { version: '2.3.1', beta: true },
+        viewport: { width: 1280, height: 800 },
+        metadata: { version: '2.3.1', beta: true },
       },
     });
 
-    expect(reponse.status).toBe(202);
-    const { id } = (await reponse.json()) as { id: string };
-    expect(await pipeline.readRetour(id)).toMatchObject({
+    expect(response.status).toBe(202);
+    const { id } = (await response.json()) as { id: string };
+    expect(await pipeline.readFeedback(id)).toMatchObject({
       source: 'api',
-      texte: '  Ligne 1\nLigne 2',
-      typeDeclare: 'suggestion',
-      auteur: { id: 'u-42', email: 'ada@exemple.test', nom: 'Ada' },
-      confianceAuteur: 'attestee',
-      contexte: {
+      text: '  Line 1\nLine 2',
+      declaredType: 'suggestion',
+      author: { id: 'u-42', email: 'ada@example.test', name: 'Ada' },
+      authorTrust: 'attested',
+      context: {
         userAgent: 'Mozilla/5.0',
-        viewport: { largeur: 1280, hauteur: 800 },
-        metadonnees: { version: '2.3.1', beta: true },
+        viewport: { width: 1280, height: 800 },
+        metadata: { version: '2.3.1', beta: true },
       },
     });
   });

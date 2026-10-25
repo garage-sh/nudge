@@ -1,44 +1,60 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import type { NudgeWidget as ElementWidget } from './index.js';
+import type { NudgeWidget as WidgetElement } from './index.js';
+import { fr } from './locales/fr.js';
 import { NudgeWidget } from './react.js';
 
 afterEach(cleanup);
 
-const widgetDe = (container: HTMLElement) => {
-  const widget = container.querySelector<ElementWidget>('nudge-widget');
-  if (!widget) throw new Error('<nudge-widget> absent');
+const widgetIn = (container: HTMLElement) => {
+  const widget = container.querySelector<WidgetElement>('nudge-widget');
+  if (!widget) throw new Error('<nudge-widget> missing');
   return widget;
 };
 
-it('monte le Widget avec la clé, l’Instance, l’identité et les métadonnées de l’hôte', () => {
+const launcherText = (widget: WidgetElement) =>
+  widget.shadowRoot?.querySelector('.launcher')?.textContent;
+
+it('mounts the Widget with the host key, Instance, identity and metadata', () => {
   const { container } = render(
     <NudgeWidget
-      cle="nk_pub_react"
-      api="https://nudge.exemple"
-      auteur={{ id: 'u-1', nom: 'Ada' }}
-      metadonnees={{ version: '1.0.0' }}
+      publicKey="nk_pub_react"
+      api="https://nudge.example"
+      author={{ id: 'u-1', name: 'Ada' }}
+      metadata={{ version: '1.0.0' }}
     />,
   );
 
-  const widget = widgetDe(container);
-  expect(widget.shadowRoot?.querySelector('.lanceur')?.textContent).toBe('Laisser un retour');
+  const widget = widgetIn(container);
+  expect(launcherText(widget)).toBe('Send feedback');
   expect(widget).toMatchObject({
-    cle: 'nk_pub_react',
-    api: 'https://nudge.exemple',
-    auteur: { id: 'u-1', nom: 'Ada' },
-    metadonnees: { version: '1.0.0' },
+    publicKey: 'nk_pub_react',
+    api: 'https://nudge.example',
+    author: { id: 'u-1', name: 'Ada' },
+    metadata: { version: '1.0.0' },
   });
 });
 
-it('suit les props sans remonter le Widget (un formulaire en cours reste ouvert)', () => {
-  const props = { cle: 'nk_pub_react', api: 'https://nudge.exemple' };
+it('follows the props without remounting the Widget (a form in progress stays open)', () => {
+  const props = { publicKey: 'nk_pub_react', api: 'https://nudge.example' };
   const { container, rerender } = render(<NudgeWidget {...props} />);
-  const avant = widgetDe(container);
+  const before = widgetIn(container);
 
-  rerender(<NudgeWidget {...props} auteur={{ id: 'u-2' }} metadonnees={{ page: 'panier' }} />);
+  rerender(<NudgeWidget {...props} author={{ id: 'u-2' }} metadata={{ page: 'cart' }} />);
 
-  expect(widgetDe(container)).toBe(avant);
-  expect(avant.auteur).toEqual({ id: 'u-2' });
-  expect(avant.metadonnees).toEqual({ page: 'panier' });
+  expect(widgetIn(container)).toBe(before);
+  expect(before.author).toEqual({ id: 'u-2' });
+  expect(before.metadata).toEqual({ page: 'cart' });
+});
+
+it('speaks the requested language, and switches when the prop changes', () => {
+  const props = { publicKey: 'nk_pub_react', api: 'https://nudge.example' };
+  const { container, rerender } = render(<NudgeWidget {...props} locale="fr" />);
+  const widget = widgetIn(container);
+  expect(widget.locale).toBe('fr');
+  expect(launcherText(widget)).toBe(fr.launcher);
+
+  rerender(<NudgeWidget {...props} locale="en" />);
+
+  expect(launcherText(widget)).toBe('Send feedback');
 });

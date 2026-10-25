@@ -4,8 +4,8 @@
   "compilerOptions": {
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    // ES2022 activerait la sémantique `define` des champs de classe, qui
-    // écrase les propriétés injectées par Nest.
+    // ES2022 would enable `define` semantics for class fields, which overwrite
+    // the properties Nest injects.
     "useDefineForClassFields": false,
     "declaration": false
   }

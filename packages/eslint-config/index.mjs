@@ -3,7 +3,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
-/** Configuration ESLint (flat) commune au monorepo. Le formatage relève de Prettier. */
+/** Shared ESLint (flat) config for the monorepo. Formatting is Prettier's job. */
 export default tseslint.config(
   {
     ignores: [

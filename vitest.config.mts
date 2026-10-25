@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-// Point d'entrée racine : `yarn vitest related --run <fichiers>` couvre tous les workspaces.
+// Root entry point: `yarn vitest related --run <files>` covers every workspace.
 export default defineConfig({
   test: {
     projects: [

@@ -1,21 +1,21 @@
-import { MODELES_JUGE_PAR_DEFAUT } from '@nudge/shared';
-import { jugeDecisions } from './decisions-http.js';
-import type { Juge } from './port.js';
-import { joinUrl, type OptionsAdaptateur } from './url.js';
+import { DEFAULT_JUDGE_MODELS } from '@nudge/shared';
+import { decisionsJudge } from './decisions-http.js';
+import type { Judge } from './port.js';
+import { joinUrl, type AdapterOptions } from './url.js';
 
 /**
- * Hôte de l'API Decisions d'OpenRouter : `POST /api/alpha/decisions`
+ * Host of OpenRouter's Decisions API: `POST /api/alpha/decisions`
  * (https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request).
  */
-export const URL_OPENROUTER = 'https://openrouter.ai';
+export const OPENROUTER_URL = 'https://openrouter.ai';
 
-/** pplx-decider (ou tout modèle de décision d'OpenRouter) par l'API Decisions d'OpenRouter. */
-export function jugeOpenRouter(options: OptionsAdaptateur & { readonly cleApi: string }): Juge {
-  return jugeDecisions({
-    fournisseur: 'OpenRouter',
-    url: joinUrl(options.urlBase ?? URL_OPENROUTER, '/api/alpha/decisions'),
-    modele: options.modele ?? MODELES_JUGE_PAR_DEFAUT.openrouter,
-    cleApi: options.cleApi,
+/** pplx-decider (or any OpenRouter decision model) through OpenRouter's Decisions API. */
+export function openRouterJudge(options: AdapterOptions & { readonly apiKey: string }): Judge {
+  return decisionsJudge({
+    provider: 'OpenRouter',
+    url: joinUrl(options.baseUrl ?? OPENROUTER_URL, '/api/alpha/decisions'),
+    model: options.model ?? DEFAULT_JUDGE_MODELS.openrouter,
+    apiKey: options.apiKey,
     fetch: options.fetch,
   });
 }

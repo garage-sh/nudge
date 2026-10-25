@@ -1,73 +1,73 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { invitations, type Db } from '@nudge/database';
-import type { InvitationCreee, InvitationVue, MembreVu } from '@nudge/shared';
+import type { CreatedInvitation, InvitationView, MemberView } from '@nudge/shared';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
-import { generateJeton, hashJeton } from './jetons.js';
-import { MembresService } from './membres.service.js';
+import { generateToken, hashToken } from './tokens.js';
+import { MembersService } from './members.service.js';
 
-/** Durée de validité d'un lien d'invitation. */
-export const DUREE_INVITATION_MS = 7 * 24 * 60 * 60 * 1000;
+/** Validity period of an invitation link. */
+export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-const invitationInvalide = () => new NotFoundException({ erreur: 'invitation_invalide' });
+const invalidInvitation = () => new NotFoundException({ error: 'invalid_invitation' });
 
 /**
- * Invitation par lien, sans email (pas de SMTP en v1) : le Membre transmet le
- * lien lui-même. Le lien est à usage unique et expire.
+ * Invitation by link, without email (no SMTP in v1): the Member passes the link on
+ * themselves. The link is single-use and expires.
  */
 @Injectable()
 export class InvitationsService {
   constructor(
     @Inject(DB) private readonly db: Db,
-    private readonly membres: MembresService,
+    private readonly members: MembersService,
   ) {}
 
-  async create(creePar: MembreVu): Promise<InvitationCreee> {
-    const jeton = generateJeton();
-    const expireLe = new Date(Date.now() + DUREE_INVITATION_MS);
+  async create(createdBy: MemberView): Promise<CreatedInvitation> {
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
     await this.db
       .insert(invitations)
-      .values({ empreinteJeton: hashJeton(jeton), creeePar: creePar.id, expireLe });
-    return { jeton, expireLe: expireLe.toISOString() };
+      .values({ tokenHash: hashToken(token), createdBy: createdBy.id, expiresAt });
+    return { token, expiresAt: expiresAt.toISOString() };
   }
 
-  /** L'invitation encore utilisable ; 404 `invitation_invalide` sinon (inconnue, expirée, servie). */
-  async read(jeton: string): Promise<InvitationVue> {
+  /** The invitation still usable; 404 `invalid_invitation` otherwise (unknown, expired, used). */
+  async read(token: string): Promise<InvitationView> {
     const [invitation] = await this.db
-      .select({ expireLe: invitations.expireLe })
+      .select({ expiresAt: invitations.expiresAt })
       .from(invitations)
-      .where(this.utilisable(jeton))
+      .where(this.usable(token))
       .limit(1);
-    if (!invitation) throw invitationInvalide();
-    return { expireLe: invitation.expireLe.toISOString() };
+    if (!invitation) throw invalidInvitation();
+    return { expiresAt: invitation.expiresAt.toISOString() };
   }
 
   /**
-   * Consomme l'invitation et crée le Membre dans la même transaction : un email
-   * déjà pris annule tout, et le lien reste utilisable.
+   * Consumes the invitation and creates the Member in the same transaction: an email
+   * already taken cancels everything, and the link stays usable.
    */
-  async accept(jeton: string, email: string, motDePasse: string): Promise<MembreVu> {
+  async accept(token: string, email: string, password: string): Promise<MemberView> {
     return this.db.transaction(async (tx) => {
       const [invitation] = await tx
         .update(invitations)
-        .set({ accepteeLe: new Date() })
-        .where(this.utilisable(jeton))
+        .set({ acceptedAt: new Date() })
+        .where(this.usable(token))
         .returning({ id: invitations.id });
-      if (!invitation) throw invitationInvalide();
-      const membre = await this.membres.create(tx, email, motDePasse);
+      if (!invitation) throw invalidInvitation();
+      const member = await this.members.create(tx, email, password);
       await tx
         .update(invitations)
-        .set({ membreId: membre.id })
+        .set({ memberId: member.id })
         .where(eq(invitations.id, invitation.id));
-      return membre;
+      return member;
     });
   }
 
-  private utilisable(jeton: string) {
+  private usable(token: string) {
     return and(
-      eq(invitations.empreinteJeton, hashJeton(jeton)),
-      isNull(invitations.accepteeLe),
-      gt(invitations.expireLe, new Date()),
+      eq(invitations.tokenHash, hashToken(token)),
+      isNull(invitations.acceptedAt),
+      gt(invitations.expiresAt, new Date()),
     );
   }
 }

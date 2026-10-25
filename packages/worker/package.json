@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Worker NestJS (Triage, Dispatch, purge, Suspension via BullMQ), démarré par l'api selon NUDGE_ROLES.",
+  "description": "NestJS worker (Triage, Dispatch, purge, Suspension over BullMQ), started by the api according to NUDGE_ROLES.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -27,7 +27,7 @@
     "@nudge/destinations": "workspace:*",
     "@nudge/judge": "workspace:*",
     "@nudge/shared": "workspace:*",
-    "@nudge/stockage": "workspace:*",
+    "@nudge/storage": "workspace:*",
     "bullmq": "^5.60.0",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.8.0",

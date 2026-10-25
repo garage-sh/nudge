@@ -1,16 +1,16 @@
 import type { TriageAnswers } from '@nudge/core';
 import {
-  CONFIANCES_AUTEUR,
-  ETATS_DESTINATION,
-  ETATS_RETOUR,
-  FOURNISSEURS_JUGE,
-  GRAVITES,
+  AUTHOR_TRUST_LEVELS,
+  DELIVERY_STATUSES,
+  DESTINATION_STATES,
+  FEEDBACK_STATES,
+  FEEDBACK_TYPES,
+  JUDGE_PROVIDERS,
+  SEVERITIES,
   SOURCES,
-  STATUTS_ENVOI,
-  TYPES_RETOUR,
-  type Auteur,
-  type Contexte,
-  type TypeCapture,
+  type Author,
+  type CaptureType,
+  type Context,
 } from '@nudge/shared';
 import { relations, sql } from 'drizzle-orm';
 import {
@@ -28,14 +28,14 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-export const typeRetourEnum = pgEnum('type_retour', TYPES_RETOUR);
-export const graviteEnum = pgEnum('gravite', GRAVITES);
-export const sourceEnum = pgEnum('source_retour', SOURCES);
-export const etatRetourEnum = pgEnum('etat_retour', ETATS_RETOUR);
-export const confianceAuteurEnum = pgEnum('confiance_auteur', CONFIANCES_AUTEUR);
-export const etatDestinationEnum = pgEnum('etat_destination', ETATS_DESTINATION);
-export const statutEnvoiEnum = pgEnum('statut_envoi', STATUTS_ENVOI);
-export const fournisseurJugeEnum = pgEnum('fournisseur_juge', FOURNISSEURS_JUGE);
+export const feedbackTypeEnum = pgEnum('feedback_type', FEEDBACK_TYPES);
+export const severityEnum = pgEnum('severity', SEVERITIES);
+export const sourceEnum = pgEnum('feedback_source', SOURCES);
+export const feedbackStateEnum = pgEnum('feedback_state', FEEDBACK_STATES);
+export const authorTrustEnum = pgEnum('author_trust', AUTHOR_TRUST_LEVELS);
+export const destinationStateEnum = pgEnum('destination_state', DESTINATION_STATES);
+export const deliveryStatusEnum = pgEnum('delivery_status', DELIVERY_STATUSES);
+export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -45,240 +45,239 @@ const timestamps = {
     .$onUpdate(() => new Date()),
 };
 
-export const projets = pgTable('projets', {
+export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
-  nom: text('nom').notNull(),
+  name: text('name').notNull(),
   description: text('description'),
-  clePublique: text('cle_publique').notNull().unique(),
-  /** SHA-256 de la clé secrète : la clé elle-même n'est jamais stockée. */
-  empreinteCleSecrete: text('empreinte_cle_secrete').notNull().unique(),
-  /** Origines (`https://exemple.com`) d'où la clé publique est acceptée, normalisées. */
-  originesAutorisees: text('origines_autorisees').array().notNull().default([]),
+  publicKey: text('public_key').notNull().unique(),
+  /** SHA-256 of the secret key: the key itself is never stored. */
+  secretKeyHash: text('secret_key_hash').notNull().unique(),
+  /** Origins (`https://example.com`) from which the public key is accepted, normalized. */
+  allowedOrigins: text('allowed_origins').array().notNull().default([]),
   ...timestamps,
 });
 
-export const membres = pgTable('membres', {
+export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  /** En minuscules : l'unicité ne dépend pas de la casse saisie. */
+  /** Lowercase: uniqueness does not depend on the case typed. */
   email: text('email').notNull().unique(),
-  /** Empreinte argon2id au format PHC ; le mot de passe n'est jamais stocké. */
-  empreinteMotDePasse: text('empreinte_mot_de_passe').notNull(),
+  /** argon2id hash in PHC format; the password is never stored. */
+  passwordHash: text('password_hash').notNull(),
   ...timestamps,
 });
 
-/** Session du dashboard : le cookie porte le jeton, la base n'en garde que l'empreinte SHA-256. */
+/** Dashboard session: the cookie carries the token, the database keeps only its SHA-256 hash. */
 export const sessions = pgTable(
   'sessions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    membreId: uuid('membre_id')
+    memberId: uuid('member_id')
       .notNull()
-      .references(() => membres.id, { onDelete: 'cascade' }),
-    empreinteJeton: text('empreinte_jeton').notNull().unique(),
-    expireLe: timestamp('expire_le', { withTimezone: true }).notNull(),
+      .references(() => members.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('sessions_membre_idx').on(t.membreId)],
+  (t) => [index('sessions_member_idx').on(t.memberId)],
 );
 
-/** Lien d'invitation à usage unique ; seule l'empreinte SHA-256 du jeton est stockée. */
+/** Single-use invitation link; only the SHA-256 hash of the token is stored. */
 export const invitations = pgTable('invitations', {
   id: uuid('id').primaryKey().defaultRandom(),
-  empreinteJeton: text('empreinte_jeton').notNull().unique(),
-  creeePar: uuid('creee_par').references(() => membres.id, { onDelete: 'set null' }),
-  expireLe: timestamp('expire_le', { withTimezone: true }).notNull(),
-  /** Renseigné quand l'invitation a servi : elle ne sert qu'une fois. */
-  accepteeLe: timestamp('acceptee_le', { withTimezone: true }),
-  membreId: uuid('membre_id').references(() => membres.id, { onDelete: 'set null' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdBy: uuid('created_by').references(() => members.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  /** Set once the invitation has been used: it works only once. */
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  memberId: uuid('member_id').references(() => members.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const retours = pgTable(
-  'retours',
+export const feedbacks = pgTable(
+  'feedbacks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    projetId: uuid('projet_id')
+    projectId: uuid('project_id')
       .notNull()
-      .references(() => projets.id, { onDelete: 'cascade' }),
-    etat: etatRetourEnum('etat').notNull().default('recu'),
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    state: feedbackStateEnum('state').notNull().default('received'),
     source: sourceEnum('source').notNull(),
-    /** Texte brut, stocké tel quel (nettoyé des caractères de contrôle). */
-    texte: text('texte').notNull(),
-    typeDeclare: typeRetourEnum('type_declare'),
-    auteur: jsonb('auteur').$type<Auteur>(),
-    confianceAuteur: confianceAuteurEnum('confiance_auteur'),
-    contexte: jsonb('contexte').$type<Contexte>().notNull().default({}),
+    /** Raw text, stored as is (stripped of control characters). */
+    text: text('text').notNull(),
+    declaredType: feedbackTypeEnum('declared_type'),
+    author: jsonb('author').$type<Author>(),
+    authorTrust: authorTrustEnum('author_trust'),
+    context: jsonb('context').$type<Context>().notNull().default({}),
     ...timestamps,
   },
   (t) => [
-    index('retours_projet_created_at_idx').on(t.projetId, t.createdAt),
-    // Boîte de réception : tous Projets confondus, du plus récent au plus ancien.
-    index('retours_created_at_id_idx').on(t.createdAt, t.id),
+    index('feedbacks_project_created_at_idx').on(t.projectId, t.createdAt),
+    // Inbox: across all Projects, newest first.
+    index('feedbacks_created_at_id_idx').on(t.createdAt, t.id),
   ],
 );
 
 /**
- * La Capture jointe à un Retour : l'image est dans le stockage des Captures
- * (`@nudge/stockage`) sous `cle`, la base n'en garde que la référence. Supprimer le
- * Retour supprime cette ligne, pas l'image : celui qui supprime appelle aussi
- * `StockageCaptures.supprimer(cle)`.
+ * The Capture attached to a Feedback: the image lives in the Capture storage under
+ * `key`, the database keeps only the reference. Deleting the Feedback deletes this row,
+ * not the image: whoever deletes also deletes the image under `key` from the storage.
  */
 export const captures = pgTable('captures', {
-  retourId: uuid('retour_id')
+  feedbackId: uuid('feedback_id')
     .primaryKey()
-    .references(() => retours.id, { onDelete: 'cascade' }),
-  cle: text('cle').notNull().unique(),
-  contentType: text('content_type').$type<TypeCapture>().notNull(),
-  octets: integer('octets').notNull(),
+    .references(() => feedbacks.id, { onDelete: 'cascade' }),
+  key: text('key').notNull().unique(),
+  contentType: text('content_type').$type<CaptureType>().notNull(),
+  bytes: integer('bytes').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const verdicts = pgTable('verdicts', {
   id: uuid('id').primaryKey().defaultRandom(),
-  retourId: uuid('retour_id')
+  feedbackId: uuid('feedback_id')
     .notNull()
     .unique()
-    .references(() => retours.id, { onDelete: 'cascade' }),
-  typeRetenu: typeRetourEnum('type_retenu').notNull(),
-  gravite: graviteEnum('gravite'),
-  indesirable: boolean('indesirable').notNull(),
+    .references(() => feedbacks.id, { onDelete: 'cascade' }),
+  resolvedType: feedbackTypeEnum('resolved_type').notNull(),
+  severity: severityEnum('severity'),
+  junk: boolean('junk').notNull(),
   manipulation: boolean('manipulation').notNull(),
-  incertain: boolean('incertain').notNull(),
-  reponsesBrutes: jsonb('reponses_brutes').$type<TriageAnswers>(),
+  uncertain: boolean('uncertain').notNull(),
+  rawAnswers: jsonb('raw_answers').$type<TriageAnswers>(),
   ...timestamps,
 });
 
 export const destinations = pgTable('destinations', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projetId: uuid('projet_id')
+  projectId: uuid('project_id')
     .notNull()
-    .references(() => projets.id, { onDelete: 'cascade' }),
-  nom: text('nom').notNull(),
-  /** Clé de l'adapter : `webhook`, `discord`, `linear`… */
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  /** Adapter key: `webhook`, `discord`, `linear`… */
   type: text('type').notNull(),
-  /** Configuration non secrète de l'adapter. */
+  /** Non-secret configuration of the adapter. */
   config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
   /**
-   * Secrets de l'adapter (jetons, secret de signature), en un objet JSON chiffré par
-   * la clé d'Instance (`secretsDestinationContext`) ; `null` : aucun secret.
+   * Secrets of the adapter (tokens, signing secret), as one JSON object encrypted with
+   * the Instance key (`destinationSecretsContext`); `null`: no secret.
    */
-  secretsChiffres: text('secrets_chiffres'),
-  /** Filtre : Types retenus… */
-  filtreTypes: typeRetourEnum('filtre_types')
+  encryptedSecrets: text('encrypted_secrets'),
+  /** Filter: accepted Types… */
+  filterTypes: feedbackTypeEnum('filter_types')
     .array()
     .notNull()
-    .default([...TYPES_RETOUR]),
-  /** … et Gravité minimale facultative (`null` : pas d'exigence). */
-  filtreGraviteMinimale: graviteEnum('filtre_gravite_minimale'),
-  etat: etatDestinationEnum('etat').notNull().default('active'),
-  /** Échecs transient consécutifs : remis à zéro par une livraison ou un échec permanent. */
-  echecsConsecutifs: integer('echecs_consecutifs').notNull().default(0),
-  /** Moment du passage en Suspendue ; `null` tant que la Destination est active. */
-  suspendueLe: timestamp('suspendue_le', { withTimezone: true }),
-  /** Ce qui l'a suspendue (`auth: HTTP 401…`) ; `null` tant qu'elle est active. */
-  motifSuspension: text('motif_suspension'),
-  /** Quand la sonde pourra tester la Destination Suspendue (fin du refroidissement). */
-  prochaineSondeLe: timestamp('prochaine_sonde_le', { withTimezone: true }),
+    .default([...FEEDBACK_TYPES]),
+  /** … and optional minimum Severity (`null`: no requirement). */
+  filterMinimumSeverity: severityEnum('filter_minimum_severity'),
+  state: destinationStateEnum('state').notNull().default('active'),
+  /** Consecutive transient failures: reset by a delivery or a permanent failure. */
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  /** When it became Suspended; `null` while the Destination is active. */
+  suspendedAt: timestamp('suspended_at', { withTimezone: true }),
+  /** What suspended it (`auth: HTTP 401…`); `null` while it is active. */
+  suspensionReason: text('suspension_reason'),
+  /** When the probe may test the Suspended Destination (end of the cooldown). */
+  nextProbeAt: timestamp('next_probe_at', { withTimezone: true }),
   ...timestamps,
 });
 
-export const envois = pgTable(
-  'envois',
+export const deliveries = pgTable(
+  'deliveries',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    retourId: uuid('retour_id')
+    feedbackId: uuid('feedback_id')
       .notNull()
-      .references(() => retours.id, { onDelete: 'cascade' }),
+      .references(() => feedbacks.id, { onDelete: 'cascade' }),
     destinationId: uuid('destination_id')
       .notNull()
       .references(() => destinations.id, { onDelete: 'cascade' }),
-    statut: statutEnvoiEnum('statut').notNull().default('en_attente'),
-    lienExterne: text('lien_externe'),
-    tentatives: integer('tentatives').notNull().default(0),
-    derniereErreur: text('derniere_erreur'),
+    status: deliveryStatusEnum('status').notNull().default('pending'),
+    externalUrl: text('external_url'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
     /**
-     * Début de la retenue en cours (`statut = 'retenu'`), `null` sinon : distingue les
-     * retenues successives d'un même Envoi, et donc leurs jobs de libération.
+     * Start of the current hold (`status = 'held'`), `null` otherwise: tells apart the
+     * successive holds of the same Delivery, and so their release jobs.
      */
-    retenuLe: timestamp('retenu_le', { withTimezone: true }),
+    heldAt: timestamp('held_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
-    // Idempotence : un Envoi par couple (Retour, Destination).
-    unique('envois_retour_destination_uniq').on(t.retourId, t.destinationId),
-    // Libération des Envois retenus d'une Destination redevenue active.
-    index('envois_retenus_idx')
+    // Idempotence: one Delivery per (Feedback, Destination) pair.
+    unique('deliveries_feedback_destination_uniq').on(t.feedbackId, t.destinationId),
+    // Release of the held Deliveries of a Destination that is active again.
+    index('deliveries_held_idx')
       .on(t.destinationId)
-      .where(sql`${t.statut} = 'retenu'`),
+      .where(sql`${t.status} = 'held'`),
   ],
 );
 
 /**
- * Paramètres de l'Instance (D6) : une seule ligne, `id = 1`, absente tant que rien
- * n'est configuré. Le Juge choisi ici prime sur les variables `NUDGE_JUDGE_*`. Les
- * paramètres d'Instance (Destination d'alerte, durée de rétention) sont des
- * colonnes de cette même ligne.
+ * Instance settings (D6): a single row, `id = 1`, absent until something is
+ * configured. The Judge chosen here takes precedence over the `NUDGE_JUDGE_*`
+ * variables. Instance-level settings (Alert destination, retention period) are columns
+ * of this same row.
  */
-export const parametresInstance = pgTable(
-  'parametres_instance',
+export const instanceSettings = pgTable(
+  'instance_settings',
   {
     id: smallint('id').primaryKey().default(1),
-    /** `null` : pas de Juge choisi pour l'Instance (repli sur l'environnement). */
-    jugeFournisseur: fournisseurJugeEnum('juge_fournisseur'),
-    jugeModele: text('juge_modele'),
-    jugeUrlBase: text('juge_url_base'),
-    /** Clé API du Juge, chiffrée par la clé d'Instance (`JUGE_KEY_CONTEXT`). */
-    jugeCleChiffree: text('juge_cle_chiffree'),
+    /** `null`: no Judge chosen for the Instance (falls back on the environment). */
+    judgeProvider: judgeProviderEnum('judge_provider'),
+    judgeModel: text('judge_model'),
+    judgeBaseUrl: text('judge_base_url'),
+    /** The Judge's API key, encrypted with the Instance key (`JUDGE_KEY_CONTEXT`). */
+    judgeEncryptedKey: text('judge_encrypted_key'),
     /**
-     * Destination d'alerte de l'Instance (`null` : aucune), servie par l'adaptateur de
-     * ce type, comme une Destination de Projet : configuration non secrète…
+     * The Instance's Alert destination (`null`: none), served by the adapter of this
+     * type, like a Project's Destination: non-secret configuration…
      */
-    alerteType: text('alerte_type'),
-    alerteConfig: jsonb('alerte_config').$type<Record<string, unknown>>(),
-    /** … et secrets en un objet JSON chiffré par la clé d'Instance (`ALERTE_SECRETS_CONTEXT`). */
-    alerteSecretsChiffres: text('alerte_secrets_chiffres'),
+    alertDestinationType: text('alert_destination_type'),
+    alertDestinationConfig: jsonb('alert_destination_config').$type<Record<string, unknown>>(),
+    /** … and secrets as one JSON object encrypted with the Instance key (`ALERT_DESTINATION_SECRETS_CONTEXT`). */
+    alertDestinationEncryptedSecrets: text('alert_destination_encrypted_secrets'),
     /**
-     * Durée de rétention des Retours, en jours : la purge planifiée efface les Retours
-     * (et leurs Captures) plus anciens. `null` : rétention illimitée.
+     * Retention period of Feedback, in days: the scheduled purge erases older Feedback
+     * (and its Captures). `null`: unlimited retention.
      */
-    retentionJours: integer('retention_jours'),
+    retentionDays: integer('retention_days'),
     ...timestamps,
   },
   (t) => [
-    check('parametres_instance_ligne_unique', sql`${t.id} = 1`),
-    check('parametres_instance_retention_positive', sql`${t.retentionJours} > 0`),
+    check('instance_settings_single_row', sql`${t.id} = 1`),
+    check('instance_settings_retention_positive', sql`${t.retentionDays} > 0`),
   ],
 );
 
-export const projetsRelations = relations(projets, ({ many }) => ({
-  retours: many(retours),
+export const projectsRelations = relations(projects, ({ many }) => ({
+  feedbacks: many(feedbacks),
   destinations: many(destinations),
 }));
 
-export const retoursRelations = relations(retours, ({ one, many }) => ({
-  projet: one(projets, { fields: [retours.projetId], references: [projets.id] }),
+export const feedbacksRelations = relations(feedbacks, ({ one, many }) => ({
+  project: one(projects, { fields: [feedbacks.projectId], references: [projects.id] }),
   verdict: one(verdicts),
   capture: one(captures),
-  envois: many(envois),
+  deliveries: many(deliveries),
 }));
 
 export const capturesRelations = relations(captures, ({ one }) => ({
-  retour: one(retours, { fields: [captures.retourId], references: [retours.id] }),
+  feedback: one(feedbacks, { fields: [captures.feedbackId], references: [feedbacks.id] }),
 }));
 
 export const verdictsRelations = relations(verdicts, ({ one }) => ({
-  retour: one(retours, { fields: [verdicts.retourId], references: [retours.id] }),
+  feedback: one(feedbacks, { fields: [verdicts.feedbackId], references: [feedbacks.id] }),
 }));
 
 export const destinationsRelations = relations(destinations, ({ one, many }) => ({
-  projet: one(projets, { fields: [destinations.projetId], references: [projets.id] }),
-  envois: many(envois),
+  project: one(projects, { fields: [destinations.projectId], references: [projects.id] }),
+  deliveries: many(deliveries),
 }));
 
-export const envoisRelations = relations(envois, ({ one }) => ({
-  retour: one(retours, { fields: [envois.retourId], references: [retours.id] }),
+export const deliveriesRelations = relations(deliveries, ({ one }) => ({
+  feedback: one(feedbacks, { fields: [deliveries.feedbackId], references: [feedbacks.id] }),
   destination: one(destinations, {
-    fields: [envois.destinationId],
+    fields: [deliveries.destinationId],
     references: [destinations.id],
   }),
 }));

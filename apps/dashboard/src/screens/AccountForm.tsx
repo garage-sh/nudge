@@ -1,49 +1,51 @@
-import { LIMITES_DASHBOARD } from '@nudge/shared';
+import { DASHBOARD_LIMITS } from '@nudge/shared';
 import { useState, type FormEvent } from 'react';
+import { useT } from '../i18n/index.js';
 import { Field, ErrorMessage } from '../layout/ui.js';
 
-/** Email + mot de passe : connexion, ou création d'un compte (setup, invitation). */
+/** Email + password: sign in, or create an account (setup, invitation). */
 export function AccountForm({
   action,
-  nouveauCompte,
-  enCours,
-  erreur,
+  newAccount,
+  pending,
+  error,
   onSubmit,
 }: {
   action: string;
-  nouveauCompte: boolean;
-  enCours: boolean;
-  erreur: unknown;
-  onSubmit: (identifiants: { email: string; motDePasse: string }) => void;
+  newAccount: boolean;
+  pending: boolean;
+  error: unknown;
+  onSubmit: (credentials: { email: string; password: string }) => void;
 }) {
+  const t = useT();
   const [email, setEmail] = useState('');
-  const [motDePasse, setMotDePasse] = useState('');
-  const soumettre = (evenement: FormEvent) => {
-    evenement.preventDefault();
-    onSubmit({ email, motDePasse });
+  const [password, setPassword] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    onSubmit({ email, password });
   };
   return (
-    <form onSubmit={soumettre} className="formulaire">
+    <form onSubmit={submit} className="form">
       <Field
-        libelle="Email"
+        label={t.account.email}
         type="email"
-        autoComplete={nouveauCompte ? 'email' : 'username'}
+        autoComplete={newAccount ? 'email' : 'username'}
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
       <Field
-        libelle="Mot de passe"
+        label={t.account.password}
         type="password"
-        autoComplete={nouveauCompte ? 'new-password' : 'current-password'}
+        autoComplete={newAccount ? 'new-password' : 'current-password'}
         required
-        minLength={nouveauCompte ? LIMITES_DASHBOARD.motDePasseMin : undefined}
-        aide={nouveauCompte ? `${LIMITES_DASHBOARD.motDePasseMin} caractères au moins.` : undefined}
-        value={motDePasse}
-        onChange={(e) => setMotDePasse(e.target.value)}
+        minLength={newAccount ? DASHBOARD_LIMITS.passwordMin : undefined}
+        help={newAccount ? t.account.passwordHelp(DASHBOARD_LIMITS.passwordMin) : undefined}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
       />
-      <ErrorMessage erreur={erreur} />
-      <button type="submit" disabled={enCours}>
+      <ErrorMessage error={error} />
+      <button type="submit" disabled={pending}>
         {action}
       </button>
     </form>

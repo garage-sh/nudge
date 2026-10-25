@@ -1,8 +1,8 @@
-import { creerClient, ErreurNudge } from '@nudge/sdk';
+import { createClient, NudgeError } from '@nudge/sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type Pipeline } from './harness/index.js';
 
-describe('SDK JS (clé secrète)', () => {
+describe('JS SDK (secret key)', () => {
   let pipeline: Pipeline;
 
   beforeAll(async () => {
@@ -13,67 +13,67 @@ describe('SDK JS (clé secrète)', () => {
     await pipeline?.stop();
   });
 
-  it('envoie un Retour de Source api, Auteur attesté, que le pipeline trie et dispatche', async () => {
-    const { projet, cleSecrete } = await pipeline.createProjet({ nom: 'Support' });
-    const { fake } = await pipeline.createDestination(projet.id);
-    pipeline.juge.script({ type: 'bug', gravite: 'majeure' });
-    const nudge = creerClient({ url: pipeline.url, cleSecrete });
+  it('sends a Feedback with Source api and an attested Author, that the pipeline triages and dispatches', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Support' });
+    const { fake } = await pipeline.createDestination(project.id);
+    pipeline.judge.script({ type: 'bug', severity: 'major' });
+    const nudge = createClient({ url: pipeline.url, secretKey });
 
-    const recu = await nudge.envoyerRetour({
-      texte: 'L’export CSV est vide depuis ce matin',
+    const received = await nudge.sendFeedback({
+      text: 'The CSV export has been empty since this morning',
       type: 'bug',
-      auteur: { id: 'u-42', email: 'ada@client.test', nom: 'Ada' },
-      contexte: { metadonnees: { canal: 'support', version: '3.1.0' } },
+      author: { id: 'u-42', email: 'ada@client.test', name: 'Ada' },
+      context: { metadata: { channel: 'support', version: '3.1.0' } },
     });
 
-    expect(recu).toEqual({ id: expect.any(String), etat: 'recu' });
-    const retour = await pipeline.waitForRetour(recu.id, (r) =>
-      r.envois.some((envoi) => envoi.statut === 'livre'),
+    expect(received).toEqual({ id: expect.any(String), state: 'received' });
+    const feedback = await pipeline.waitForFeedback(received.id, (r) =>
+      r.deliveries.some((delivery) => delivery.status === 'delivered'),
     );
-    expect(retour).toMatchObject({
-      etat: 'dispatche',
+    expect(feedback).toMatchObject({
+      state: 'dispatched',
       source: 'api',
-      texte: 'L’export CSV est vide depuis ce matin',
-      typeDeclare: 'bug',
-      auteur: { id: 'u-42', email: 'ada@client.test', nom: 'Ada' },
-      confianceAuteur: 'attestee',
-      contexte: { metadonnees: { canal: 'support', version: '3.1.0' } },
+      text: 'The CSV export has been empty since this morning',
+      declaredType: 'bug',
+      author: { id: 'u-42', email: 'ada@client.test', name: 'Ada' },
+      authorTrust: 'attested',
+      context: { metadata: { channel: 'support', version: '3.1.0' } },
     });
-    expect(fake.envois).toHaveLength(1);
+    expect(fake.deliveries).toHaveLength(1);
   });
 
-  it('rejette un Retour refusé par l’Instance avec le code de l’API et le détail des champs', async () => {
-    const { cleSecrete } = await pipeline.createProjet({ nom: 'Refus' });
-    const nudge = creerClient({ url: `${pipeline.url}/`, cleSecrete });
+  it('rejects a Feedback refused by the Instance with the API code and the field details', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Refusal' });
+    const nudge = createClient({ url: `${pipeline.url}/`, secretKey });
 
-    const refus = await nudge
-      .envoyerRetour({ texte: 'Bonjour', contexte: { url: 'pas une url' } })
-      .catch((erreur: unknown) => erreur);
+    const refusal = await nudge
+      .sendFeedback({ text: 'Hello', context: { url: 'not a url' } })
+      .catch((error: unknown) => error);
 
-    expect(refus).toBeInstanceOf(ErreurNudge);
-    expect(refus).toMatchObject({
-      statut: 400,
-      code: 'retour_invalide',
-      details: [{ chemin: 'contexte.url', message: expect.any(String) }],
-    });
-  });
-
-  it('rejette une clé secrète inconnue ou révoquée', async () => {
-    const nudge = creerClient({ url: pipeline.url, cleSecrete: 'nk_sec_revoquee' });
-
-    await expect(nudge.envoyerRetour({ texte: 'Bonjour' })).rejects.toMatchObject({
-      name: 'ErreurNudge',
-      statut: 401,
-      code: 'cle_invalide',
+    expect(refusal).toBeInstanceOf(NudgeError);
+    expect(refusal).toMatchObject({
+      status: 400,
+      code: 'invalid_feedback',
+      details: [{ path: 'context.url', message: expect.any(String) }],
     });
   });
 
-  it('n’atteste pas un Auteur sans identité', async () => {
-    const { cleSecrete } = await pipeline.createProjet({ nom: 'Anonyme' });
-    const nudge = creerClient({ url: pipeline.url, cleSecrete });
+  it('rejects an unknown or revoked secret key', async () => {
+    const nudge = createClient({ url: pipeline.url, secretKey: 'nk_sec_revoked' });
 
-    const { id } = await nudge.envoyerRetour({ texte: 'Merci pour la mise à jour', auteur: {} });
+    await expect(nudge.sendFeedback({ text: 'Hello' })).rejects.toMatchObject({
+      name: 'NudgeError',
+      status: 401,
+      code: 'invalid_key',
+    });
+  });
 
-    expect(await pipeline.readRetour(id)).toMatchObject({ auteur: null, confianceAuteur: null });
+  it('does not attest an Author without an identity', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Anonymous' });
+    const nudge = createClient({ url: pipeline.url, secretKey });
+
+    const { id } = await nudge.sendFeedback({ text: 'Thanks for the update', author: {} });
+
+    expect(await pipeline.readFeedback(id)).toMatchObject({ author: null, authorTrust: null });
   });
 });
