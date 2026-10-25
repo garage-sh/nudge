@@ -286,7 +286,7 @@ function Judge({ judge }: { judge: InstanceJudgeView }) {
       <ErrorMessage error={choice.error} />
       <div className="actions">
         <button type="submit" disabled={choice.isPending}>
-          {t.common.save}
+          {j.save}
         </button>
       </div>
       <SaveStatus saved={choice.isSuccess} />

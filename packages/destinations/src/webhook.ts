@@ -7,7 +7,14 @@ import {
   type OutgoingDelivery,
   type DeliveryResult,
 } from '@nudge/core';
-import { webhookDefinition, type WebhookSecrets } from '@nudge/shared';
+import {
+  webhookDefinition,
+  type WebhookAlertEvent,
+  type WebhookEventName,
+  type WebhookFeedbackEvent,
+  type WebhookPingEvent,
+  type WebhookSecrets,
+} from '@nudge/shared';
 import { readCapture, type CaptureImage } from './capture.js';
 import { DEFAULT_HTTP_TIMEOUT_MS, httpFailure, errorMessage } from './http.js';
 
@@ -20,7 +27,8 @@ export interface WebhookOptions {
 }
 
 /**
- * Generic webhook (D10): a JSON POST to the configured URL, per event:
+ * Generic webhook (D10): a JSON POST to the configured URL, per event (bodies typed in
+ * `@nudge/shared`, whose examples the dashboard shows):
  * - `feedback`: a dispatched piece of Feedback (`isTest: true` for the "test" button);
  * - `alert`: an alert for the Members, when the webhook is the Alert destination;
  * - `ping`: the `healthCheck()` probe, which the receiver answers with a 2xx.
@@ -47,8 +55,8 @@ export function webhookAdapter(
   const timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
 
   async function post(
-    event: 'feedback' | 'alert' | 'ping',
-    body: unknown,
+    event: WebhookEventName,
+    body: WebhookFeedbackEvent | WebhookAlertEvent | WebhookPingEvent,
     idHeaders: Readonly<Record<string, string>> = {},
   ): Promise<DeliveryResult> {
     const raw = JSON.stringify(body);
@@ -106,7 +114,7 @@ export function webhookAdapter(
 function feedbackBody(
   { deliveryId, isTest, project, feedback }: OutgoingDelivery,
   capture: CaptureImage | null,
-) {
+): WebhookFeedbackEvent {
   return {
     event: 'feedback',
     isTest,
@@ -141,11 +149,10 @@ function feedbackBody(
 }
 
 /** The structured alert, and its text (`title`, `summary`) for whoever relays it as is. */
-function alertBody(alert: Alert) {
+function alertBody(alert: Alert): WebhookAlertEvent {
   const { title, summary } = presentAlert(alert);
   const common = {
     id: alert.id,
-    type: alert.event,
     at: alert.at.toISOString(),
     title,
     summary,
@@ -157,9 +164,10 @@ function alertBody(alert: Alert) {
     isTest: alert.isTest,
     alert:
       alert.event === 'feedback_in_review'
-        ? { ...common, feedback: { id: alert.feedback.id } }
+        ? { ...common, type: alert.event, feedback: { id: alert.feedback.id } }
         : {
             ...common,
+            type: alert.event,
             destination: {
               id: alert.destination.id,
               name: alert.destination.name,

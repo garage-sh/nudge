@@ -7,6 +7,7 @@ import type { DestinationTypeForm } from './destination-type-form.js';
 import { webhookForm } from './webhook.js';
 
 export type { TypeFieldsProps, DestinationTypeForm } from './destination-type-form.js';
+export { TypeIcon } from './type-icon.js';
 
 /** One form per type of `DESTINATION_DEFINITIONS`: the compiler requires each entry. */
 export const DESTINATION_FORMS: {

@@ -1,4 +1,9 @@
-# nudge
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg" />
+    <img src="docs/assets/logo.svg" alt="nudge" height="48" />
+  </picture>
+</h1>
 
 [![CI](https://github.com/garage-sh/nudge/actions/workflows/ci.yml/badge.svg)](https://github.com/garage-sh/nudge/actions/workflows/ci.yml)
 [![Images](https://github.com/garage-sh/nudge/actions/workflows/images.yml/badge.svg)](https://github.com/garage-sh/nudge/pkgs/container/nudge)
@@ -296,6 +301,8 @@ yarn dev                   # api and worker on :3000, dashboard on :5173 (relays
 The api and the `db:*` scripts read the root `.env`; a variable already exported in the shell takes precedence. The other variables are described in `.env.example`.
 
 `yarn dev` runs `dev:infra` again, builds the packages the apps depend on, then starts the api (with the worker) and the dashboard in watch mode. A single app: `yarn workspace @nudge/api dev`. The worker is the `packages/worker` library, which the api starts according to `NUDGE_ROLES`.
+
+`yarn dev:reset` starts over from an empty local Instance: it drops the Postgres volume and the Redis queues, deletes the Captures in `.data/captures`, restarts the infrastructure and applies the migrations.
 
 To build and run the images from source rather than pulling them from ghcr.io:
 

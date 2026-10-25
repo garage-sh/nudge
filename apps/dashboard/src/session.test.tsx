@@ -16,6 +16,28 @@ describe('Dashboard session', () => {
     expect(await screen.findByRole('heading', { name: /first account/i })).toBeTruthy();
   });
 
+  it('says under each field what is wrong, without sending anything', async () => {
+    const api = fakeApi({
+      'GET /api/session': NO_SESSION,
+      'GET /api/setup': { status: 200, body: { required: true } },
+    });
+    renderDashboard('/setup');
+
+    const email = await screen.findByLabelText('Email');
+    await userEvent.type(email, 'not-an-email');
+    await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+
+    expect(email.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(email);
+    expect(screen.getByText(/Enter an email address/)).toBeTruthy();
+    expect(api.calls.some((c) => c.route === 'POST /api/setup')).toBe(false);
+
+    await userEvent.clear(email);
+    await userEvent.type(email, 'ada@example.com');
+    expect(email.getAttribute('aria-invalid')).toBeNull();
+  });
+
   it('sends to sign in without a session, then back to the requested page', async () => {
     const api = fakeApi({
       'GET /api/session': NO_SESSION,

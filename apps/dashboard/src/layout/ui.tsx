@@ -68,13 +68,23 @@ export function SaveStatus({ saved }: { saved: boolean }) {
 export function Loading() {
   const t = useT();
   return (
-    <div className="loading" aria-live="polite">
+    <div className="loading" role="status">
       <span className="visually-hidden">{t.common.loading}</span>
       <span aria-hidden="true" />
       <span aria-hidden="true" />
       <span aria-hidden="true" />
     </div>
   );
+}
+
+/** The browser tab names the screen: "Members · nudge". */
+export function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = `${title} · nudge`;
+    return () => {
+      document.title = 'nudge';
+    };
+  }, [title]);
 }
 
 /**
@@ -87,17 +97,18 @@ export function PageHeader({
   description,
   actions,
 }: {
-  title: ReactNode;
+  title: string;
   back?: { to: string; label: string };
   description?: ReactNode;
   actions?: ReactNode;
 }) {
+  useDocumentTitle(title);
   return (
     <header className="page-header">
       <div>
         {back ? (
           <Link to={back.to} className="back-link">
-            ← {back.label}
+            <span aria-hidden="true">←</span> {back.label}
           </Link>
         ) : null}
         <h1>{title}</h1>
@@ -151,23 +162,95 @@ export function Pill({
 
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: ReactNode };
 
-export function Field({ label, help, id, ...input }: FieldProps) {
+/** Why the browser refuses a field's value, in the dashboard's language. */
+function validityMessage(input: HTMLInputElement, t: Messages): string {
+  const { validity } = input;
+  const v = t.validation;
+  if (validity.valueMissing) return v.required;
+  if (validity.typeMismatch) {
+    if (input.type === 'email') return v.email;
+    if (input.type === 'url') return v.url;
+  }
+  if (validity.tooShort) return v.tooShort(input.minLength);
+  if (validity.tooLong) return v.tooLong(input.maxLength);
+  if (validity.rangeUnderflow) return v.min(input.min);
+  if (validity.rangeOverflow) return v.max(input.max);
+  if (validity.stepMismatch || validity.badInput) return v.wholeNumber;
+  return v.invalid;
+}
+
+/**
+ * A text field with its label and help. A value the browser refuses (required, email,
+ * length, range) is said under the field rather than in the browser's bubble, and the
+ * first refused field takes focus; the message follows the value until it is valid.
+ */
+export function Field({
+  label,
+  help,
+  id,
+  onInvalid,
+  onChange,
+  'aria-describedby': describedBy,
+  ...input
+}: FieldProps) {
+  const t = useT();
   const generated = useId();
   const fieldId = id ?? generated;
+  const [error, setError] = useState<string | null>(null);
+  const helpId = `${fieldId}-help`;
+  const errorId = `${fieldId}-error`;
+  const descriptions = [describedBy, help ? helpId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div className="field">
       <label htmlFor={fieldId}>{label}</label>
-      <input id={fieldId} {...input} />
-      {help ? <p className="help">{help}</p> : null}
+      <input
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={descriptions || undefined}
+        onInvalid={(e) => {
+          e.preventDefault();
+          const field = e.currentTarget;
+          setError(validityMessage(field, t));
+          if (field.form?.querySelector(':invalid') === field) field.focus();
+          onInvalid?.(e);
+        }}
+        onChange={(e) => {
+          const field = e.currentTarget;
+          if (error) setError(field.validity.valid ? null : validityMessage(field, t));
+          onChange?.(e);
+        }}
+        {...input}
+      />
+      {error ? (
+        <p id={errorId} className="field-error">
+          {error}
+        </p>
+      ) : null}
+      {help ? (
+        <p id={helpId} className="help">
+          {help}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 /**
  * A key or a link shown in full, with a copy button. Without a clipboard (http origin,
- * refused by the browser), the text is selected for a manual copy.
+ * refused by the browser), the text is selected for a manual copy. `multiline`: a
+ * block of code (a JSON body, a snippet), whitespace kept, the button in its corner.
  */
-export function CopyableValue({ value, label }: { value: string; label: string }) {
+export function CopyableValue({
+  value,
+  label,
+  multiline = false,
+}: {
+  value: string;
+  label: string;
+  multiline?: boolean;
+}) {
   const t = useT();
   const code = useRef<HTMLElement>(null);
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
@@ -194,11 +277,14 @@ export function CopyableValue({ value, label }: { value: string; label: string }
       setState('manual');
     }
   };
+  const text = (
+    <code ref={code} aria-label={label}>
+      {value}
+    </code>
+  );
   return (
-    <div className="copyable">
-      <code ref={code} aria-label={label}>
-        {value}
-      </code>
+    <div className={multiline ? 'copyable multiline' : 'copyable'}>
+      {multiline ? <pre>{text}</pre> : text}
       <button type="button" className="secondary" onClick={() => void copy()}>
         {state === 'copied' ? t.common.copied : t.common.copy}
       </button>

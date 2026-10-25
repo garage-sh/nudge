@@ -29,14 +29,14 @@ export function Projects() {
       />
       {projects.isPending ? <Loading /> : null}
       <ErrorMessage error={projects.error} onRetry={() => void projects.refetch()} />
-      {formOpen ? <NewProject onCancel={none ? undefined : () => setAdding(false)} /> : null}
       {none ? <EmptyState title={t.projects.emptyTitle}>{t.projects.emptyHelp}</EmptyState> : null}
+      {formOpen ? <NewProject onCancel={none ? undefined : () => setAdding(false)} /> : null}
       {projects.data && projects.data.length > 0 ? (
         <ul className="list projects" aria-label={t.projects.list}>
           {projects.data.map((project) => (
-            <li key={project.id}>
+            <li key={project.id} className="linked-row">
               <div>
-                <Link to={`/projects/${project.id}/destinations`} className="project-link">
+                <Link to={`/projects/${project.id}/destinations`} className="project-link row-link">
                   {project.name}
                 </Link>
                 {project.description ? <p className="muted">{project.description}</p> : null}

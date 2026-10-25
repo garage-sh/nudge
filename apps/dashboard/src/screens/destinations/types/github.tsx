@@ -1,6 +1,7 @@
 import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
 import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
+import { TYPE_ICONS } from './type-icon.js';
 
 const repository = (config: Readonly<Record<string, unknown>>) =>
   typeof config.repository === 'string' ? config.repository : '';
@@ -47,6 +48,7 @@ function GitHubFields({
 
 export const gitHubForm: DestinationTypeForm<'github'> = {
   label: 'GitHub Issues',
+  icon: TYPE_ICONS.github,
   initialConfig: { repository: '' },
   Fields: GitHubFields,
   summary: (config, t) => t.destinationTypes.github.summary(repository(config)),

@@ -106,6 +106,19 @@ export const en = {
   unreachable: 'The Instance cannot be reached. Try again.',
   unexpectedError: (code: string) => `Unexpected error (${code}).`,
 
+  /** A field the browser refuses, said under it in the dashboard's language. */
+  validation: {
+    required: 'Required.',
+    email: 'Enter an email address, like name@example.com.',
+    url: 'Enter a full URL, starting with https://.',
+    tooShort: (min: number) => `At least ${min} characters.`,
+    tooLong: (max: number) => `At most ${max} characters.`,
+    min: (min: string) => `At least ${min}.`,
+    max: (max: string) => `At most ${max}.`,
+    wholeNumber: 'Enter a whole number.',
+    invalid: 'Check this value.',
+  },
+
   common: {
     retry: 'Retry',
     saved: 'Saved.',
@@ -191,6 +204,12 @@ export const en = {
     joinTitle: 'Join the Instance',
     intro: 'You are invited to join this nudge Instance. Create your Member account.',
     submit: 'Create my account',
+  },
+
+  crash: {
+    title: 'Something went wrong',
+    help: 'This screen stopped on an unexpected error. Reload the page; if it happens again, report it with the steps that led here.',
+    reload: 'Reload',
   },
 
   notFound: {
@@ -300,6 +319,11 @@ export const en = {
       junk: 'Junk',
       manipulation: 'Manipulation',
       correct: 'Correct',
+      uncertainHelp:
+        'The Judge hesitated on this Verdict: check the type and Severity, and correct them if needed.',
+      degradedHelp:
+        'Triaged without a Judge: the type declared by the Author is kept, with no Severity.',
+      setUpJudge: 'Set up a Judge',
       correctionHelp:
         'The correction changes nothing in the Destinations already served: replay a Delivery to pass it on to them, or redispatch the Feedback to send it to the Destinations whose Filter now accepts it.',
     },
@@ -338,7 +362,7 @@ export const en = {
     new: 'New Project',
     emptyTitle: 'No Project yet.',
     emptyHelp:
-      'Create the first one above: you will get its keys to connect the Widget or the API.',
+      'Create the first one below: you will get its keys to connect the Widget or the API.',
     list: 'Projects of the Instance',
     thisWeek: (count: number) => `${count} Feedback this week`,
     inReview: (count: number) => `${count} In review`,
@@ -367,12 +391,14 @@ export const en = {
     regenerateSecretKey: 'Regenerate secret key',
     regenerateSecretKeyQuestion: 'The old secret key will stop working immediately. Regenerate?',
     details: 'Details',
+    saveDetails: 'Save details',
     description: 'Project description',
     descriptionHelp:
       'Optional. Tell the Judge what the Project is and what is critical in it, so it can assess Severity better.',
     allowedOrigins: 'Allowed origins',
     originsLabel: 'One origin per line',
     originsHelp: 'The Widget is accepted only from these origins (scheme://host[:port], no path).',
+    saveOrigins: 'Save origins',
   },
 
   destinations: {
@@ -380,7 +406,7 @@ export const en = {
     intro: 'Each Triaged Feedback goes to every Destination whose Filter accepts it.',
     emptyTitle: 'No Destination: Triaged Feedback goes nowhere.',
     emptyHelp:
-      'Add one above: a GitHub repository, a Linear team, a Slack or Discord channel, or your own webhook.',
+      'Add one below: a GitHub repository, a Linear team, a Slack or Discord channel, or your own webhook.',
     copySecretNow: (name: string) =>
       `Copy the secret of “${name}” now: it will never be shown again.`,
     anySeverity: 'any Severity',
@@ -393,6 +419,17 @@ export const en = {
     editTitle: (name: string) => `Edit ${name}`,
     testDelivered: 'Sample Feedback delivered.',
     testFailed: (failureClass: string, message: string) => `Failed (${failureClass}): ${message}`,
+    routing: {
+      title: 'Routing',
+      help: 'Where each type of Triaged Feedback goes. Junk and Feedback In review reach no Destination.',
+      types: 'Feedback types',
+      destinations: 'Destinations',
+      destinationCount: (count: number) =>
+        count === 0 ? 'No Destination' : count === 1 ? '1 Destination' : `${count} Destinations`,
+      nowhere: 'Goes nowhere',
+      route: (type: string, destinations: string) => `${type}: ${destinations}.`,
+      routeNowhere: (type: string) => `${type}: no Destination accepts it.`,
+    },
     form: {
       type: 'Type',
       name: 'Name',
@@ -401,7 +438,6 @@ export const en = {
       noMinimum: 'None',
       minimumSeverityHelp:
         'A Feedback without Severity (nudge without a Judge) reaches no minimum Severity.',
-      add: 'Add',
     },
   },
 
@@ -413,10 +449,35 @@ export const en = {
     webhookUrl: 'Webhook URL',
     webhook: {
       url: 'URL',
-      urlHelp:
-        'nudge POSTs each Feedback there as JSON: event, isTest, delivery, project and feedback (alert instead, for the Alert destination). Headers: X-Nudge-Event (feedback, alert or ping), X-Nudge-Delivery or X-Nudge-Alert, X-Nudge-Timestamp, and X-Nudge-Signature: sha256=HMAC(secret, X-Nudge-Timestamp + "." + raw body).',
+      urlHelp: 'nudge POSTs each event there as signed JSON. Redirects are not followed.',
       signingSecret: 'Signing secret',
       signingSecretHelp: 'Your receiver uses it to check that calls come from this Instance.',
+      payload: {
+        title: 'Payload',
+        show: 'What your receiver gets',
+        event: 'Event',
+        events: { feedback: 'Feedback', alert: 'Alert', ping: 'Ping' },
+        eventHelp: {
+          feedback:
+            'Each dispatched Feedback, and the Test button with isTest: true. The text is raw: encode it for your target.',
+          alert:
+            'An alert for the Members: a Feedback In review or a Suspended Destination. It never carries a Feedback’s text.',
+          ping: 'The health check, while the Destination is Suspended: answer with a 2xx to resume its Deliveries.',
+        },
+        request: 'Request',
+        headers: 'Headers',
+        body: 'Example body',
+        headerHelp: {
+          event: 'feedback, alert or ping.',
+          delivery: 'The Delivery’s stable id: ignore a retry you already processed.',
+          alert: 'The alert’s stable id: ignore a retry you already processed.',
+          timestamp: 'Unix seconds at signing: reject a call older than a few minutes.',
+          signature: 'HMAC-SHA256 of timestamp + "." + raw body, with the signing secret.',
+        },
+        verify: 'Verify the signature',
+        verifyHelp:
+          'Compute it on the raw body, before parsing the JSON, and compare in constant time.',
+      },
     },
     discord: {
       urlHelp:
@@ -481,6 +542,7 @@ export const en = {
     },
     judge: {
       title: 'Judge',
+      save: 'Save Judge',
       help: 'The decision model that triages Feedback: it answers Triage’s questions with probabilities, where a chat model would write text. Choose where it runs, then which one. Without a Judge, nudge runs in degraded mode: the declared type is kept, with no Severity and no Junk detection.',
       provider: 'Provider',
       none: 'None (degraded mode)',

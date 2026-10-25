@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { AuthorTrust, FailureClass, FeedbackType, Severity, Source } from '../domain.js';
+import type { CaptureType, Context } from '../feedback-input.js';
 import { httpUrlSchema, type DestinationDefinition } from './definition.js';
 
 /**
@@ -16,3 +18,122 @@ export type WebhookConfig = z.output<typeof webhookDefinition.config>;
 export type WebhookSecrets = Readonly<
   Record<(typeof webhookDefinition.generatedSecrets)[number], string>
 >;
+
+/*
+ * The webhook's contract with its receiver: the JSON body of each event. The adapter
+ * (`@nudge/destinations`) builds these types and the dashboard shows their examples,
+ * so the documented payload cannot drift from the one sent.
+ */
+
+export type WebhookEventName = 'feedback' | 'alert' | 'ping';
+
+/** A dispatched Feedback (`isTest: true` for the "test" button). */
+export interface WebhookFeedbackEvent {
+  readonly event: 'feedback';
+  readonly isTest: boolean;
+  readonly delivery: { readonly id: string };
+  readonly project: { readonly id: string; readonly name: string };
+  readonly feedback: {
+    readonly id: string;
+    /** Raw, as the Author wrote it: the receiver encodes it for its target. */
+    readonly text: string;
+    readonly source: Source;
+    readonly type: FeedbackType;
+    readonly severity: Severity | null;
+    readonly uncertain: boolean;
+    readonly author: {
+      readonly id: string | null;
+      readonly email: string | null;
+      readonly name: string | null;
+      readonly trust: AuthorTrust;
+    } | null;
+    readonly context: Context;
+    /** Base64 image, `null` without a Capture. */
+    readonly capture: { readonly contentType: CaptureType; readonly data: string } | null;
+    readonly receivedAt: string;
+    readonly dashboardUrl: string | null;
+  };
+}
+
+interface WebhookAlertBase {
+  readonly id: string;
+  readonly at: string;
+  /** The alert in plain text, for a receiver that relays it as is. */
+  readonly title: string;
+  readonly summary: string;
+  readonly project: { readonly id: string; readonly name: string };
+  readonly dashboardUrl: string | null;
+}
+
+/** An alert for the Members, when the webhook is the Alert destination. */
+export interface WebhookAlertEvent {
+  readonly event: 'alert';
+  readonly isTest: boolean;
+  readonly alert:
+    | (WebhookAlertBase & {
+        readonly type: 'feedback_in_review';
+        readonly feedback: { readonly id: string };
+      })
+    | (WebhookAlertBase & {
+        readonly type: 'destination_suspended';
+        readonly destination: {
+          readonly id: string;
+          readonly name: string;
+          readonly failureClass: Exclude<FailureClass, 'permanent'>;
+          readonly message: string;
+        };
+      });
+}
+
+/** The health check probe, which the receiver answers with a 2xx. */
+export interface WebhookPingEvent {
+  readonly event: 'ping';
+}
+
+/** A sample of each event's body, as a receiver gets it. */
+export const WEBHOOK_EXAMPLES: {
+  readonly feedback: WebhookFeedbackEvent;
+  readonly alert: WebhookAlertEvent;
+  readonly ping: WebhookPingEvent;
+} = {
+  feedback: {
+    event: 'feedback',
+    isTest: false,
+    delivery: { id: '0b8f3c1e-5d2a-4c7e-9f10-6a4b2d8e1c37' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    feedback: {
+      id: 'c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64',
+      text: 'The “Pay” button does nothing on the cart page.',
+      source: 'widget',
+      type: 'bug',
+      severity: 'major',
+      uncertain: false,
+      author: { id: 'u-42', email: 'ada@example.com', name: 'Ada', trust: 'attested' },
+      context: {
+        url: 'https://shop.example.com/cart',
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) …',
+        viewport: { width: 1440, height: 900 },
+        metadata: { version: '2.3.1' },
+      },
+      capture: null,
+      receivedAt: '2026-10-24T09:29:58.000Z',
+      dashboardUrl: 'https://nudge.example.com/feedbacks/c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64',
+    },
+  },
+  alert: {
+    event: 'alert',
+    isTest: false,
+    alert: {
+      id: '9d2e6b4a-1c8f-4a35-b7e0-3f5c9a1d6e82',
+      type: 'feedback_in_review',
+      at: '2026-10-24T09:30:02.000Z',
+      title: 'Feedback in review · Shop',
+      summary:
+        'A Feedback seems to try to influence Triage: it goes to no Destination until a Member approves or rejects it.',
+      project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+      dashboardUrl: 'https://nudge.example.com/feedbacks/c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64',
+      feedback: { id: 'c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64' },
+    },
+  },
+  ping: { event: 'ping' },
+};

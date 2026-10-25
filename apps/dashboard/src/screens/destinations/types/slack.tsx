@@ -1,6 +1,7 @@
 import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
 import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
+import { TYPE_ICONS } from './type-icon.js';
 
 /** The incoming webhook URL carries its token: a secret, typed in and never shown again. */
 function SlackFields({ idPrefix, secrets, setSecrets, savedSecrets }: TypeFieldsProps) {
@@ -23,6 +24,7 @@ function SlackFields({ idPrefix, secrets, setSecrets, savedSecrets }: TypeFields
 
 export const slackForm: DestinationTypeForm<'slack'> = {
   label: 'Slack',
+  icon: TYPE_ICONS.slack,
   initialConfig: {},
   Fields: SlackFields,
   summary: (_config, t) => t.destinationTypes.slack.summary,

@@ -86,7 +86,7 @@ describe('Projects', () => {
       await screen.findByLabelText('One origin per line'),
       'https://app.example{Enter}not-a-url',
     );
-    await userEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1) as HTMLElement);
+    await userEvent.click(screen.getByRole('button', { name: 'Save origins' }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/Invalid origin: not-a-url/);
     expect(api.calls.find((c) => c.route === 'PATCH /api/projects/project-1')?.body).toEqual({

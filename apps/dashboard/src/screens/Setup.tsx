@@ -12,8 +12,14 @@ export function Setup() {
   const setup = useSetup();
 
   if (setup.isSuccess) return <Navigate to="/projects" replace />;
-  if (state.isPending) return <Loading />;
-  if (state.isError) return <ErrorMessage error={state.error} />;
+  if (state.isPending || state.isError) {
+    return (
+      <PublicPage title={t.setup.title}>
+        {state.isPending ? <Loading /> : null}
+        <ErrorMessage error={state.error} onRetry={() => void state.refetch()} />
+      </PublicPage>
+    );
+  }
   if (!state.data.required) return <Navigate to="/sign-in" replace />;
   return (
     <PublicPage title={t.setup.title}>

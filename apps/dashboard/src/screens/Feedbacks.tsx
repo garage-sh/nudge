@@ -32,7 +32,7 @@ export interface ListState {
 export const FeedbackPane = createContext<{ readonly close: string } | null>(null);
 
 /** The width from which a Feedback opens beside the list. */
-const SPLIT_WIDTH = '(min-width: 1200px)';
+const SPLIT_WIDTH = '(min-width: 1360px)';
 
 /** The Inbox, and the open Feedback: beside the list if the screen allows. */
 export function Feedbacks() {
@@ -319,7 +319,7 @@ function FeedbackRow({
     if (document.activeElement?.closest('.feedback-list')) element.focus();
   }, [open]);
   return (
-    <li className="feedback-row" data-state={feedback.state} data-open={open}>
+    <li className="feedback-row linked-row" data-state={feedback.state} data-open={open}>
       <SeverityGauge severity={verdict?.severity} />
       <p className="summary">
         <strong className="type">{typeLabel(t, verdict?.resolvedType)}</strong>
@@ -327,7 +327,8 @@ function FeedbackRow({
           ref={link}
           to={to}
           state={state}
-          className="preview"
+          className="preview row-link"
+          title={feedback.preview}
           aria-current={open ? 'true' : undefined}
         >
           {feedback.preview}

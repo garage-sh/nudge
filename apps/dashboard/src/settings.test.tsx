@@ -64,7 +64,7 @@ describe('Instance settings: Judge', () => {
       'perplexity/pplx-decider-v1.2',
     );
     await userEvent.type(key, 'sk-or-v1-secret');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Judge' }));
 
     expect(await screen.findByText(/Saved/)).toBeTruthy();
     expect(api.calls.find((c) => c.route === 'PUT /api/instance/judge')?.body).toEqual({
@@ -85,7 +85,7 @@ describe('Instance settings: Judge', () => {
     renderDashboard('/settings');
 
     await userEvent.type(await screen.findByLabelText('Model'), 'jev-1.14.0');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Judge' }));
 
     await screen.findByText(/Saved/);
     expect(api.calls.find((c) => c.route === 'PUT /api/instance/judge')?.body).toEqual({
@@ -112,7 +112,7 @@ describe('Instance settings: Judge', () => {
     const url = screen.getByLabelText('Server URL') as HTMLInputElement;
     expect(url.required).toBe(true);
     await userEvent.type(url, 'http://decider:8080');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Judge' }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/http\(s\) URL expected/);
     expect(api.calls.find((c) => c.route === 'PUT /api/instance/judge')?.body).toEqual({
@@ -130,7 +130,7 @@ describe('Instance settings: Judge', () => {
     renderDashboard('/settings');
 
     await userEvent.selectOptions(await screen.findByLabelText('Provider'), '');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Judge' }));
 
     await screen.findByText(/Saved/);
     expect(api.calls.find((c) => c.route === 'PUT /api/instance/judge')?.body).toEqual({

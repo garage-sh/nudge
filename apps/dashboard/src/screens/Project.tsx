@@ -173,7 +173,7 @@ function Details({ project }: { project: ProjectView }) {
       <ErrorMessage error={update.error} />
       <div className="actions">
         <button type="submit" disabled={update.isPending}>
-          {t.common.save}
+          {t.project.saveDetails}
         </button>
       </div>
       <SaveStatus saved={update.isSuccess} />
@@ -213,7 +213,7 @@ function AllowedOrigins({ project }: { project: ProjectView }) {
       <ErrorMessage error={update.error} />
       <div className="actions">
         <button type="submit" disabled={update.isPending}>
-          {t.common.save}
+          {t.project.saveOrigins}
         </button>
       </div>
       <SaveStatus saved={update.isSuccess} />

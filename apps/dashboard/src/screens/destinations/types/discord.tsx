@@ -1,6 +1,7 @@
 import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
 import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
+import { TYPE_ICONS } from './type-icon.js';
 
 /** The webhook URL carries its token: a secret, typed in and never shown again. */
 function DiscordFields({ idPrefix, secrets, setSecrets, savedSecrets }: TypeFieldsProps) {
@@ -23,6 +24,7 @@ function DiscordFields({ idPrefix, secrets, setSecrets, savedSecrets }: TypeFiel
 
 export const discordForm: DestinationTypeForm<'discord'> = {
   label: 'Discord',
+  icon: TYPE_ICONS.discord,
   initialConfig: {},
   Fields: DiscordFields,
   summary: (_config, t) => t.destinationTypes.discord.summary,

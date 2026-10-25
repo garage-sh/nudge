@@ -3,10 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="nudge: user feedback, triaged and sent where your team works."
+    />
+    <!-- The first paint follows the theme before the stylesheet loads: no white flash in dark mode. -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#e3e9e6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0f0d" media="(prefers-color-scheme: dark)" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>nudge</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>nudge needs JavaScript to run.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

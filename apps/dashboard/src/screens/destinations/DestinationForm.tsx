@@ -11,7 +11,7 @@ import {
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useT } from '../../i18n/index.js';
 import { ErrorMessage, Field } from '../../layout/ui.js';
-import { DESTINATION_FORMS } from './types/index.js';
+import { DESTINATION_FORMS, TypeIcon } from './types/index.js';
 
 export interface DestinationValues {
   readonly type: DestinationType;
@@ -96,20 +96,22 @@ export function DestinationForm({
       <h2>{title}</h2>
       {children}
       {typeEditable ? (
-        <div className="field">
-          <label htmlFor={`${id}-type`}>{t.destinations.form.type}</label>
-          <select
-            id={`${id}-type`}
-            value={type}
-            onChange={(e) => changeType(e.target.value as DestinationType)}
-          >
-            {DESTINATION_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {DESTINATION_FORMS[value].label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <fieldset className="field type-picker">
+          <legend>{t.destinations.form.type}</legend>
+          {DESTINATION_TYPES.map((value) => (
+            <label key={value} className="type-option">
+              <input
+                type="radio"
+                name={`${id}-type`}
+                value={value}
+                checked={type === value}
+                onChange={() => changeType(value)}
+              />
+              <TypeIcon icon={DESTINATION_FORMS[value].icon} />
+              {DESTINATION_FORMS[value].label}
+            </label>
+          ))}
+        </fieldset>
       ) : null}
       {withoutNameOrFilter ? null : (
         <Field
@@ -128,6 +130,7 @@ export function DestinationForm({
         setSecrets={setSecrets}
         // Saved secrets are valid only for their type.
         savedSecrets={type === initial.type ? savedSecrets : []}
+        purpose={withoutNameOrFilter ? 'alert' : 'feedback'}
       />
       {withoutNameOrFilter ? null : (
         <>

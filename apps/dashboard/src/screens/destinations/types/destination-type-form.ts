@@ -1,6 +1,7 @@
 import type { DESTINATION_DEFINITIONS, DestinationType } from '@nudge/shared';
 import type { ReactNode } from 'react';
 import type { Messages } from '../../../i18n/index.js';
+import type { TypeIconShape } from './type-icon.js';
 
 /** What the shared form passes to a type's own fields. */
 export interface TypeFieldsProps {
@@ -13,6 +14,8 @@ export interface TypeFieldsProps {
   readonly setSecrets: (secrets: Record<string, string>) => void;
   /** Names of the secrets already saved (encrypted, never returned by the api). */
   readonly savedSecrets: readonly string[];
+  /** What the Destination receives: a Project's Feedback, or the Instance's alerts. */
+  readonly purpose: 'feedback' | 'alert';
 }
 
 /**
@@ -22,6 +25,8 @@ export interface TypeFieldsProps {
 export interface DestinationTypeForm<T extends DestinationType = DestinationType> {
   /** The type's name: a product name, the same in every locale. */
   readonly label: string;
+  /** The type's mark, beside its name in the type picker and the lists. */
+  readonly icon: TypeIconShape;
   /** Configuration of a new Destination of this type. */
   readonly initialConfig: Readonly<Record<string, unknown>>;
   /** The type's own config and secret fields. */

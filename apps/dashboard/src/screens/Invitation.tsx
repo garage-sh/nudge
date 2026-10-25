@@ -14,7 +14,13 @@ export function Invitation() {
   const acceptance = useAcceptInvitation(token);
 
   if (acceptance.isSuccess) return <Navigate to="/projects" replace />;
-  if (invitation.isPending) return <Loading />;
+  if (invitation.isPending) {
+    return (
+      <PublicPage title={t.invitation.joinTitle}>
+        <Loading />
+      </PublicPage>
+    );
+  }
   if (invitation.isError) {
     return (
       <PublicPage title={t.invitation.title}>

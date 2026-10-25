@@ -129,7 +129,7 @@ describe('Instance settings: Alert destination', () => {
     expect(within(panel).getByText(/No Alert destination/)).toBeTruthy();
     expect(within(panel).queryByLabelText('Name')).toBeNull();
     expect(within(panel).queryByText('Accepted types')).toBeNull();
-    await userEvent.selectOptions(within(panel).getByLabelText('Type'), 'webhook');
+    await userEvent.click(within(panel).getByRole('radio', { name: 'Webhook' }));
     await userEvent.type(within(panel).getByLabelText('URL'), 'https://alerts.test/nudge');
     await userEvent.click(within(panel).getByRole('button', { name: 'Save alert destination' }));
 
@@ -160,7 +160,7 @@ describe('Instance settings: Alert destination', () => {
     renderDashboard('/settings');
 
     const panel = await screen.findByRole('form', { name: 'Alert destination' });
-    expect(within(panel).getByRole('option', { name: 'Discord', selected: true })).toBeTruthy();
+    expect(within(panel).getByRole('radio', { name: 'Discord', checked: true })).toBeTruthy();
     await userEvent.click(within(panel).getByRole('button', { name: 'Test' }));
     expect(await within(panel).findByText(/HTTP 401/)).toBeTruthy();
 

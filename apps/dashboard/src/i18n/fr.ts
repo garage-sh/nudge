@@ -88,6 +88,18 @@ export const fr: Messages = {
   unreachable: 'L’Instance est injoignable. Réessayez.',
   unexpectedError: (code) => `Erreur inattendue (${code}).`,
 
+  validation: {
+    required: 'Obligatoire.',
+    email: 'Saisissez une adresse e-mail, comme nom@exemple.fr.',
+    url: 'Saisissez une URL complète, commençant par https://.',
+    tooShort: (min) => `Au moins ${min} caractères.`,
+    tooLong: (max) => `Au plus ${max} caractères.`,
+    min: (min) => `Au moins ${min}.`,
+    max: (max) => `Au plus ${max}.`,
+    wholeNumber: 'Saisissez un nombre entier.',
+    invalid: 'Vérifiez cette valeur.',
+  },
+
   common: {
     retry: 'Réessayer',
     saved: 'Enregistré.',
@@ -172,6 +184,12 @@ export const fr: Messages = {
     joinTitle: 'Rejoindre l’Instance',
     intro: 'Vous êtes invité à rejoindre cette Instance nudge. Créez votre compte de Membre.',
     submit: 'Créer mon compte',
+  },
+
+  crash: {
+    title: 'Une erreur est survenue',
+    help: 'Cet écran s’est arrêté sur une erreur inattendue. Rechargez la page ; si cela se reproduit, signalez-le avec les étapes qui y ont mené.',
+    reload: 'Recharger',
   },
 
   notFound: {
@@ -280,6 +298,10 @@ export const fr: Messages = {
       junk: 'Indésirable',
       manipulation: 'Manipulation',
       correct: 'Corriger',
+      uncertainHelp:
+        'Le Juge a hésité sur ce Verdict : vérifiez le Type et la Gravité, et corrigez-les si besoin.',
+      degradedHelp: 'Trié sans Juge : le Type déclaré par l’Auteur est retenu, sans Gravité.',
+      setUpJudge: 'Configurer un Juge',
       correctionHelp:
         'La correction ne change rien chez les Destinations déjà servies : rejouez un Envoi pour la leur propager, ou redispatchez le Retour pour l’envoyer aux Destinations qui le retiennent désormais.',
     },
@@ -318,7 +340,7 @@ export const fr: Messages = {
     new: 'Nouveau Projet',
     emptyTitle: 'Aucun Projet pour l’instant.',
     emptyHelp:
-      'Créez le premier ci-dessus : vous obtiendrez ses clés pour brancher le Widget ou l’API.',
+      'Créez le premier ci-dessous : vous obtiendrez ses clés pour brancher le Widget ou l’API.',
     list: 'Projets de l’Instance',
     thisWeek: (count) => `${count} Retour${s(count)} cette semaine`,
     inReview: (count) => `${count} En revue`,
@@ -348,6 +370,7 @@ export const fr: Messages = {
     regenerateSecretKeyQuestion:
       'L’ancienne clé secrète cessera immédiatement de fonctionner. Régénérer ?',
     details: 'Informations',
+    saveDetails: 'Enregistrer les informations',
     description: 'Description du Projet',
     descriptionHelp:
       'Facultative. Dites au Juge ce qu’est le Projet et ce qui y est critique, pour qu’il évalue mieux la Gravité.',
@@ -355,6 +378,7 @@ export const fr: Messages = {
     originsLabel: 'Une origine par ligne',
     originsHelp:
       'Le Widget n’est accepté que depuis ces origines (schéma://hôte[:port], sans chemin).',
+    saveOrigins: 'Enregistrer les origines',
   },
 
   destinations: {
@@ -362,7 +386,7 @@ export const fr: Messages = {
     intro: 'Chaque Retour Trié part vers toutes les Destinations dont le Filtre le retient.',
     emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
     emptyHelp:
-      'Ajoutez-en une ci-dessus : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
+      'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
     copySecretNow: (name) =>
       `Copiez maintenant le secret de « ${name} » : il ne sera plus jamais affiché.`,
     anySeverity: 'toute Gravité',
@@ -375,6 +399,21 @@ export const fr: Messages = {
     editTitle: (name) => `Modifier ${name}`,
     testDelivered: 'Retour d’exemple livré.',
     testFailed: (failureClass, message) => `Échec (${failureClass}) : ${message}`,
+    routing: {
+      title: 'Routage',
+      help: 'Où part chaque type de Retour Trié. Les Indésirables et les Retours En revue n’atteignent aucune Destination.',
+      types: 'Types de Retour',
+      destinations: 'Destinations',
+      destinationCount: (count) =>
+        count === 0
+          ? 'Aucune Destination'
+          : count === 1
+            ? '1 Destination'
+            : `${count} Destinations`,
+      nowhere: 'Ne part nulle part',
+      route: (type, destinations) => `${type} : ${destinations}.`,
+      routeNowhere: (type) => `${type} : aucune Destination ne le retient.`,
+    },
     form: {
       type: 'Type',
       name: 'Nom',
@@ -383,7 +422,6 @@ export const fr: Messages = {
       noMinimum: 'Aucune',
       minimumSeverityHelp:
         'Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.',
-      add: 'Ajouter',
     },
   },
 
@@ -395,10 +433,38 @@ export const fr: Messages = {
     webhook: {
       url: 'URL',
       urlHelp:
-        'nudge y POSTe chaque Retour en JSON : event, isTest, delivery, project et feedback (alert à la place, pour la Destination d’alerte). En-têtes : X-Nudge-Event (feedback, alert ou ping), X-Nudge-Delivery ou X-Nudge-Alert, X-Nudge-Timestamp, et X-Nudge-Signature : sha256=HMAC(secret, X-Nudge-Timestamp + « . » + corps brut).',
+        'nudge y POSTe chaque évènement en JSON signé. Les redirections ne sont pas suivies.',
       signingSecret: 'Secret de signature',
       signingSecretHelp:
         'Votre récepteur vérifie avec lui que les appels viennent de cette Instance.',
+      payload: {
+        title: 'Payload',
+        show: 'Ce que reçoit votre récepteur',
+        event: 'Évènement',
+        events: { feedback: 'Retour', alert: 'Alerte', ping: 'Ping' },
+        eventHelp: {
+          feedback:
+            'Chaque Retour dispatché, et le bouton Tester avec isTest: true. Le texte est brut : encodez-le pour votre cible.',
+          alert:
+            'Une alerte pour les Membres : un Retour En revue ou une Destination Suspendue. Elle ne porte jamais le texte d’un Retour.',
+          ping: 'La vérification de santé, tant que la Destination est Suspendue : répondez par un 2xx pour reprendre ses Envois.',
+        },
+        request: 'Requête',
+        headers: 'En-têtes',
+        body: 'Exemple de corps',
+        headerHelp: {
+          event: 'feedback, alert ou ping.',
+          delivery:
+            'L’identifiant stable de l’Envoi : ignorez une nouvelle tentative déjà traitée.',
+          alert: 'L’identifiant stable de l’alerte : ignorez une nouvelle tentative déjà traitée.',
+          timestamp:
+            'Secondes Unix à la signature : refusez un appel vieux de plus de quelques minutes.',
+          signature: 'HMAC-SHA256 de timestamp + « . » + corps brut, avec le secret de signature.',
+        },
+        verify: 'Vérifier la signature',
+        verifyHelp:
+          'Calculez-la sur le corps brut, avant d’analyser le JSON, et comparez en temps constant.',
+      },
     },
     discord: {
       urlHelp:
@@ -463,6 +529,7 @@ export const fr: Messages = {
     },
     judge: {
       title: 'Juge',
+      save: 'Enregistrer le Juge',
       help: 'Le modèle de décision qui trie les Retours : il répond aux questions du Triage par des probabilités, là où un modèle de chat rédigerait du texte. Choisissez où il tourne, puis lequel. Sans Juge, nudge tourne en mode dégradé : le Type déclaré est retenu, sans Gravité ni détection d’Indésirable.',
       provider: 'Fournisseur',
       none: 'Aucun (mode dégradé)',

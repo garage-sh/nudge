@@ -60,6 +60,53 @@ describe('A Project’s Destinations', () => {
     expect(receiver.getByText('Major or higher')).toBeTruthy();
   });
 
+  it('draws the routing: where each type goes, and the types that go nowhere', async () => {
+    fakeApi(
+      baseRoutes([
+        RECEIVER,
+        {
+          ...RECEIVER,
+          id: 'destination-2',
+          name: 'Linear ENG',
+          type: 'linear',
+          config: { team: 'ENG' },
+          filter: { types: ['bug'], minimumSeverity: null },
+        },
+      ]),
+    );
+    renderDashboard('/projects/project-1/destinations');
+
+    const routing = within(await screen.findByRole('figure', { name: 'Routing' }));
+    expect(routing.getByText('Bug: Internal receiver, Linear ENG.')).toBeTruthy();
+    expect(routing.getByText('Question: Internal receiver.')).toBeTruthy();
+    expect(routing.getByText('Suggestion: no Destination accepts it.')).toBeTruthy();
+    expect(routing.getByText('Opinion: no Destination accepts it.')).toBeTruthy();
+  });
+
+  it('shows a webhook’s payload while it is configured', async () => {
+    fakeApi(baseRoutes([]));
+    renderDashboard('/projects/project-1/destinations');
+
+    const form = within(
+      (await screen.findByRole('heading', { name: 'Add Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.type(form.getByLabelText('URL'), 'https://receiver.test/nudge');
+    expect(form.getByText('https://receiver.test/nudge')).toBeTruthy();
+    expect(form.getByText('X-Nudge-Signature')).toBeTruthy();
+    const body = () =>
+      JSON.parse(form.getByLabelText(/^Example body/).textContent ?? '') as unknown;
+    expect(body()).toMatchObject({ event: 'feedback', feedback: { type: 'bug' } });
+
+    await userEvent.click(form.getByRole('radio', { name: 'Ping' }));
+    expect(body()).toEqual({ event: 'ping' });
+    expect(form.queryByText('X-Nudge-Delivery')).toBeNull();
+
+    await userEvent.click(form.getByRole('radio', { name: 'Discord' }));
+    expect(form.queryByText('X-Nudge-Signature')).toBeNull();
+  });
+
   it('announces a Project without a Destination', async () => {
     fakeApi(baseRoutes([]));
     renderDashboard('/projects/project-1/destinations');
@@ -82,15 +129,13 @@ describe('A Project’s Destinations', () => {
         'form',
       ) as HTMLElement,
     );
-    expect((form.getByRole('option', { name: 'Webhook' }) as HTMLOptionElement).selected).toBe(
-      true,
-    );
+    expect(form.getByRole('radio', { name: 'Webhook', checked: true })).toBeTruthy();
     await userEvent.type(form.getByLabelText('Name'), 'Internal receiver');
     await userEvent.type(form.getByLabelText('URL'), 'https://receiver.test/nudge');
     await userEvent.click(form.getByLabelText('Suggestion'));
     await userEvent.click(form.getByLabelText('Opinion'));
     await userEvent.selectOptions(form.getByLabelText('Minimum Severity'), 'major');
-    await userEvent.click(form.getByRole('button', { name: 'Add' }));
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
 
     expect((await screen.findByLabelText('Signing secret')).textContent).toBe('whsec-unique');
     expect(screen.getByText(/will never be shown again/)).toBeTruthy();
@@ -127,12 +172,12 @@ describe('A Project’s Destinations', () => {
         'form',
       ) as HTMLElement,
     );
-    await userEvent.selectOptions(form.getByLabelText('Type'), 'Discord');
+    await userEvent.click(form.getByRole('radio', { name: 'Discord' }));
     await userEvent.type(form.getByLabelText('Name'), 'Channel #bugs');
     const urlField = form.getByLabelText('Webhook URL') as HTMLInputElement;
     expect(urlField.type).toBe('password');
     await userEvent.type(urlField, URL_WEBHOOK);
-    await userEvent.click(form.getByRole('button', { name: 'Add' }));
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
 
     await vi.waitFor(() =>
       expect(
@@ -201,13 +246,13 @@ describe('A Project’s Destinations', () => {
         'form',
       ) as HTMLElement,
     );
-    await userEvent.selectOptions(form.getByLabelText('Type'), 'Slack');
+    await userEvent.click(form.getByRole('radio', { name: 'Slack' }));
     await userEvent.type(form.getByLabelText('Name'), 'Slack #bugs');
     const urlField = form.getByLabelText('Webhook URL') as HTMLInputElement;
     expect(urlField.type).toBe('password');
     expect(urlField.placeholder).toBe('https://hooks.slack.com/services/…');
     await userEvent.type(urlField, URL_WEBHOOK);
-    await userEvent.click(form.getByRole('button', { name: 'Add' }));
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
 
     await vi.waitFor(() =>
       expect(
@@ -244,13 +289,13 @@ describe('A Project’s Destinations', () => {
         'form',
       ) as HTMLElement,
     );
-    await userEvent.selectOptions(form.getByLabelText('Type'), 'GitHub Issues');
+    await userEvent.click(form.getByRole('radio', { name: 'GitHub Issues' }));
     await userEvent.type(form.getByLabelText('Name'), 'Issues shop-web');
     const tokenField = form.getByLabelText('Access token') as HTMLInputElement;
     expect(tokenField.type).toBe('password');
     await userEvent.type(tokenField, 'github_pat_secret');
     await userEvent.type(form.getByLabelText('Repository'), 'shop-inc/shop-web');
-    await userEvent.click(form.getByRole('button', { name: 'Add' }));
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
 
     await vi.waitFor(() =>
       expect(
@@ -324,7 +369,7 @@ describe('A Project’s Destinations', () => {
         'form',
       ) as HTMLElement,
     );
-    await userEvent.selectOptions(form.getByLabelText('Type'), 'Linear');
+    await userEvent.click(form.getByRole('radio', { name: 'Linear' }));
     await userEvent.type(form.getByLabelText('Name'), 'Linear ENG');
     const keyField = form.getByLabelText('API key') as HTMLInputElement;
     expect(keyField.type).toBe('password');
@@ -334,7 +379,7 @@ describe('A Project’s Destinations', () => {
     await userEvent.type(form.getByLabelText('Label for type Opinion'), 'x');
     await userEvent.clear(form.getByLabelText('Label for type Opinion'));
     await userEvent.type(form.getByLabelText('Label for Severity Blocking'), 'Urgent');
-    await userEvent.click(form.getByRole('button', { name: 'Add' }));
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
 
     await vi.waitFor(() =>
       expect(
@@ -401,7 +446,7 @@ describe('A Project’s Destinations', () => {
 
     await userEvent.type(await screen.findByLabelText('Name'), 'Receiver');
     await userEvent.type(screen.getByLabelText('URL'), 'ftp://receiver.test');
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Destination' }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/http\(s\) URL expected/);
   });
@@ -508,7 +553,9 @@ describe('A Project’s Destinations', () => {
     );
     renderDashboard('/projects/project-1/destinations');
 
-    expect(await screen.findByText('<img src=x onerror="alert(1)">')).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: '<img src=x onerror="alert(1)">' }),
+    ).toBeTruthy();
     expect(document.querySelector('img')).toBeNull();
     expect(document.querySelector('a[href^="javascript"]')).toBeNull();
   });

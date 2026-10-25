@@ -68,19 +68,24 @@ Each semantic color has a `-soft` variant for backgrounds. Dark mode (`prefers-c
 - `Layout`: 232 px sticky sidebar, on the frame; the content is a sheet laid beside it. Below 860 px, the sheet fills the whole screen. Below 860 px, it becomes a drawer opened by "Menu" (closed by Escape, the backdrop or a navigation).
 - Fixed entries are in `layout/navigation.ts`; Projects are read from the API.
 - Alerts (`Alerts`) live in the sidebar: In review in violet, suspended Destination in amber.
-- `PublicPage`: screens without a session (setup, sign in, invitation), a centered 400 px column.
+- `PublicPage`: screens without a session (setup, sign in, invitation), a centered 400 px column. Their loading and error states stay inside it.
+- `ErrorBoundary`: an unexpected render error shows what happened and "Reload", never a blank page.
 - `LocaleSelect`: the language, per browser; in the sidebar's account block and at the foot of a `PublicPage`.
+
+## Brand
+
+The mark is the Severity gauge at its full level: four rising bars, in the accent. `Brand` (`layout/Layout.tsx`) draws it beside the name; the same geometry is in `docs/assets/` (`logo.svg`, `logo-dark.svg` with the outlined wordmark, `mark.svg`, `social-preview.png` for the repository) and `apps/dashboard/public/` (favicon and app icon: white bars on an accent tile).
 
 ## Primitives
 
 | Primitive                                                                   | Where                 | When                                                                                                                                          |
 | --------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PageHeader`                                                                | `ui.tsx`              | At the top of every signed-in screen: the only `h1`, an optional back link, a description, the screen's actions.                              |
+| `PageHeader`                                                                | `ui.tsx`              | At the top of every signed-in screen: the only `h1`, an optional back link, a description, the screen's actions. Names the browser tab.       |
 | `EmptyState`                                                                | `ui.tsx`              | A list or section with no content: say why, offer the action that fills it.                                                                   |
 | `Loading`                                                                   | `ui.tsx`              | During a request: row skeletons, announced as "Loading…".                                                                                     |
 | `ErrorMessage`                                                              | `ui.tsx`              | API error, in plain words and with the action to take (codes in the dictionaries' `apiErrors`). `onRetry` adds "Retry" on a read that failed. |
-| `Field`                                                                     | `ui.tsx`              | A text field with a label and help text.                                                                                                      |
-| `CopyableValue`                                                             | `ui.tsx`              | Key or link to copy.                                                                                                                          |
+| `Field`                                                                     | `ui.tsx`              | A text field with a label and help text. A value the browser refuses is said under the field (`.field-error`), and the first one takes focus. |
+| `CopyableValue`                                                             | `ui.tsx`              | Key or link to copy; `multiline` for a block of code (a JSON body, a snippet), with the button in its corner.                                 |
 | `ConfirmAction`                                                             | `ui.tsx`              | Irreversible action behind a button: the confirmation opens in place, with focus on Cancel. Escape cancels and returns focus to the button.   |
 | `Confirmation`                                                              | `ui.tsx`              | The same question, triggered another way, for example a save that erases data (shorter retention).                                            |
 | `SaveStatus`                                                                | `ui.tsx`              | "Saved." after a save, announced to screen readers. The form clears it as soon as it changes (`onChange={() => mutation.reset()}`).           |
@@ -94,8 +99,10 @@ Each semantic color has a `-soft` variant for backgrounds. Dark mode (`prefers-c
 
 - `.panel`: a panel, for a whole object (a Verdict, a Destination, a settings section).
 - `.list`: a surface with separators, for a collection. No card per item.
+- `.linked-row` + `.row-link`: a row that opens its object. The link is stretched over the whole row, which takes the hover and the focus ring: a click anywhere on the row opens it (Inbox, Projects).
 - `.form`, `.field`, `fieldset.field` + `.check` (checkboxes as pills), `.actions` (row of buttons), `.help`, `.muted`.
 - `.alert` (error), `.warning` (caution, amber), `.empty` (empty state), `.meta` (inline metadata), `.properties` (label / value pairs).
+- `fieldset.type-picker` + `.type-option`: a choice between a few kinds of object, as radios carrying a mark (`TypeIcon`) and a name. `fieldset.segmented`: a switch between a few views of the same thing (a webhook's events).
 
 ### Buttons
 
@@ -116,13 +123,13 @@ Every signed-in screen starts with `PageHeader`. The patterns below are the shap
 
   An empty result offers "Clear filters".
 
-- **Reading pane** (Inbox, above 1200 px):
+- **Reading pane** (Inbox, above 1360 px):
   - like a mail client, the Feedback opens in a pane (`.feedback-pane`) beside the list, which narrows;
   - the route stays `/feedbacks/:id`, nested under `/feedbacks`; the filters follow in the URL;
   - the detail view knows it is in the pane through the `FeedbackPane` context: it offers "Close", and its title becomes an `h2`;
   - J and K move to the next or previous Feedback, and Escape closes the pane;
   - rows and detail adapt to the space they have, through container queries (`list`, `detail`) rather than the screen width.
-    Below 1200 px, the Feedback opens as a full page.
+    Below 1360 px, the Feedback opens as a full page.
 
 - **Item detail** (a Feedback's detail, `screens/Feedback.tsx`):
   - `.trail`: back to the originating list, with its filters, and Previous / Next from the `ListState` navigation state;
@@ -133,15 +140,17 @@ Every signed-in screen starts with `PageHeader`. The patterns below are the shap
   - the tab's primary action goes in the header.
 - **Configurable collection** (Destinations, Projects):
   - one row per object (`.destination`);
-  - adding is the header's action and opens the form at the top of the list. It is open by default when the collection is empty, and the empty state (`EmptyState`) says what to put in it;
-  - an object in trouble says why and what to do (`.problem`).
+  - adding is the header's action and opens the form at the top of the list. It is open by default when the collection is empty, under the empty state (`EmptyState`) that says what to put in it;
+  - an object in trouble says why and what to do (`.problem`);
+  - a Project's routing (`RoutingMap`) heads the list: Feedback types on the left, Destinations on the right, a line where a Filter accepts a type, highlighted on hover. A type no Destination accepts says it goes nowhere. The drawing is `aria-hidden`; the same routes are written as a list, which is also the narrow-screen view;
+  - a webhook's form shows its payload (`.payload`): request, headers, body per event and the signature check, from `WEBHOOK_EXAMPLES` in `@nudge/shared`. On a wide screen it sits beside the fields.
 - **Settings** (Settings, a Project's settings): a `.settings` column of at most 760 px, one `.panel` per topic, and one solid button per panel.
 
 ## Writing rules
 
 - A button says what it does, with the domain name: "Add Destination", "Reinstate", not "Submit form".
 - An action keeps the same name throughout the flow (button, confirmation, success message).
-- An error says what happened and what to do, without apologizing.
+- An error says what happened and what to do, without apologizing. A field's error sits under that field, never in the browser's bubble.
 - In lists, dates are relative (`format.dateRelative`), and the exact date shows in `title`. Day groups use `format.day`.
 - No copy in components: every string lives in `src/i18n/en.ts` (the source of the keys) and `src/i18n/fr.ts`, read with `useT()` or `useI18n()` (which also gives `format`, the dates and sizes of the active locale). A sentence with a number is a function, so each language handles its own plurals.
 - An empty state invites action.

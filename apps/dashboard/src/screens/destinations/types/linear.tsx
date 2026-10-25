@@ -2,6 +2,7 @@ import { SEVERITIES, FEEDBACK_TYPES } from '@nudge/shared';
 import { useT } from '../../../i18n/index.js';
 import { Field } from '../../../layout/ui.js';
 import type { DestinationTypeForm, TypeFieldsProps } from './destination-type-form.js';
+import { TYPE_ICONS } from './type-icon.js';
 
 type Mapping = Readonly<Record<string, string>>;
 
@@ -110,6 +111,7 @@ function LinearFields({
 
 export const linearForm: DestinationTypeForm<'linear'> = {
   label: 'Linear',
+  icon: TYPE_ICONS.linear,
   initialConfig: { team: '', labels: { types: {}, severities: {} } },
   Fields: LinearFields,
   summary: (config, t) => t.destinationTypes.linear.summary(read(config).team),

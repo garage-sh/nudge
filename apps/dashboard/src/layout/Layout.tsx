@@ -7,6 +7,7 @@ import { useT } from '../i18n/index.js';
 import { Alerts } from './Alerts.js';
 import { LocaleSelect } from './LocaleSelect.js';
 import { INSTANCE_NAVIGATION, MAIN_NAVIGATION } from './navigation.js';
+import { useDocumentTitle } from './ui.js';
 
 /**
  * Frame of the signed-in screens: sidebar (navigation, Projects, alerts, signed-in
@@ -161,16 +162,21 @@ function Account() {
   );
 }
 
-/** The brand: the full Severity gauge, and the name. */
+/** The mark's bars, on a 20-unit grid: the Severity gauge at its full level (docs/assets/logo.svg). */
+const MARK_BARS = [5, 8, 11, 14].map((level, index) => ({
+  x: index * 5.5,
+  height: (20 * level) / 14,
+}));
+
+/** The brand: the mark, and the name. */
 function Brand() {
   return (
     <span className="brand">
-      <span className="gauge" data-level="4" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-      </span>
+      <svg className="brand-mark" viewBox="0 0 20 20" aria-hidden="true">
+        {MARK_BARS.map(({ x, height }) => (
+          <rect key={x} x={x} y={20 - height} width={3.5} height={height} rx={1.1} />
+        ))}
+      </svg>
       nudge
     </span>
   );
@@ -178,6 +184,7 @@ function Brand() {
 
 /** A centered public page (setup, sign in, invitation). */
 export function PublicPage({ title, children }: { title: string; children: React.ReactNode }) {
+  useDocumentTitle(title);
   return (
     <main className="public">
       <div className="card">

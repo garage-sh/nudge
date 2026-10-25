@@ -362,6 +362,15 @@ function Verdict({ feedbackId, verdict }: { feedbackId: string; verdict: Verdict
           ) : null}
         </p>
       ) : null}
+      {/* What the pill means, visible: a title is out of reach on touch and keyboard. */}
+      {verdict.severity === null ? (
+        <p className="help">
+          {t.feedback.verdict.degradedHelp}{' '}
+          <Link to="/settings">{t.feedback.verdict.setUpJudge}</Link>
+        </p>
+      ) : verdict.uncertain ? (
+        <p className="help">{t.feedback.verdict.uncertainHelp}</p>
+      ) : null}
       <div className="actions">
         <button
           ref={correct}
