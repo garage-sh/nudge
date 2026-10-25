@@ -1455,7 +1455,7 @@ __metadata:
     "@nudge/typescript-config": "workspace:*"
     "@nudge/worker": "workspace:*"
     "@testcontainers/postgresql": "npm:^12.2.1"
-    "@testcontainers/redis": "npm:^11.14.0"
+    "@testcontainers/redis": "npm:^12.2.1"
     "@types/node": "npm:^24.10.0"
     "@types/pg": "npm:^8.15.0"
     bullmq: "npm:^5.60.0"
@@ -2170,12 +2170,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@testcontainers/redis@npm:^11.14.0":
-  version: 11.14.0
-  resolution: "@testcontainers/redis@npm:11.14.0"
+"@testcontainers/redis@npm:^12.2.1":
+  version: 12.2.1
+  resolution: "@testcontainers/redis@npm:12.2.1"
   dependencies:
-    testcontainers: "npm:^11.14.0"
-  checksum: 10c0/bccbf827712674e2fe187373f1997f7864b56bf95235d37efbf8b9c28e6e3640b70dabb60a1835758e7957b14cf0158444a5a92091dba9602480b7a1b695aa44
+    testcontainers: "npm:^12.2.1"
+  checksum: 10c0/76a6d42a2ceaa1c709cbbe0e06d84fae7812c70046357ed6a27efd36cbfe6d2ff5f48e789f1d1a37ed377219b65486aa220b23e4d1c0d30113f1a24c9000287d
   languageName: node
   linkType: hard
 
