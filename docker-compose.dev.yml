@@ -17,7 +17,7 @@ services:
       timeout: 3s
       retries: 15
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     ports:
       - '${NUDGE_REDIS_PORT:-6379}:6379'
     healthcheck:

@@ -60,7 +60,7 @@ services:
 
   # The BullMQ queues: persisted (AOF), and never evicted under memory pressure.
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     volumes:
