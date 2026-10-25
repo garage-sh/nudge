@@ -348,7 +348,11 @@ describe('Review of a Feedback by a Member', () => {
   it('approving a Feedback In review dispatches it', async () => {
     const { id, fake } = await feedbackIn('in_review');
 
-    expect(await pipeline.review(id, 'approve')).toEqual({ status: 'applied', state: 'triaged' });
+    // The response reads the Feedback back once queued: it may already be Dispatched.
+    expect(await pipeline.review(id, 'approve')).toEqual({
+      status: 'applied',
+      state: expect.stringMatching(/^(triaged|dispatched)$/),
+    });
 
     const feedback = await pipeline.waitForFeedback(id, (r) =>
       r.deliveries.some((delivery) => delivery.status === 'delivered'),
@@ -369,7 +373,11 @@ describe('Review of a Feedback by a Member', () => {
   it('reinstating a Feedback Discarded as Junk dispatches it normally', async () => {
     const { id, fake } = await feedbackIn('discarded');
 
-    expect(await pipeline.review(id, 'reinstate')).toEqual({ status: 'applied', state: 'triaged' });
+    // The response reads the Feedback back once queued: it may already be Dispatched.
+    expect(await pipeline.review(id, 'reinstate')).toEqual({
+      status: 'applied',
+      state: expect.stringMatching(/^(triaged|dispatched)$/),
+    });
 
     const feedback = await pipeline.waitForFeedback(id, (r) =>
       r.deliveries.some((delivery) => delivery.status === 'delivered'),

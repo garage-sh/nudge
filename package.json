@@ -30,7 +30,7 @@
   "devDependencies": {
     "@nudge/eslint-config": "workspace:*",
     "@swc/core": "^1.15.0",
-    "eslint": "^9.39.0",
+    "eslint": "^10.13.0",
     "prettier": "^3.6.2",
     "turbo": "^2.7.4",
     "typescript": "~5.9.3",
