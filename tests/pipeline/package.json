@@ -24,7 +24,7 @@
     "@nudge/typescript-config": "workspace:*",
     "@nudge/worker": "workspace:*",
     "@testcontainers/postgresql": "^11.14.0",
-    "@testcontainers/redis": "^11.14.0",
+    "@testcontainers/redis": "^12.2.1",
     "@types/node": "^24.10.0",
     "@types/pg": "^8.15.0",
     "bullmq": "^5.60.0",
