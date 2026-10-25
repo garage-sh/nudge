@@ -44,7 +44,7 @@
     "@nudge/shared": "workspace:*",
     "@nudge/tsup-config": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.0",
