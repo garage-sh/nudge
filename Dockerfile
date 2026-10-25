@@ -84,7 +84,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
 CMD ["node", "apps/api/dist/main.js"]
 
 # --- dashboard: static files, Widget and proxy to the api (same origin) --------------
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS dashboard
+FROM nginx:1.31-alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417 AS dashboard
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge-dashboard" \
       org.opencontainers.image.description="nudge dashboard and Widget, served by nginx with a proxy to the api." \
