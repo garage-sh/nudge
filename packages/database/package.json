@@ -36,7 +36,7 @@
     "@nudge/typescript-config": "workspace:*",
     "@types/node": "^24.10.0",
     "drizzle-kit": "^0.31.5",
-    "eslint": "^9.39.0",
+    "eslint": "^10.13.0",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
