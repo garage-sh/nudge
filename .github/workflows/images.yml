@@ -6,9 +6,13 @@
 #   GitHub Release is created with its notes, the compose file and `env.example`.
 #
 # Each architecture (amd64, arm64) is built on a native runner, without emulation;
-# both are joined under the same tag. Every published image carries an SBOM and a
-# provenance attestation, is signed by cosign (keyless, through GitHub's OIDC) and
-# scanned: a critical vulnerability fixed upstream fails the publication.
+# both are joined under the same tag. Each architecture is scanned once pushed by
+# digest, before any tag or signature: a critical vulnerability fixed upstream stops
+# the publication. Every published image carries an SBOM and a provenance attestation
+# and is signed by cosign (keyless, through GitHub's OIDC).
+#
+# `publish` and `release` run in the `release` environment, whose protection rules
+# (allowed refs, reviewers) are set in the repository settings.
 name: Images
 
 on:
@@ -72,6 +76,16 @@ jobs:
           # Pushed by digest only: the tags are set once both architectures are
           # joined (`publish` job).
           outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, github.repository_owner, matrix.image.name) || 'type=cacheonly' }}
+      # Before `publish` tags and signs anything: a failure here leaves the digest
+      # untagged and unsigned.
+      - if: github.event_name != 'pull_request'
+        name: Scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }}@${{ steps.build.outputs.digest }}
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
       - if: github.event_name != 'pull_request'
         name: Digest
         run: |
@@ -93,6 +107,7 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    environment: release
     permissions:
       contents: read
       packages: write
@@ -144,13 +159,6 @@ jobs:
         run: cosign sign --yes "$IMAGE@$DIGEST"
         env:
           DIGEST: ${{ steps.digest.outputs.digest }}
-      - name: Scan
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        with:
-          image: ${{ env.IMAGE }}@${{ steps.digest.outputs.digest }}
-          severity-cutoff: critical
-          only-fixed: true
-          output-format: table
 
   release:
     name: GitHub Release
@@ -158,6 +166,7 @@ jobs:
     needs: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    environment: release
     permissions:
       contents: write
     steps:
