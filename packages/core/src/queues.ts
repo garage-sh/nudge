@@ -40,8 +40,14 @@ export interface DispatchJob {
 /** First Triage job of a Feedback (ingestion, sweep D18): it is queued only once. */
 export const triageJobId = (feedbackId: string): string => feedbackId;
 
-/** A Feedback becomes Triaged again through a review only once: a review-specific job is enough. */
-export const reviewJobId = (feedbackId: string): string => `${feedbackId}-review`;
+/**
+ * A review that makes the Feedback Triaged (approve, reinstate): a fresh job per review.
+ * The conditional transition already prevents a double review; a fixed id would make
+ * BullMQ ignore the job of a review retried after an undone one (queueing failed after
+ * Redis stored the job), leaving a Triaged Feedback that nothing dispatches.
+ */
+export const reviewJobId = (feedbackId: string): string =>
+  `${feedbackId}-review-${randomUUID()}`;
 
 /**
  * First dispatch job of a Delivery (after Triage or a redispatch, D22): a Delivery is

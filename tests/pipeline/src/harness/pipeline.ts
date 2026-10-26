@@ -25,6 +25,7 @@ import {
   readFeedback,
   feedbacks,
   runMigrations,
+  undoReview,
   type DestinationRow,
   type Project,
   type LoadedFeedback,
@@ -168,6 +169,8 @@ export interface Pipeline {
    * `POST /api/feedbacks/:id/review`, by the Member of `signIn()`.
    */
   review(feedbackId: string, action: ReviewAction): Promise<ReviewResult>;
+  /** Undoes a review transition, as the api does when queueing its job fails. */
+  undoReview(feedbackId: string, action: ReviewAction): Promise<void>;
   /**
    * Re-enqueues a Feedback's Triage job (new job id, like a replayed job) and
    * waits until it is processed.
@@ -421,6 +424,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       if (status === 404) return { status: 'not_found' };
       throw new Error(`review: unexpected response ${status} ${JSON.stringify(body)}`);
     },
+    undoReview: (feedbackId, action) => undoReview(db, feedbackId, action),
     replayTriage: (feedbackId) => replay(TRIAGE_QUEUE, { feedbackId }),
     replayDispatch: (deliveryId) => replay(DISPATCH_QUEUE, { deliveryId }),
     async breakEnqueue(name) {

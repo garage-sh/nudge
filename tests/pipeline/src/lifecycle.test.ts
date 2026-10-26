@@ -396,6 +396,25 @@ describe('Review of a Feedback by a Member', () => {
     expect(await pipeline.readFeedback(id)).toMatchObject({ state: 'triaged', deliveries: [] });
   });
 
+  it('a review undone after its job was queued can be made again, and dispatches', async () => {
+    const { id } = await feedbackIn('in_review', { destination: false });
+    // Queueing answered with an error although Redis stored the job: the api undoes the
+    // approval, and the job runs without anything to dispatch.
+    await pipeline.review(id, 'approve');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await pipeline.undoReview(id, 'approve');
+    const { projectId } = (await pipeline.readFeedback(id))!;
+    const { fake } = await pipeline.createDestination(projectId);
+
+    expect(await pipeline.review(id, 'approve')).toMatchObject({ status: 'applied' });
+
+    const feedback = await pipeline.waitForFeedback(id, (r) =>
+      r.deliveries.some((delivery) => delivery.status === 'delivered'),
+    );
+    expect(feedback.state).toBe('dispatched');
+    expect(fake.deliveries).toHaveLength(1);
+  });
+
   it('a transition outside its starting state is refused and changes nothing', async () => {
     const inReview = await feedbackIn('in_review');
     const discarded = await feedbackIn('discarded');
