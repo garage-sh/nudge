@@ -144,6 +144,7 @@ describe('Captures', () => {
       },
     ],
     ['content that is not base64', { contentType: 'image/png', data: 'not base64 at all' }],
+    ['base64 too short to decode', { contentType: 'image/png', data: 'A' }],
     ['an empty Capture', { contentType: 'image/png', data: '' }],
     [
       'a too heavy Capture',
