@@ -12,4 +12,4 @@ Security fixes are released on the latest minor version. Update with `docker com
 
 ## Verifying the images
 
-Every image published on `ghcr.io/garage-sh` is signed with cosign from the repository's CI, and carries an SBOM and a provenance attestation. The verification command is in the [README](README.md#updating-backing-up-scaling).
+Every image published on `ghcr.io/garage-sh` is signed with cosign by the `images.yml` workflow on `main` or a release tag, and carries an SBOM and a provenance attestation. The verification command, which pins that workflow and those refs, is in the [README](README.md#updating-backing-up-scaling).

@@ -80,13 +80,15 @@ The session cookie is `Secure`, so HTTPS is required. Browsers make an exception
 
 - **Updating**: `docker compose pull && docker compose up -d`. The `migrate` service applies the new migrations before `nudge` restarts. Read the [release notes](https://github.com/garage-sh/nudge/releases) before changing minor version. There are no down migrations: going back to a previous version means restoring the Postgres backup taken before the update.
 - **Pinning a version**: `NUDGE_VERSION` in `.env`. By default, `latest` follows the latest release. `0.1` receives the 0.1 fixes, and `0.1.2` never moves. Images built from `main`, not released, carry the `edge` tag. In production, pin an exact version and raise it on purpose, after verifying the new image: with `latest`, the next `pull` installs whatever was published last. The compose file pins Postgres and Redis by digest.
-- **Verifying an image**: every published image is signed with cosign, keyless, from the repository's CI.
+- **Verifying an image**: every published image is signed with cosign, keyless, by the `images.yml` workflow, from `main` (`edge`) or from a release tag. The identity below accepts no other workflow and no other branch:
 
   ```bash
   cosign verify ghcr.io/garage-sh/nudge:latest \
-    --certificate-identity-regexp '^https://github.com/garage-sh/nudge/' \
+    --certificate-identity-regexp '^https://github\.com/garage-sh/nudge/\.github/workflows/images\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
+
+  To accept one release only, and no `edge` build, end the regexp with `@refs/tags/v0\.1\.2$` instead.
 
 - **Backing up**: the `postgres` (the source of truth), `captures` and `redis` volumes, as well as the value of `NUDGE_ENCRYPTION_KEY`. Without this key, the stored secrets (Judge key, Destination tokens) are unreadable and must be entered again. Redis only holds the queues: a Feedback left Received goes back to Triage on its own, but a pending Delivery lost with Redis stays stuck.
 - **Scaling**: by default, the api and the worker run in the same process (`NUDGE_ROLES=api,worker`). To replicate the worker without replicating the api, also download [`docker-compose.worker.yml`](docker-compose.worker.yml) (attached to every release, like `docker-compose.yml`), which starts the same image with `NUDGE_ROLES=worker`:
