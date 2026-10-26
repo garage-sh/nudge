@@ -48,6 +48,14 @@ interface Position {
 
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
+/** An existing instant (no 13th month): Postgres would refuse it with a 500, not a 400. */
+const isInstant = (value: string): boolean => {
+  if (!INSTANT.test(value)) return false;
+  const milliseconds = `${value.slice(0, 23)}Z`;
+  const date = new Date(milliseconds);
+  return !Number.isNaN(date.getTime()) && date.toISOString() === milliseconds;
+};
+
 const encodeCursor = (position: Position): string =>
   Buffer.from(JSON.stringify([position.instant, position.id])).toString('base64url');
 
@@ -58,7 +66,7 @@ function decodeCursor(cursor: string): Position {
       const [instant, id] = value as unknown[];
       if (
         typeof instant === 'string' &&
-        INSTANT.test(instant) &&
+        isInstant(instant) &&
         typeof id === 'string' &&
         isUuid(id)
       ) {
