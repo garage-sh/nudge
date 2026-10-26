@@ -51,5 +51,10 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header Referrer-Policy "same-origin" always;
+        # Everything comes from this origin: Vite's script and stylesheet, the fonts
+        # (small ones inlined as data:), the Captures (/api) and the api calls. No
+        # inline script nor style element; React sets the style attributes through the
+        # DOM, which CSP does not restrict.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
     }
 }
