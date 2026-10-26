@@ -44,6 +44,7 @@ export async function createApi(options: ApiOptions): Promise<NestExpressApplica
     },
   );
   app.set('trust proxy', options.trustProxy ?? false);
+  app.disable('x-powered-by');
   // A Feedback can carry a Capture (base64): its route alone accepts a heavy body.
   app.use('/v1/feedbacks', json({ limit: FEEDBACK_BODY_LIMIT }));
   app.useBodyParser('json', { limit: '100kb' });

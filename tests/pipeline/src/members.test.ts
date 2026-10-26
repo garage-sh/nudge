@@ -157,6 +157,12 @@ describe('Members: setup, session, invitation', () => {
       }
     });
 
+    it('does not announce the framework it runs on', async () => {
+      const response = await fetch(`${pipeline.url}/api/setup`);
+
+      expect(response.headers.get('x-powered-by')).toBeNull();
+    });
+
     it('throttles repeated sign-in attempts from the same address', async () => {
       for (let attempt = 0; attempt < 10; attempt += 1) {
         const failure = await pipeline.dashboard().post('/api/session', {
