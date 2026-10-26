@@ -67,9 +67,14 @@ Because everything is served on the same origin, the session cookie stays first-
 Put a TLS reverse proxy (Caddy, Traefik, nginx…) in front of the published port, then set:
 
 - `NUDGE_DASHBOARD_URL=https://nudge.example.com` so that Deliveries and alerts carry a link to the Feedback;
-- `NUDGE_TRUST_PROXY=2`, that is your proxy plus the dashboard's. The api reads the client IP from `X-Forwarded-For`, which the Widget rate limit and the sign-in brute-force protection rely on. A value too high would let a client choose its IP.
+- `NUDGE_TRUST_PROXY=2`, that is your proxy plus the dashboard's. The api reads the client IP from `X-Forwarded-For`, which the Widget rate limit and the sign-in brute-force protection rely on.
 
-The session cookie is `Secure`, so HTTPS is required. Browsers make an exception for `http://localhost`. To try the Instance over HTTP from another machine, `NUDGE_COOKIE_SECURE=false` lifts this protection, but never do it on an exposed Instance.
+The published port listens on `127.0.0.1` only (`NUDGE_BIND`): a proxy on the same host reaches it, the network does not. A proxy running as a container can also join the compose network and target `dashboard:8080`; it counts as one hop all the same. Both values of `NUDGE_TRUST_PROXY` are wrong in one direction:
+
+- **too high** (`2` while clients can reach the port without going through your proxy): a client sends its own `X-Forwarded-For` and chooses its IP, so it is never throttled. If your proxy runs on another machine and you set `NUDGE_BIND=0.0.0.0`, firewall the port so that only the proxy reaches it; Docker publishes ports past `ufw` and `firewalld` rules;
+- **too low** (`1`, the default, behind a proxy): every client shares the proxy's IP. Ten sign-in attempts per minute from anyone then lock every Member out of sign-in, and all the Widgets share a single 20 Feedbacks per minute budget.
+
+The session cookie is `Secure`, so HTTPS is required. Browsers make an exception for `http://localhost`. To try the Instance over HTTP from another machine, `NUDGE_BIND=0.0.0.0` and `NUDGE_COOKIE_SECURE=false` lift these protections (keep `NUDGE_TRUST_PROXY=1`), but never do it on an exposed Instance.
 
 ### Updating, backing up, scaling
 

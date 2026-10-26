@@ -3,6 +3,8 @@
 #
 # Only the dashboard publishes a port: it also serves the api (/api, /v1) and the Widget
 # (/widget/nudge-widget.js) on the same origin. Put a TLS reverse proxy in front of it.
+# The port listens on 127.0.0.1 only (NUDGE_BIND): a client must not reach it without
+# going through that proxy, or it could choose its IP (see the README).
 #
 # The images come from ghcr.io; NUDGE_VERSION pins them (default: latest).
 # Build from source: add `-f docker-compose.build.yml`. Replicate the worker
@@ -97,8 +99,9 @@ services:
   dashboard:
     image: ghcr.io/garage-sh/nudge-dashboard:${NUDGE_VERSION:-latest}
     restart: unless-stopped
+    # 127.0.0.1: reachable from the host's TLS proxy, not from the network.
     ports:
-      - '${NUDGE_PORT:-8080}:8080'
+      - '${NUDGE_BIND:-127.0.0.1}:${NUDGE_PORT:-8080}:8080'
     depends_on:
       nudge:
         condition: service_healthy

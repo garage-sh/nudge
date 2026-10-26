@@ -24,7 +24,10 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         # The api reads the client IP here (Widget rate limit, brute-force protection):
-        # NUDGE_TRUST_PROXY counts this proxy, and the ones in front of it.
+        # NUDGE_TRUST_PROXY counts this proxy, and the ones in front of it. Appended,
+        # not overwritten, so that a TLS proxy in front can pass the client IP on; the
+        # compose file therefore keeps this port off the network (NUDGE_BIND), or a
+        # client skipping that proxy would write its own entry.
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
