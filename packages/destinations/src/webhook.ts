@@ -16,7 +16,7 @@ import {
   type WebhookSecrets,
 } from '@nudge/shared';
 import { readCapture, type CaptureImage } from './capture.js';
-import { DEFAULT_HTTP_TIMEOUT_MS, httpFailure, errorMessage } from './http.js';
+import { DEFAULT_HTTP_TIMEOUT_MS, httpFailure, networkFailure } from './http.js';
 
 export interface WebhookOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -81,7 +81,7 @@ export function webhookAdapter(
         body: raw,
       });
     } catch (error) {
-      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
+      return { status: 'failed', ...networkFailure(error) };
     }
     if (response.ok) {
       await response.body?.cancel();

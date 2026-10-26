@@ -1,5 +1,6 @@
 import type { FailureClass } from '@nudge/core';
-import { readTextPrefix } from '@nudge/shared';
+import { errorMessage, readTextPrefix } from '@nudge/shared';
+import { OutboundRefusedError } from './outbound.js';
 import { truncate } from './text.js';
 
 /** Maximum length of an external service's response carried over into a failure message. */
@@ -66,6 +67,17 @@ export const EXTERNAL_URL_MAX = 2048;
 export function externalLink(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > EXTERNAL_URL_MAX) return null;
   return URL.parse(value)?.protocol === 'https:' ? value : null;
+}
+
+/**
+ * Class and message of a `fetch` exception: a host the outbound policy refuses is
+ * permanent (only a configuration change fixes it), a network error or a timeout transient.
+ */
+export function networkFailure(error: unknown): { failureClass: FailureClass; message: string } {
+  return {
+    failureClass: error instanceof OutboundRefusedError ? 'permanent' : 'transient',
+    message: errorMessage(error),
+  };
 }
 
 /** Message of a `fetch` exception (network, timeout). */

@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
+import { OutboundRefusedError } from './outbound.js';
 import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { webhookAdapter } from './webhook.js';
 
@@ -323,6 +324,29 @@ describe('Webhook adapter', () => {
       status: 'failed',
       failureClass: 'transient',
       message: expect.stringContaining('fetch failed'),
+    });
+  });
+
+  it('a host the outbound policy refuses is a permanent failure: retrying changes nothing', async () => {
+    const { fetch } = receiver(new OutboundRefusedError('receiver.test'));
+
+    expect(await webhook(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass: 'permanent',
+      message: expect.stringContaining('NUDGE_OUTBOUND_ALLOWED_HOSTS'),
+    });
+  });
+
+  it('the registry calls a non-public URL through the guarded fetch: refused', async () => {
+    const internal = {
+      ...DESTINATION,
+      config: { url: 'http://169.254.169.254/latest/meta-data/' },
+    };
+
+    expect(await resolveDestinationAdapter(internal).healthCheck()).toMatchObject({
+      reachable: false,
+      failureClass: 'permanent',
+      message: expect.stringContaining('169.254.169.254'),
     });
   });
 
