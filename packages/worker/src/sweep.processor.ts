@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  CAPTURE_KEY_PREFIX,
   DISPATCH_JOB,
   sweepJobId,
   triageJobId,
@@ -7,13 +8,18 @@ import {
   type DispatchJob,
   type TriageJob,
 } from '@nudge/core';
-import { deliveries, feedbacks, type Db } from '@nudge/database';
+import { captures, deliveries, feedbacks, type Db } from '@nudge/database';
 import type { JobType, Queue } from 'bullmq';
-import { and, asc, eq, gt, isNull, lt, lte, or, sql } from 'drizzle-orm';
-import { DEFAULT_SWEEP, MAX_TRIAGE_SWEEP_BACKOFF_MS, type WorkerOptions } from './options.js';
+import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import {
+  DEFAULT_CAPTURE_SWEEP,
+  DEFAULT_SWEEP,
+  MAX_TRIAGE_SWEEP_BACKOFF_MS,
+  type WorkerOptions,
+} from './options.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS, TRIAGE_QUEUE_TOKEN } from './tokens.js';
 
-/** Feedbacks or Deliveries handled per run (or per page): the next run picks up the rest. */
+/** Items handled per run (or per page): the next run picks up the rest. */
 const BATCH = 100;
 
 /** States of a job that will eventually process its Delivery: neither finished nor failed. */
@@ -29,11 +35,11 @@ const LIVE_JOBS: JobType[] = [
 const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 
 /**
- * Sweeps of the Feedbacks left Received (D18) and of the Deliveries left pending (D26).
- * Without an outbox, a Feedback or a Delivery can be stored without its queueing
- * succeeding; its job can also have exhausted its retries without moving it forward
- * (Judge away for long, Postgres unavailable). The sweep queues them again, without
- * doubling a job still waiting or running.
+ * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26) and
+ * of the Capture storage. Without an outbox, a Feedback or a Delivery can be stored
+ * without its queueing succeeding; its job can also have exhausted its retries without
+ * moving it forward (Judge away for long, Postgres unavailable). The sweep queues them
+ * again, without doubling a job still waiting or running.
  */
 @Injectable()
 export class SweepProcessor {
@@ -136,6 +142,49 @@ export class SweepProcessor {
     );
     for (const id of batch) {
       this.logger.warn(`Delivery ${id} left pending without a job: sent back to dispatch`);
+    }
+  }
+
+  /**
+   * Deletes from the Capture storage the images no Capture references (the api stopped
+   * between writing the image and its database row) and what interrupted writes left
+   * behind. Objects younger than the grace period are left alone: their row may be on
+   * its way.
+   */
+  async sweepCaptures(): Promise<void> {
+    const { graceMs } = this.options.captureSweep ?? DEFAULT_CAPTURE_SWEEP;
+    const storage = this.options.captureStorage;
+    const before = new Date(Date.now() - graceMs);
+    const incomplete = await storage.removeIncomplete(before);
+    if (incomplete > 0) {
+      this.logger.warn(`${incomplete} interrupted Capture write(s) removed from the storage`);
+    }
+    let candidates: string[] = [];
+    for await (const { key, modifiedAt } of storage.list(CAPTURE_KEY_PREFIX)) {
+      if (modifiedAt >= before) continue;
+      candidates.push(key);
+      if (candidates.length === BATCH) {
+        await this.deleteOrphans(candidates);
+        candidates = [];
+      }
+    }
+    await this.deleteOrphans(candidates);
+  }
+
+  private async deleteOrphans(keys: readonly string[]): Promise<void> {
+    if (keys.length === 0) return;
+    const referenced = new Set(
+      (
+        await this.db
+          .select({ key: captures.key })
+          .from(captures)
+          .where(inArray(captures.key, [...keys]))
+      ).map(({ key }) => key),
+    );
+    for (const key of keys) {
+      if (referenced.has(key)) continue;
+      await this.options.captureStorage.delete(key);
+      this.logger.warn(`Capture image ${key} referenced by no Feedback: deleted from the storage`);
     }
   }
 

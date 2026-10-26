@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 export {
+  type CaptureSweepOptions,
   type ConcurrencyOptions,
   type SweepOptions,
   type PurgeOptions,

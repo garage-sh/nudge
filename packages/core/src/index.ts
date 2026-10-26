@@ -1,4 +1,5 @@
 export * from './alert.js';
+export * from './captures.js';
 export * from './keys.js';
 export * from './lifecycle.js';
 export * from './destination.js';
