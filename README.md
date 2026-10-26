@@ -76,6 +76,8 @@ The published port listens on `127.0.0.1` only (`NUDGE_BIND`): a proxy on the sa
 
 The session cookie is `Secure`, so HTTPS is required. Browsers make an exception for `http://localhost`. To try the Instance over HTTP from another machine, `NUDGE_BIND=0.0.0.0` and `NUDGE_COOKIE_SECURE=false` lift these protections (keep `NUDGE_TRUST_PROXY=1`), but never do it on an exposed Instance.
 
+Before opening the Instance to real Authors, read [Operating an Instance](SECURITY.md#operating-an-instance): Triage routing, the per-Project Widget budget and invitation links in logs.
+
 ### Updating, backing up, scaling
 
 - **Updating**: `docker compose pull && docker compose up -d`. The `migrate` service applies the new migrations before `nudge` restarts. Read the [release notes](https://github.com/garage-sh/nudge/releases) before changing minor version. There are no down migrations: going back to a previous version means restoring the Postgres backup taken before the update.
