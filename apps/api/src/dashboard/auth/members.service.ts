@@ -13,6 +13,8 @@ export const isUniqueViolation = (error: unknown): boolean => {
   return code(error) === '23505' || code((error as { cause?: unknown })?.cause) === '23505';
 };
 
+const setupCompleted = () => new ConflictException({ error: 'setup_completed' });
+
 @Injectable()
 export class MembersService {
   /** Hash compared against when the email is unknown: the response takes the same time. */
@@ -39,21 +41,27 @@ export class MembersService {
 
   /**
    * Creates the first Member of the Instance. An advisory lock serializes concurrent
-   * setups: only one wins, the others find the setup completed.
+   * setups: only one wins, the others find the setup completed. The route stays public
+   * once the Instance is claimed: it refuses before hashing, which costs a libuv thread.
    */
   async setup(email: string, password: string): Promise<MemberView> {
+    if (!(await this.setupRequired())) throw setupCompleted();
     const hash = await hashPassword(password);
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('nudge:setup'))`);
       const [existing] = await tx.select({ id: members.id }).from(members).limit(1);
-      if (existing) throw new ConflictException({ error: 'setup_completed' });
+      if (existing) throw setupCompleted();
       return this.insert(tx, email, hash);
     });
   }
 
-  /** Creates a Member in a given transaction (invitation); 409 if the email is taken. */
-  async create(tx: Transaction, email: string, password: string): Promise<MemberView> {
-    return this.insert(tx, email, await hashPassword(password));
+  /**
+   * Creates a Member in a given transaction (invitation), from a password already
+   * hashed (`hashPassword`) so that the transaction is not held open while it hashes;
+   * 409 if the email is taken.
+   */
+  async create(tx: Transaction, email: string, passwordHash: string): Promise<MemberView> {
+    return this.insert(tx, email, passwordHash);
   }
 
   /** The Member whose credentials match, or `null`. */

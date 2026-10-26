@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hashPassword } from '../../../apps/api/src/dashboard/auth/password.js';
 import { startPipeline, type Pipeline } from './harness/index.js';
+
+// A spy that still hashes: a refusal must not cost an argon2id derivation.
+vi.mock(import('../../../apps/api/src/dashboard/auth/password.js'), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, hashPassword: vi.fn(original.hashPassword) };
+});
 
 const ADA = { email: 'ada@nudge.test', password: 'a strong password' };
 
@@ -36,6 +43,19 @@ describe('Members: setup, session, invitation', () => {
         password: 'i am taking over',
       });
       expect(intruder).toMatchObject({ status: 409, body: { error: 'setup_completed' } });
+    });
+
+    it('refuses the setup of a claimed Instance without hashing the password', async () => {
+      await pipeline.dashboard().post('/api/setup', ADA);
+      vi.mocked(hashPassword).mockClear();
+
+      const intruder = await pipeline.dashboard().post('/api/setup', {
+        email: 'intruder@nudge.test',
+        password: 'i am taking over',
+      });
+
+      expect(intruder).toMatchObject({ status: 409, body: { error: 'setup_completed' } });
+      expect(hashPassword).not.toHaveBeenCalled();
     });
 
     it('creates a single first Member when several setups arrive together', async () => {
@@ -237,10 +257,13 @@ describe('Members: setup, session, invitation', () => {
       }
     });
 
-    it('refuses an unknown link', async () => {
+    it('refuses an unknown link, without hashing the password', async () => {
+      vi.mocked(hashPassword).mockClear();
+
       const unknown = await pipeline.dashboard().post('/api/invitations/unknown/accept', BOB);
 
       expect(unknown).toMatchObject({ status: 404, body: { error: 'invalid_invitation' } });
+      expect(hashPassword).not.toHaveBeenCalled();
     });
 
     it('refuses an email already taken without consuming the link', async () => {
