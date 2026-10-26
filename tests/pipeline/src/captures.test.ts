@@ -56,6 +56,8 @@ describe('Captures', () => {
     expect(image.status).toBe(200);
     expect(image.headers.get('content-type')).toBe('image/png');
     expect(image.headers.get('x-content-type-options')).toBe('nosniff');
+    // Erased with its Feedback, it must not outlive it in the browser cache.
+    expect(image.headers.get('cache-control')).toBe('no-store');
     expect(image.bytes).toEqual(new Uint8Array(PNG));
   });
 
