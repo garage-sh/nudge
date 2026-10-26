@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { argon2Sync, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { hashPassword, verifyPassword } from './password.js';
@@ -40,5 +41,21 @@ describe('Passwords', () => {
 
   it('refuses an unreadable hash', async () => {
     expect(await verifyPassword(PASSWORD, 'not a hash')).toBe(false);
+  });
+
+  it('answers 503 server_busy at once beyond the derivations it can queue', async () => {
+    const results = await Promise.allSettled(
+      Array.from({ length: 40 }, () => hashPassword(PASSWORD)),
+    );
+
+    const refused = results.filter((result) => result.status === 'rejected');
+    expect(refused).toHaveLength(40 - 2 - 32);
+    for (const { reason } of refused) {
+      expect(reason).toBeInstanceOf(ServiceUnavailableException);
+      expect((reason as ServiceUnavailableException).getResponse()).toEqual({
+        error: 'server_busy',
+      });
+    }
+    expect(await verifyPassword(PASSWORD, await hashPassword(PASSWORD))).toBe(true);
   });
 });

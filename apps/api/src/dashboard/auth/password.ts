@@ -1,5 +1,7 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { argon2, randomBytes, timingSafeEqual, type Argon2Parameters } from 'node:crypto';
 import { promisify } from 'node:util';
+import { ConcurrencyLimit } from '../../infra/concurrency-limit.js';
 
 const argon2Async = promisify(argon2);
 
@@ -8,8 +10,22 @@ const PARAMETERS = { memory: 19_456, passes: 2, parallelism: 1, tagLength: 32 } 
 
 type Argon2Settings = Pick<Argon2Parameters, 'memory' | 'passes' | 'parallelism' | 'tagLength'>;
 
-const derive = (password: string, nonce: Buffer, parameters: Argon2Settings) =>
-  argon2Async('argon2id', { message: password, nonce, ...parameters });
+/**
+ * A derivation holds a libuv thread for about 40 ms, and the pool (4 threads) also
+ * serves disk Captures and DNS lookups: two at once, whatever the number of IPs
+ * asking. Beyond the queue, 503 `server_busy` at once rather than an endless wait.
+ */
+const derivations = new ConcurrencyLimit({ concurrency: 2, waiting: 32 });
+
+async function derive(password: string, nonce: Buffer, parameters: Argon2Settings) {
+  const release = await derivations.acquire();
+  if (!release) throw new ServiceUnavailableException({ error: 'server_busy' });
+  try {
+    return await argon2Async('argon2id', { message: password, nonce, ...parameters });
+  } finally {
+    release();
+  }
+}
 
 /** argon2id hash in PHC format: `$argon2id$v=19$m=…,t=…,p=…$<salt>$<hash>`. */
 export async function hashPassword(password: string): Promise<string> {

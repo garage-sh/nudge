@@ -84,6 +84,7 @@ export const fr: Messages = {
     destination_not_found: 'Cette Destination n’existe plus.',
     unknown_destination_type: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
     session_required: 'Votre session a expiré : reconnectez-vous.',
+    server_busy: 'L’Instance vérifie déjà d’autres mots de passe. Réessayez dans un instant.',
   },
   unreachable: 'L’Instance est injoignable. Réessayez.',
   unexpectedError: (code) => `Erreur inattendue (${code}).`,
