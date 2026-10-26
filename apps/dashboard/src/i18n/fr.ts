@@ -84,6 +84,13 @@ export const fr: Messages = {
     destination_not_found: 'Cette Destination n’existe plus.',
     unknown_destination_type: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
     session_required: 'Votre session a expiré : reconnectez-vous.',
+    invalid_setup_token:
+      'Ce jeton d’installation est incorrect : copiez-le depuis les journaux du serveur nudge, ou depuis NUDGE_SETUP_TOKEN.',
+    invalid_current_password: 'Votre mot de passe actuel est incorrect.',
+    member_not_found: 'Ce Membre n’existe plus.',
+    cannot_remove_self:
+      'Vous ne pouvez pas vous retirer vous-même : demandez-le à un autre Membre.',
+    too_many_attempts: 'Trop de tentatives : patientez une minute, puis réessayez.',
   },
   unreachable: 'L’Instance est injoignable. Réessayez.',
   unexpectedError: (code) => `Erreur inattendue (${code}).`,
@@ -174,6 +181,9 @@ export const fr: Messages = {
     title: 'Créer le premier compte',
     intro: 'Cette Instance n’a encore aucun Membre. Le compte créé ici pourra inviter les autres.',
     submit: 'Créer le compte',
+    token: 'Jeton d’installation',
+    tokenHelp:
+      'Il prouve que vous administrez cette Instance : le serveur nudge l’affiche dans ses journaux au démarrage (docker compose logs nudge), sauf si NUDGE_SETUP_TOKEN le fixe.',
   },
 
   invitation: {
@@ -210,6 +220,26 @@ export const fr: Messages = {
     list: 'Membres de l’Instance',
     you: ' (vous)',
     since: (date) => `Membre depuis le ${date}`,
+    remove: 'Retirer',
+    removeLabel: (email) => `Retirer ${email}`,
+    removeQuestion: (email) => `Retirer ${email} ? Ses sessions prennent fin aussitôt.`,
+    removed: (email) => `${email} n’est plus Membre.`,
+  },
+
+  ownAccount: {
+    title: 'Votre compte',
+    currentPassword: 'Mot de passe actuel',
+    newPassword: 'Nouveau mot de passe',
+    changePassword: 'Changer le mot de passe',
+    passwordChanged: 'Mot de passe changé. Vos autres sessions sont déconnectées.',
+    sessionsTitle: 'Sessions',
+    sessionsHelp:
+      'Un appareil perdu, un ordinateur partagé : déconnectez-vous partout ailleurs. Cette session reste ouverte.',
+    signOutOthers: 'Se déconnecter partout ailleurs',
+    signedOutOthers: (count) =>
+      count === 0
+        ? 'Aucune autre session n’était ouverte.'
+        : `${count} autre${s(count)} session${s(count)} déconnectée${s(count)}.`,
   },
 
   inbox: {

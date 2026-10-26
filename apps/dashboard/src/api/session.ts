@@ -3,7 +3,10 @@ import type {
   SetupState,
   MemberView,
   NewMember,
+  PasswordChange,
+  RevokedSessions,
   SessionView,
+  SetupRequest,
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isSessionLost } from './client.js';
@@ -48,7 +51,19 @@ function useOpenSession<V>(call: (variables: V) => Promise<SessionView>) {
 }
 
 export const useSetup = () =>
-  useOpenSession((member: NewMember) => api.post<SessionView>('/api/setup', member));
+  useOpenSession((request: SetupRequest) => api.post<SessionView>('/api/setup', request));
+
+/** Changes the signed-in Member's password; their other sessions are revoked. */
+export const useChangePassword = () =>
+  useMutation({
+    mutationFn: (change: PasswordChange) => api.put<null>('/api/account/password', change),
+  });
+
+/** "Sign out everywhere else": every session of the Member but this one. */
+export const useSignOutOthers = () =>
+  useMutation({
+    mutationFn: () => api.delete<RevokedSessions>('/api/account/other-sessions'),
+  });
 
 export const useSignIn = () =>
   useOpenSession((credentials: SignInCredentials) =>

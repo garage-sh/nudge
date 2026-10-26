@@ -1,21 +1,26 @@
 import { DASHBOARD_LIMITS } from '@nudge/shared';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useT } from '../i18n/index.js';
 import { Field, ErrorMessage } from '../layout/ui.js';
 
-/** Email + password: sign in, or create an account (setup, invitation). */
+/**
+ * Email + password: sign in, or create an account (setup, invitation). `children`: the
+ * fields a flow adds before them (the setup token).
+ */
 export function AccountForm({
   action,
   newAccount,
   pending,
   error,
   onSubmit,
+  children,
 }: {
   action: string;
   newAccount: boolean;
   pending: boolean;
   error: unknown;
   onSubmit: (credentials: { email: string; password: string }) => void;
+  children?: ReactNode;
 }) {
   const t = useT();
   const [email, setEmail] = useState('');
@@ -26,6 +31,7 @@ export function AccountForm({
   };
   return (
     <form onSubmit={submit} className="form">
+      {children}
       <Field
         label={t.account.email}
         type="email"
