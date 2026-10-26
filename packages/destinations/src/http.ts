@@ -53,5 +53,18 @@ export async function responseText(response: Response): Promise<string> {
   ).trim();
 }
 
+/** Longest link to a created issue that a Delivery keeps. */
+export const EXTERNAL_URL_MAX = 2048;
+
+/**
+ * The link to what the target created, as the service returned it: kept only if it is
+ * an https URL of bounded length, otherwise the Delivery has no link. The dashboard
+ * shows it as a link: a third-party value never sets its scheme.
+ */
+export function externalLink(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > EXTERNAL_URL_MAX) return null;
+  return URL.parse(value)?.protocol === 'https:' ? value : null;
+}
+
 /** Message of a `fetch` exception (network, timeout). */
 export { errorMessage } from '@nudge/shared';
