@@ -36,6 +36,7 @@ import type { FeedbackState, FeedbackInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
+  type ConcurrencyOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,
@@ -87,6 +88,8 @@ export interface PipelineOptions {
   readonly storage?: CaptureStorage;
   /** Period of the retention purge; the worker's otherwise. */
   readonly purge?: PurgeOptions;
+  /** Jobs each worker runs at the same time; the worker's otherwise. */
+  readonly concurrency?: ConcurrencyOptions;
 }
 
 export interface Pipeline {
@@ -275,6 +278,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.sweep ? { sweep: options.sweep } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
     ...(options.purge ? { purge: options.purge } : {}),
+    ...(options.concurrency ? { concurrency: options.concurrency } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     onSuspension: (suspension) => {
       suspensions.push(suspension);

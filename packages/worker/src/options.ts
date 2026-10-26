@@ -40,6 +40,8 @@ export interface WorkerOptions {
   readonly sweep?: SweepOptions;
   /** Period of the retention purge; `DEFAULT_PURGE` by default. */
   readonly purge?: PurgeOptions;
+  /** Jobs each worker runs at the same time, per queue; `DEFAULT_CONCURRENCY` by default. */
+  readonly concurrency?: ConcurrencyOptions;
   /** Suspension threshold, cooldown and probe period; `DEFAULT_SUSPENSION` by default. */
   readonly suspension?: SuspensionOptions;
   /**
@@ -64,6 +66,15 @@ export interface SweepOptions {
 }
 
 export const DEFAULT_SWEEP: SweepOptions = { delayMs: 5 * 60_000, intervalMs: 60_000 };
+
+export interface ConcurrencyOptions {
+  /** Triage jobs at the same time: as many Judge requests in flight. */
+  readonly triage: number;
+  /** Dispatch jobs at the same time: a slow Destination only holds one of them. */
+  readonly dispatch: number;
+}
+
+export const DEFAULT_CONCURRENCY: ConcurrencyOptions = { triage: 2, dispatch: 10 };
 
 export interface PurgeOptions {
   /**

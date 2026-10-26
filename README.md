@@ -107,6 +107,7 @@ All configuration goes through environment variables. [`.env.example`](.env.exam
 | `NUDGE_TRIAGE_JUNK_THRESHOLD`, `NUDGE_TRIAGE_MANIPULATION_THRESHOLD`, `NUDGE_TRIAGE_CONFIDENCE_THRESHOLD`            | Thresholds of the Verdict policy (0.8, 0.7, 0.6)                                                            |
 | `NUDGE_SUSPENSION_FAILURE_THRESHOLD`, `NUDGE_SUSPENSION_COOLDOWN_MS`, `NUDGE_SUSPENSION_PROBE_INTERVAL_MS`           | Destination suspension (5 failures, 5 min, probe every minute)                                              |
 | `NUDGE_PURGE_INTERVAL_MS`                                                                                            | Period of the Retention purge (1 h)                                                                         |
+| `NUDGE_TRIAGE_CONCURRENCY`, `NUDGE_DISPATCH_CONCURRENCY`                                                             | Jobs a worker runs at the same time: Triages (2) and Deliveries (10)                                        |
 | `NUDGE_CAPTURES_STORAGE`, `NUDGE_CAPTURES_DIR`, `NUDGE_S3_*`                                                         | Capture storage: `disk` or S3-compatible (`s3`)                                                             |
 
 ### Judge

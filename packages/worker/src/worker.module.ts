@@ -42,6 +42,7 @@ import {
 } from './tokens.js';
 import { JudgeResolver } from './judge-resolver.js';
 import {
+  DEFAULT_CONCURRENCY,
   DEFAULT_SWEEP,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
@@ -173,10 +174,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: purge.intervalMs },
       { name: PURGE_RETENTION_JOB },
     );
+    const concurrency = this.options.concurrency ?? DEFAULT_CONCURRENCY;
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
         connection: this.redis,
         prefix,
+        concurrency: concurrency.triage,
       }),
       new Worker<DispatchJob>(
         DISPATCH_QUEUE,
@@ -184,7 +187,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           this.dispatch.handle(job.data, {
             lastAttempt: isLastAttempt(job),
           }),
-        { connection: this.redis, prefix },
+        { connection: this.redis, prefix, concurrency: concurrency.dispatch },
       ),
       new Worker<AlertJob>(
         ALERTS_QUEUE,

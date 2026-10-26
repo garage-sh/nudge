@@ -20,10 +20,11 @@ describe('Worker configuration from environment variables', () => {
       judgeTimeoutMs: 30_000,
       suspension: { failureThreshold: 5, cooldownMs: 300_000, probeIntervalMs: 60_000 },
       purge: { intervalMs: 3_600_000 },
+      concurrency: { triage: 2, dispatch: 10 },
     });
   });
 
-  it('reads the Triage thresholds, the Judge timeout, the Suspension, the purge and the dashboard', () => {
+  it('reads the Triage thresholds, the Judge timeout, the Suspension, the purge, the concurrency and the dashboard', () => {
     const config = workerConfigFromEnv({
       ...MINIMAL,
       NUDGE_TRIAGE_JUNK_THRESHOLD: '0.9',
@@ -34,6 +35,8 @@ describe('Worker configuration from environment variables', () => {
       NUDGE_SUSPENSION_COOLDOWN_MS: '600000',
       NUDGE_SUSPENSION_PROBE_INTERVAL_MS: '30000',
       NUDGE_PURGE_INTERVAL_MS: '900000',
+      NUDGE_TRIAGE_CONCURRENCY: '4',
+      NUDGE_DISPATCH_CONCURRENCY: '25',
       NUDGE_DASHBOARD_URL: 'https://nudge.example.com',
     });
 
@@ -42,6 +45,7 @@ describe('Worker configuration from environment variables', () => {
       judgeTimeoutMs: 45_000,
       suspension: { failureThreshold: 3, cooldownMs: 600_000, probeIntervalMs: 30_000 },
       purge: { intervalMs: 900_000 },
+      concurrency: { triage: 4, dispatch: 25 },
       dashboardUrl: 'https://nudge.example.com',
     });
   });
@@ -61,6 +65,8 @@ describe('Worker configuration from environment variables', () => {
     ['NUDGE_JUDGE_TIMEOUT_MS', '30s'],
     ['NUDGE_SUSPENSION_FAILURE_THRESHOLD', '2.5'],
     ['NUDGE_PURGE_INTERVAL_MS', '-1'],
+    ['NUDGE_DISPATCH_CONCURRENCY', '0'],
+    ['NUDGE_TRIAGE_CONCURRENCY', '1.5'],
     ['NUDGE_DASHBOARD_URL', 'nudge.example.com'],
   ])('refuses to start with %s=%s', (variable, value) => {
     expect(() => workerConfigFromEnv({ ...MINIMAL, [variable]: value })).toThrow(variable);
