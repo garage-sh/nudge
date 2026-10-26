@@ -7,8 +7,12 @@ import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
 import type { InfraOptions } from './infra/infra.module.js';
 
-/** Express `trust proxy` setting: boolean, number of proxies, or trusted addresses. */
-export type TrustProxy = boolean | number | string;
+/**
+ * Express `trust proxy` setting: none (`false`), number of proxies, or trusted
+ * addresses. Never `true`, which trusts the leftmost, client-supplied
+ * `X-Forwarded-For`.
+ */
+export type TrustProxy = false | number | string;
 
 export interface ApiOptions extends InfraOptions, IngestionOptions {
   /** `false` turns off Nest logs (tests). */

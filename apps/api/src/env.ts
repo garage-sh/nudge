@@ -24,15 +24,21 @@ export type ApiConfig = Required<
 > & { readonly port: number; readonly storage: StorageConfig };
 
 /**
- * `NUDGE_TRUST_PROXY` as Express understands it: `true`/`false`, a number of proxies to
+ * `NUDGE_TRUST_PROXY` as Express understands it: `false`, a number of proxies to
  * traverse from the right of `X-Forwarded-For`, or trusted addresses and subnets
  * (`loopback, uniquelocal`, `10.0.0.0/8`). Absent: no proxy, the IP seen is the
- * connection's.
+ * connection's. `true` is refused: Express would take the leftmost address, which the
+ * client writes itself, and every per-IP limit would be the client's to choose.
  */
 function trustProxyFromEnv(env: Env): TrustProxy {
   const value = optionalEnv(env, 'NUDGE_TRUST_PROXY');
   if (value === null || value === 'false') return false;
-  if (value === 'true') return true;
+  if (value === 'true') {
+    throw new Error(
+      'Invalid NUDGE_TRUST_PROXY: "true" (trusts a client-supplied X-Forwarded-For; ' +
+        'expected the number of proxies in front of the api, or their addresses)',
+    );
+  }
   if (/^\d+$/.test(value)) return Number(value);
   return value;
 }

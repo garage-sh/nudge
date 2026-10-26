@@ -46,7 +46,6 @@ describe('Api configuration from environment variables', () => {
   it.each([
     ['1', 1],
     ['2', 2],
-    ['true', true],
     ['false', false],
     ['loopback, uniquelocal', 'loopback, uniquelocal'],
     ['10.0.0.0/8', '10.0.0.0/8'],
@@ -60,6 +59,7 @@ describe('Api configuration from environment variables', () => {
     ['NUDGE_WIDGET_RATE_LIMIT_IP', '0'],
     ['NUDGE_WIDGET_RATE_LIMIT_PROJECT', 'unlimited'],
     ['NUDGE_CAPTURES_DIR', 'captures'],
+    ['NUDGE_TRUST_PROXY', 'true'],
   ])('refuses to start with %s=%s', (variable, value) => {
     expect(() => apiConfigFromEnv({ ...MINIMAL, [variable]: value })).toThrow(variable);
   });
