@@ -211,3 +211,47 @@ describe('Judge from environment variables', () => {
     expect(provider.requests.at(-1)).toMatchObject({ path: '/v1/decisions' });
   });
 });
+
+describe('Judge behind the outbound policy (NUDGE_OUTBOUND_ALLOWED_HOSTS empty)', () => {
+  let pipeline: Pipeline;
+  let provider: FakeDecisionsServer;
+
+  beforeAll(async () => {
+    provider = await FakeDecisionsServer.start();
+    pipeline = await startPipeline({
+      judge: 'instance',
+      outboundAllowedHosts: [],
+      defaultJudge: { provider: 'self_hosted', apiKey: null, model: null, baseUrl: provider.url },
+    });
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+    await provider?.stop();
+  });
+
+  it('the NUDGE_JUDGE_* Judge, set by the Self-hoster, reaches an internal host', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Internal default' });
+    await pipeline.createDestination(project.id);
+    provider.respondWith({ type: 'bug', severity: 1 });
+
+    const response = await pipeline.postFeedback(secretKey, { text: 'Self-hoster Judge' });
+    const { id } = (await response.json()) as { id: string };
+
+    await pipeline.waitForFeedback(id, (r) => r.state === 'dispatched');
+  });
+
+  it('the Judge a Member chose at an internal address is refused before any request', async () => {
+    const dashboard = await pipeline.signIn();
+    await dashboard.put('/api/instance/judge', { provider: 'self_hosted', baseUrl: provider.url });
+    const { project } = await pipeline.createProject({ name: 'Internal Instance Judge' });
+    const feedbackId = await pipeline.insertFeedbackWithoutTriage(project.id, {
+      text: 'Member Judge',
+    });
+    const before = provider.requests.length;
+
+    await expect(pipeline.replayTriage(feedbackId)).rejects.toThrow('NUDGE_OUTBOUND_ALLOWED_HOSTS');
+    expect(provider.requests).toHaveLength(before);
+    expect((await pipeline.readFeedback(feedbackId))?.state).toBe('received');
+  });
+});

@@ -7,6 +7,7 @@ import {
   DEFAULT_TRIAGE_THRESHOLDS,
   type Env,
 } from '@nudge/core';
+import { outboundPolicyFromEnv, type OutboundPolicy } from '@nudge/destinations';
 import { judgeConfigFromEnv } from '@nudge/judge';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import {
@@ -30,7 +31,7 @@ export type WorkerConfig = Required<
     | 'suspension'
     | 'purge'
   >
-> & { readonly storage: StorageConfig };
+> & { readonly storage: StorageConfig; readonly outbound: OutboundPolicy };
 
 const probabilityBounds = { min: 0, max: 1 };
 const durationBounds = { min: 1 };
@@ -50,6 +51,8 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
     defaultJudge: judgeConfigFromEnv(env),
     // The same storage as the api's: a shared volume, or an S3 bucket.
     storage: storageConfigFromEnv(env),
+    // Internal hosts a Member-configured URL may reach (Judge, Destinations).
+    outbound: outboundPolicyFromEnv(env),
     dashboardUrl: httpUrlEnv(env, 'NUDGE_DASHBOARD_URL'),
     triageThresholds: {
       junk: numberEnv(env, 'NUDGE_TRIAGE_JUNK_THRESHOLD', thresholds.junk, probabilityBounds),

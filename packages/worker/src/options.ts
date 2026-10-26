@@ -24,6 +24,12 @@ export interface WorkerOptions {
   readonly judge?: Judge | null;
   /** Judge from the `NUDGE_JUDGE_*` variables, when the Instance has not chosen one. */
   readonly defaultJudge?: JudgeConfig | null;
+  /**
+   * HTTP client of the Judge chosen in the dashboard, whose base URL a Member typed:
+   * `guardedFetch` of `NUDGE_OUTBOUND_ALLOWED_HOSTS` (`apps/api/src/main.ts`); only public
+   * addresses by default. The `NUDGE_JUDGE_*` Judge, set by the Self-hoster, is not guarded.
+   */
+  readonly outboundFetch?: typeof globalThis.fetch;
   /** Time after which a Judge request is abandoned and retried (30 s by default). */
   readonly judgeTimeoutMs?: number;
   /** Thresholds of the Verdict policy; `DEFAULT_TRIAGE_THRESHOLDS` by default. */

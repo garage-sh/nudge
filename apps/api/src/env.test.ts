@@ -15,6 +15,7 @@ describe('Api configuration from environment variables', () => {
       redisUrl: MINIMAL.REDIS_URL,
       encryptionKey: MINIMAL.NUDGE_ENCRYPTION_KEY,
       storage: { type: 'disk', dir: '/var/lib/nudge/captures' },
+      outbound: { allowedHosts: [] },
       sessionCookieSecure: true,
       trustProxy: false,
       widgetLimits: {
@@ -54,7 +55,15 @@ describe('Api configuration from environment variables', () => {
     expect(apiConfigFromEnv({ ...MINIMAL, NUDGE_TRUST_PROXY: value }).trustProxy).toEqual(expected);
   });
 
+  it('reads the internal hosts a Member-configured URL may reach', () => {
+    expect(
+      apiConfigFromEnv({ ...MINIMAL, NUDGE_OUTBOUND_ALLOWED_HOSTS: 'hooks.lan,10.0.0.0/8' })
+        .outbound,
+    ).toEqual({ allowedHosts: ['hooks.lan', '10.0.0.0/8'] });
+  });
+
   it.each([
+    ['NUDGE_OUTBOUND_ALLOWED_HOSTS', 'http://hooks.lan'],
     ['NUDGE_COOKIE_SECURE', 'no'],
     ['NUDGE_API_PORT', '70000'],
     ['NUDGE_WIDGET_RATE_LIMIT_IP', '0'],

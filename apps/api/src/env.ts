@@ -6,6 +6,7 @@ import {
   requireEnv,
   type Env,
 } from '@nudge/core';
+import { outboundPolicyFromEnv, type OutboundPolicy } from '@nudge/destinations';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import type { ApiOptions, TrustProxy } from './api.js';
 import { DEFAULT_WIDGET_LIMITS } from './ingestion/widget-access.js';
@@ -21,7 +22,11 @@ export type ApiConfig = Required<
     | 'trustProxy'
     | 'widgetLimits'
   >
-> & { readonly port: number; readonly storage: StorageConfig };
+> & {
+  readonly port: number;
+  readonly storage: StorageConfig;
+  readonly outbound: OutboundPolicy;
+};
 
 /**
  * `NUDGE_TRUST_PROXY` as Express understands it: `true`/`false`, a number of proxies to
@@ -50,6 +55,8 @@ export function apiConfigFromEnv(env: Env): ApiConfig {
     encryptionKey: requireEnv(env, ENCRYPTION_KEY_VARIABLE),
     // The same storage as the worker's: a shared volume, or an S3 bucket.
     storage: storageConfigFromEnv(env),
+    // Internal hosts a Member-configured URL may reach (test buttons of the Destinations).
+    outbound: outboundPolicyFromEnv(env),
     sessionCookieSecure: booleanEnv(env, 'NUDGE_COOKIE_SECURE', true),
     trustProxy: trustProxyFromEnv(env),
     widgetLimits: {
