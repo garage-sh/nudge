@@ -15,6 +15,7 @@ describe('Worker configuration from environment variables', () => {
       encryptionKey: MINIMAL.NUDGE_ENCRYPTION_KEY,
       defaultJudge: null,
       storage: { type: 'disk', dir: '/var/lib/nudge/captures' },
+      outbound: { allowedHosts: [] },
       dashboardUrl: null,
       triageThresholds: { junk: 0.8, manipulation: 0.7, confidence: 0.6 },
       judgeTimeoutMs: 30_000,
@@ -62,6 +63,7 @@ describe('Worker configuration from environment variables', () => {
     ['NUDGE_SUSPENSION_FAILURE_THRESHOLD', '2.5'],
     ['NUDGE_PURGE_INTERVAL_MS', '-1'],
     ['NUDGE_DASHBOARD_URL', 'nudge.example.com'],
+    ['NUDGE_OUTBOUND_ALLOWED_HOSTS', '10.0.0.0/40'],
   ])('refuses to start with %s=%s', (variable, value) => {
     expect(() => workerConfigFromEnv({ ...MINIMAL, [variable]: value })).toThrow(variable);
   });
@@ -75,6 +77,12 @@ describe('Worker configuration from environment variables', () => {
     });
     expect(config.defaultJudge).toMatchObject({ provider: 'typesafe', apiKey: 'ts-dummy' });
     expect(config.storage).toEqual({ type: 'disk', dir: '/srv/captures' });
+  });
+
+  it('reads the internal hosts a Member-configured URL may reach (Judge, Destinations)', () => {
+    expect(
+      workerConfigFromEnv({ ...MINIMAL, NUDGE_OUTBOUND_ALLOWED_HOSTS: 'decider' }).outbound,
+    ).toEqual({ allowedHosts: ['decider'] });
   });
 
   it.each(['DATABASE_URL', 'REDIS_URL', 'NUDGE_ENCRYPTION_KEY'])(

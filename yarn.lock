@@ -1407,6 +1407,7 @@ __metadata:
     markdown-it: "npm:^14.1.0"
     tsup: "npm:^8.5.1"
     typescript: "npm:~5.9.3"
+    undici: "npm:^8.12.1"
     vitest: "npm:^5.0.5"
   languageName: unknown
   linkType: soft

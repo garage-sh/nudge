@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import type { INestApplicationContext } from '@nestjs/common';
-import { resolveDestinationAdapter } from '@nudge/destinations';
+import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
 import { createStorage } from '@nudge/storage';
 import { workerConfigFromEnv, createWorker } from '@nudge/worker';
 import { createApi } from './api.js';
@@ -18,19 +18,24 @@ async function main() {
   const worker = roles.has('worker') ? workerConfigFromEnv(process.env) : null;
   // The api and the worker of the same process share the Capture storage.
   const captureStorage = createStorage((api ?? worker)!.storage);
+  // Every call to a URL a Member configured (Destinations, Alert destination, Judge).
+  const outboundFetch = guardedFetch((api ?? worker)!.outbound);
+  const resolveDestinationAdapter = destinationAdapterResolver({ fetch: outboundFetch });
 
   // In shutdown order: the api stops accepting Feedbacks before the worker finishes
   // its running jobs.
   const started: INestApplicationContext[] = [];
   if (api) {
-    const { port, storage: _storage, ...config } = api;
+    const { port, storage: _storage, outbound: _outbound, ...config } = api;
     const app = await createApi({ ...config, resolveDestinationAdapter, captureStorage });
     await app.listen(port);
     started.push(app);
   }
   if (worker) {
-    const { storage: _storage, ...config } = worker;
-    started.push(await createWorker({ ...config, resolveDestinationAdapter, captureStorage }));
+    const { storage: _storage, outbound: _outbound, ...config } = worker;
+    started.push(
+      await createWorker({ ...config, resolveDestinationAdapter, captureStorage, outboundFetch }),
+    );
   }
 
   // No `enableShutdownHooks`: each Nest context would kill the process as soon as it

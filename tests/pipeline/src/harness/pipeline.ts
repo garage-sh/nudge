@@ -30,7 +30,7 @@ import {
   type LoadedFeedback,
 } from '@nudge/database';
 import type { JudgeConfig } from '@nudge/judge';
-import { resolveDestinationAdapter as realAdapters } from '@nudge/destinations';
+import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
 import type { FeedbackState, FeedbackInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
@@ -69,6 +69,12 @@ export interface PipelineOptions {
    * receivers. By default, each Destination is served by its `FakeDestination`.
    */
   readonly destinations?: 'fakes' | 'real';
+  /**
+   * Internal hosts the real adapters and the Instance's Judge may reach
+   * (`NUDGE_OUTBOUND_ALLOWED_HOSTS`): by default `127.0.0.1`, where the test receivers
+   * and servers listen.
+   */
+  readonly outboundAllowedHosts?: readonly string[];
   /** Suspension threshold, cooldown and probe; the worker's otherwise. */
   readonly suspension?: SuspensionOptions;
   /** Public URL of the dashboard (`NUDGE_DASHBOARD_URL`): links in Deliveries and alerts. */
@@ -259,8 +265,13 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const suspensions: Suspension[] = [];
   const encryptionKey = randomBytes(32).toString('base64');
   const cipher = createSecretCipher(encryptionKey);
+  const outboundFetch = guardedFetch({
+    allowedHosts: options.outboundAllowedHosts ?? ['127.0.0.1'],
+  });
   const resolveDestinationAdapter: DestinationAdapterResolver =
-    options.destinations === 'real' ? realAdapters : (destination) => fakeFor(destination.id);
+    options.destinations === 'real'
+      ? destinationAdapterResolver({ fetch: outboundFetch })
+      : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,
@@ -273,7 +284,9 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   };
   const workerOptions = {
     ...infra,
-    ...(judge === 'instance' ? { defaultJudge: options.defaultJudge ?? null } : { judge }),
+    ...(judge === 'instance'
+      ? { defaultJudge: options.defaultJudge ?? null, outboundFetch }
+      : { judge }),
     ...(options.triageThresholds ? { triageThresholds: options.triageThresholds } : {}),
     ...(options.judgeTimeoutMs ? { judgeTimeoutMs: options.judgeTimeoutMs } : {}),
     ...(options.sweep ? { sweep: options.sweep } : {}),

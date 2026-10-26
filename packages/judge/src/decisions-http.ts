@@ -1,4 +1,4 @@
-import { errorMessage } from '@nudge/shared';
+import { errorMessage, readTextPrefix } from '@nudge/shared';
 import {
   JudgeRefusedError,
   JudgeTransientError,
@@ -31,6 +31,9 @@ export interface DecisionsClient {
 
 /** Maximum length of a provider's error message carried over into our errors. */
 const MESSAGE_MAX = 300;
+
+/** Bytes of an error response read to find its message (JSON `error.message` or `detail`). */
+const ERROR_BODY_MAX = 8 * 1024;
 
 export function decisionsJudge(client: DecisionsClient): Judge {
   return {
@@ -100,6 +103,8 @@ async function call(
   try {
     response = await fetch(client.url, {
       method: 'POST',
+      // The key never follows a redirect to another host: the final URL is configured.
+      redirect: 'manual',
       headers: {
         'content-type': 'application/json',
         ...(client.apiKey ? { authorization: `Bearer ${client.apiKey}` } : {}),
@@ -114,8 +119,20 @@ async function call(
     });
   }
 
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new JudgeRefusedError(
+      'request',
+      `${client.provider} responded ${response.status}: redirect refused, configure the final URL`,
+      response.status,
+    );
+  }
+  if (!response.ok) {
+    // Only the start of an error body is read: its message is truncated anyway.
+    const start = await readTextPrefix(response, ERROR_BODY_MAX);
+    throw httpError(client.provider, response.status, start);
+  }
   const text = await response.text().catch(() => '');
-  if (!response.ok) throw httpError(client.provider, response.status, text);
   try {
     return JSON.parse(text) as unknown;
   } catch {

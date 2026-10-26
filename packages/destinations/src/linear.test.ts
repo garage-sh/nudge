@@ -602,6 +602,25 @@ describe('Linear adapter', () => {
     });
   });
 
+  it.each([
+    ['a javascript: URL', 'javascript:alert(1)'],
+    ['an http URL', 'http://linear.app/shop/issue/ENG-123'],
+    ['an overlong URL', `${ISSUE_URL}?${'a'.repeat(2048)}`],
+    ['no URL', null],
+  ])('keeps no link when Linear returns %s', async (_, url) => {
+    const created = {
+      ...LINEAR.issueCreated,
+      body: {
+        data: {
+          issueCreate: { success: true, issue: { id: 'issue-1', identifier: 'ENG-1', url } },
+        },
+      },
+    };
+    const { fetch } = linear(LINEAR.team, created);
+
+    expect(await adapter(fetch).send(DELIVERY)).toEqual({ status: 'delivered', externalUrl: null });
+  });
+
   it('a creation without an issue (success false) is a permanent failure', async () => {
     const { fetch } = linear(LINEAR.team, LINEAR.creationRefused);
 

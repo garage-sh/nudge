@@ -19,6 +19,7 @@ import {
   classifyStatus,
   httpFailure,
   errorMessage,
+  externalLink,
   failureMessage,
   responseText,
 } from './http.js';
@@ -84,7 +85,7 @@ export function gitHubAdapter(
     const created = (await response.json().catch(() => ({}))) as { html_url?: unknown };
     return {
       status: 'delivered',
-      externalUrl: typeof created.html_url === 'string' ? created.html_url : null,
+      externalUrl: externalLink(created.html_url),
     };
   }
 

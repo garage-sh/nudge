@@ -225,6 +225,49 @@ describe.each(PROVIDERS)('$name Judge: common contract', (f) => {
     }
   });
 
+  it('does not follow redirects: a 3xx is a "request" refusal, the key goes nowhere else', async () => {
+    const inits: RequestInit[] = [];
+    const fetch = (async (_url: string | URL, init: RequestInit = {}) => {
+      inits.push(init);
+      return new Response(null, { status: 307, headers: { location: 'http://elsewhere.test/' } });
+    }) as typeof globalThis.fetch;
+
+    const error = await f
+      .judge(fetch)
+      .judge(triageRequest)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(JudgeRefusedError);
+    expect(error).toMatchObject({ reason: 'request', status: 307 });
+    expect((error as Error).message).toContain('redirect refused');
+    expect(inits[0]?.redirect).toBe('manual');
+  });
+
+  it('reads only the start of an error body: an endless body is cancelled, not downloaded', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1024;
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetch = (async () => new Response(endless, { status: 500 })) as typeof globalThis.fetch;
+
+    const error = await f
+      .judge(fetch)
+      .judge(triageRequest)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(JudgeTransientError);
+    expect((error as Error).message.length).toBeLessThan(400);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(64 * 1024);
+  });
+
   it('rejects a response that does not answer the questions asked', async () => {
     const body = f.triage.body as { answers: Record<string, unknown> };
     const incomplete = { ...body, answers: { ...body.answers, severity: undefined } };
