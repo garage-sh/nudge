@@ -114,6 +114,29 @@ describe('Judge chosen for the Instance', () => {
     });
   });
 
+  it('keeps the key when the host is written differently, forgets it when the path changes', async () => {
+    const dashboard = await pipeline.signIn();
+    await dashboard.put('/api/instance/judge', {
+      provider: 'openrouter',
+      apiKey: 'sk-or-secret',
+      baseUrl: 'https://proxy.example/judge',
+    });
+
+    // Same server: host case, default port and trailing slash do not change it.
+    const sameServer = await dashboard.put('/api/instance/judge', {
+      provider: 'openrouter',
+      baseUrl: 'https://PROXY.example:443/judge/',
+    });
+    expect(sameServer.status).toBe(200);
+    expect(sameServer.body).toMatchObject({ keyConfigured: true });
+
+    const otherPath = await dashboard.put('/api/instance/judge', {
+      provider: 'openrouter',
+      baseUrl: 'https://proxy.example/other',
+    });
+    expect(otherPath.status).toBe(400);
+  });
+
   it('a self-hosted Decisions API server serves as Judge, without a key', async () => {
     const dashboard = await pipeline.signIn();
     const withoutUrl = await dashboard.put('/api/instance/judge', { provider: 'self_hosted' });
