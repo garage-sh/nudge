@@ -13,6 +13,12 @@ export interface DeclaredAuthor {
 /** Free-form host metadata (version, environment…), attached to the Feedback context. */
 export type Metadata = Readonly<Record<string, string | number | boolean | null>>;
 
+/**
+ * Rewrites the page URL before it is attached to the Feedback context: it receives the
+ * full URL (fragment included) and returns the one to send, or `null` to send none.
+ */
+export type RedactUrl = (url: URL) => URL | string | null;
+
 /** What the integrator gives the Widget. */
 export interface WidgetOptions {
   /** The Project's public key (`nk_pub_…`). */
@@ -23,4 +29,9 @@ export interface WidgetOptions {
   readonly metadata?: Metadata;
   /** The Widget's language; detected from the page, then the browser, when omitted. */
   readonly locale?: Locale;
+  /**
+   * Redacts the page URL (query parameters carrying a token, an ID…). Without it, the
+   * URL is sent without its fragment, which often carries tokens (OAuth, magic links).
+   */
+  readonly redactUrl?: RedactUrl;
 }

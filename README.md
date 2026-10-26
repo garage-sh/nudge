@@ -135,7 +135,7 @@ By default, Captures are written to disk (`NUDGE_CAPTURES_STORAGE=disk`), in the
 ></script>
 ```
 
-The Widget adds a "Send feedback" button to the page, which opens a form. It is isolated in a Shadow DOM: its CSS and the page's do not interfere. It is only accepted from the Project's **Allowed origins**. It automatically attaches the page URL, the browser, the OS and the screen size.
+The Widget adds a "Send feedback" button to the page, which opens a form. It is isolated in a Shadow DOM: its CSS and the page's do not interfere. It is only accepted from the Project's **Allowed origins**. It automatically attaches the page URL (without its `#fragment`, see **Page URL** below), the browser, the OS and the screen size.
 
 **Language.** The Widget speaks English and French. Without a `locale`, it follows the page's `<html lang>`, then the browser's language: French if either is French, English otherwise. To force it, add `data-locale="en"` or `data-locale="fr"` to the script tag (or the `locale` option below).
 
@@ -150,15 +150,27 @@ To pass the signed-in user's identity and metadata, omit `data-public-key` and `
     author: { id: 'u-42', email: 'ada@example.com', name: 'Ada' },
     metadata: { version: '2.3.1', environment: 'production' },
     locale: 'en', // optional: 'en' | 'fr', detected when omitted
+    redactUrl: (url) => url.origin + url.pathname, // optional: see "Page URL" below
   });
 </script>
 ```
 
-The script also defines the `<nudge-widget>` custom element, which you can place yourself: `<nudge-widget public-key="nk_pub_…" api="https://nudge.example.com" locale="fr"></nudge-widget>`, with `author` and `metadata` set as properties.
+The script also defines the `<nudge-widget>` custom element, which you can place yourself: `<nudge-widget public-key="nk_pub_…" api="https://nudge.example.com" locale="fr"></nudge-widget>`, with `author`, `metadata` and `redactUrl` set as properties.
+
+**Page URL.** By default, the Widget sends the page URL without its fragment (`#…`), where tokens often travel (OAuth implicit flow, magic links). If the URL carries other sensitive data, such as a token or a personal ID in the query string, pass `redactUrl`. It receives the full page URL as a `URL` (fragment included) and returns the URL to send (a `URL` or a string), or `null` to send none. For example, to drop a query parameter:
+
+```js
+redactUrl: (url) => {
+  url.searchParams.delete('token');
+  return url;
+},
+```
+
+If `redactUrl` throws or returns something other than an absolute URL, the Feedback is sent without a URL rather than with the unredacted one.
 
 An identity coming from the browser is recorded as **declared**, never as attested: anyone can forge it. For a trustworthy identity, send the Feedback from your server with the SDK.
 
-**Captures.** The Author can tick "Attach a screenshot of the page". They then see a preview, on which they can blur areas before sending, and nothing is captured without their consent. Mark sensitive elements with `data-nudge-mask`: they are always masked, in the browser, before the image leaves the page.
+**Captures.** The Author can tick "Attach a screenshot of the page". They then see a preview, on which they can blur areas before sending, and nothing is captured without their consent. Mark sensitive elements with `data-nudge-mask`: they are always masked, in the browser, before the image leaves the page. This covers open Shadow DOMs and same-origin iframes too. An iframe whose content the page cannot read (another site, a sandbox) is always masked whole.
 
 ```html
 <div data-nudge-mask>IBAN: FR76 …</div>
@@ -202,6 +214,8 @@ try {
   if (error instanceof NudgeError) console.error(error.status, error.code, error.details);
 }
 ```
+
+The Instance `url` must use HTTPS: the secret key travels in every request, and `createClient` throws on a plain `http://` URL. The only exception is the machine itself (`localhost`, `127.0.0.1`, `[::1]`), for local development.
 
 The SDK does not retry a submission on its own. Pass `{ signal }` as the second argument to bound the call in time.
 

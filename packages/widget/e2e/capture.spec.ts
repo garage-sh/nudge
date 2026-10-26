@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test, type FakeApi } from './host.js';
 
+const OTHER_ORIGIN = 'https://other.example';
+
 /**
  * The host page: a sensitive area marked `data-nudge-mask` (red), another one inside
  * the Shadow DOM of a host component, a control area (green) and a black-and-white
@@ -157,6 +159,64 @@ test('always masks data-nudge-mask elements, even inside a Shadow DOM', async ({
   expect(rgb(stats[1]!.max)).toEqual(mask);
   // Not a single pixel of the sensitive areas spills past the mask.
   expect(stats[2]!.reds).toBe(0);
+});
+
+/**
+ * A host page with framed content: a same-origin frame (`srcdoc`, with a border and a
+ * padding) holding a masked element (red) next to plain content (green), and a frame
+ * from another site whose content the Widget cannot inspect (red).
+ */
+const FRAMED_PAGE = {
+  head: `<style>
+  body { margin: 0; background: #ffffff; }
+  iframe { position: absolute; width: 400px; height: 200px; border: 0; }
+</style>`,
+  body: `
+<iframe id="same-origin" style="left: 40px; top: 40px; border: 8px solid rgb(0, 0, 255); padding: 12px" srcdoc="<body style='margin: 0; background: #fff'>
+  <p data-nudge-mask style='position: absolute; left: 20px; top: 20px; width: 200px; height: 100px; margin: 0;
+    background: rgb(255, 0, 0); color: rgb(255, 0, 0); font-size: 40px'>SECRET-1234</p>
+  <div style='position: absolute; left: 240px; top: 20px; width: 100px; height: 100px; background: rgb(0, 128, 0)'></div>
+</body>"></iframe>
+<iframe id="cross-origin" style="left: 500px; top: 40px" src="${OTHER_ORIGIN}/embed"></iframe>`,
+};
+
+test('masks data-nudge-mask elements inside a same-origin frame, and covers frames it cannot inspect', async ({
+  page,
+  host,
+  api,
+}) => {
+  await page.route(`${OTHER_ORIGIN}/**`, (route) =>
+    route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: '<body style="margin: 0; background: rgb(255, 0, 0)">Account 4970 1012</body>',
+    }),
+  );
+  await host.open(FRAMED_PAGE);
+  await expect(page.frameLocator('#same-origin').getByText('SECRET-1234')).toBeAttached();
+  await expect(page.frameLocator('#cross-origin').getByText('Account 4970 1012')).toBeAttached();
+
+  await openAndAttach(page);
+  await send(page);
+
+  await expect(page.getByRole('status')).toBeVisible();
+  const { stats } = await analyze(page, receivedCapture(api)!, [
+    // The masked element, in the frame whose content starts at (60, 60) (border, padding).
+    { x: 80, y: 80, width: 200, height: 100 },
+    // The frame's unmasked content stays in the Capture. The render loses the frame's
+    // padding, so only the core of the green block is checked.
+    { x: 310, y: 90, width: 60, height: 60 },
+    // The frame from another site.
+    { x: 500, y: 40, width: 400, height: 200 },
+    { x: 0, y: 0, width: 1280, height: 720 },
+  ]);
+  const mask = [MASK.red, MASK.green, MASK.blue];
+  expect(rgb(stats[0]!.min)).toEqual(mask);
+  expect(rgb(stats[0]!.max)).toEqual(mask);
+  expect(rgb(stats[1]!.min)).toEqual([0, 128, 0]);
+  expect(rgb(stats[1]!.max)).toEqual([0, 128, 0]);
+  expect(rgb(stats[2]!.min)).toEqual(mask);
+  expect(rgb(stats[2]!.max)).toEqual(mask);
+  expect(stats[3]!.reds).toBe(0);
 });
 
 test('blurs the area the Author draws on the preview, and can remove the blurs', async ({

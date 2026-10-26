@@ -32,7 +32,10 @@ const PUBLIC_KEY_PREFIX = 'nk_pub_' satisfies typeof INSTANCE_PUBLIC_KEY_PREFIX;
 const SECRET_KEY_PREFIX = 'nk_sec_' satisfies typeof INSTANCE_SECRET_KEY_PREFIX;
 
 export interface ClientOptions {
-  /** Base URL of the Instance, for example `https://nudge.example.com`. */
+  /**
+   * Base URL of the Instance, for example `https://nudge.example.com`. It must use
+   * HTTPS, except for `localhost`, `127.0.0.1` and `[::1]`.
+   */
   readonly url: string;
   /** The Project's secret key (`nk_sec_…`), shown once in the dashboard. */
   readonly secretKey: string;
@@ -67,6 +70,7 @@ export class NudgeError extends Error {
 }
 
 export function createClient(options: ClientOptions): NudgeClient {
+  checkUrl(options.url);
   checkKey(options.secretKey);
   const fetcher = options.fetch ?? globalThis.fetch;
   const endpoint = `${options.url.replace(/\/+$/, '')}/v1/feedbacks`;
@@ -85,6 +89,28 @@ export function createClient(options: ClientOptions): NudgeClient {
       return (await response.json()) as ReceivedFeedback;
     },
   };
+}
+
+/** Hosts reachable over plain HTTP: the secret key then never leaves the machine. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The secret key travels in every request: over plain HTTP, anyone on the path reads
+ * it. Only HTTPS is accepted, except towards the machine itself (local development).
+ */
+function checkUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new TypeError(`Invalid Instance URL: ${url}`);
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname)) return;
+  throw new TypeError(
+    `The Instance URL must use https (${url}): the secret key would travel in clear. ` +
+      'Plain http is only accepted for localhost, 127.0.0.1 and [::1].',
+  );
 }
 
 /**

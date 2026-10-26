@@ -2,7 +2,7 @@ import type { Context, FeedbackInput, FeedbackType } from '@nudge/shared';
 import type { EncodedCapture } from './capture.js';
 import { LIMITS } from './domain.js';
 import { retryAfterMinutes, type Messages } from './locales/index.js';
-import type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
+import type { DeclaredAuthor, Metadata, RedactUrl, WidgetOptions } from './options.js';
 
 /** What the Author entered in the form. */
 export interface FormInput {
@@ -17,14 +17,33 @@ export type SubmissionResult =
   { readonly status: 'sent' } | { readonly status: 'error'; readonly message: string };
 
 /**
+ * The page URL to send: the integrator's redaction of it or, by default, the URL without
+ * its fragment. A redaction that fails (throws, returns something other than an absolute
+ * URL) sends no URL rather than the unredacted one.
+ */
+export function pageUrl(redactUrl?: RedactUrl): string | null {
+  if (!redactUrl) {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    return url.href;
+  }
+  try {
+    const redacted = redactUrl(new URL(window.location.href));
+    return redacted === null ? null : new URL(String(redacted)).href;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Context gathered automatically: page URL, browser and OS (user agent), screen
  * (viewport), plus the host metadata. A value beyond the ingestion bounds is left out
  * rather than getting the Feedback rejected.
  */
-export function pageContext(metadata?: Metadata): Context {
-  const url = window.location.href;
+export function pageContext(metadata?: Metadata, redactUrl?: RedactUrl): Context {
+  const url = pageUrl(redactUrl);
   return {
-    ...(url.length <= LIMITS.url ? { url } : {}),
+    ...(url && url.length <= LIMITS.url ? { url } : {}),
     userAgent: navigator.userAgent.slice(0, LIMITS.userAgent),
     viewport: { width: window.innerWidth, height: window.innerHeight },
     ...(metadata && Object.keys(metadata).length > 0 ? { metadata: { ...metadata } } : {}),
@@ -51,7 +70,7 @@ export async function postFeedback(
     text: input.text,
     ...(input.type ? { type: input.type } : {}),
     ...(author ? { author } : {}),
-    context: pageContext(options.metadata),
+    context: pageContext(options.metadata, options.redactUrl),
     ...(input.capture ? { capture: input.capture } : {}),
   };
   let response: Response;
