@@ -172,6 +172,11 @@ describe('Captures, storage unavailable', () => {
     save: () => Promise.reject(new Error('disk full')),
     read: () => Promise.reject(new Error('disk unreadable')),
     delete: () => Promise.resolve(),
+    // eslint-disable-next-line require-yield
+    list: async function* () {
+      throw new Error('disk unreadable');
+    },
+    removeIncomplete: () => Promise.resolve(0),
   };
 
   beforeAll(async () => {

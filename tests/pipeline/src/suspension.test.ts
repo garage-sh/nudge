@@ -339,6 +339,11 @@ describe('Failures internal to nudge: Capture unreadable in storage', () => {
     save: () => Promise.resolve(),
     read: () => Promise.reject(new Error('unreadable disk')),
     delete: () => Promise.resolve(),
+    // eslint-disable-next-line require-yield
+    list: async function* () {
+      throw new Error('unreadable disk');
+    },
+    removeIncomplete: () => Promise.resolve(0),
   };
 
   beforeAll(async () => {

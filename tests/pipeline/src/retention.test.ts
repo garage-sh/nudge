@@ -17,15 +17,21 @@ const capturePng = { contentType: 'image/png', data: PNG.toString('base64') } as
  * self-hoster would see the files of their volume.
  */
 function memoryStorage() {
-  const objects = new Map<string, Uint8Array>();
+  const objects = new Map<string, { content: Uint8Array; modifiedAt: Date }>();
   const storage: CaptureStorage = {
     save: async (key, content) => {
-      objects.set(key, content);
+      objects.set(key, { content, modifiedAt: new Date() });
     },
-    read: async (key) => objects.get(key) ?? null,
+    read: async (key) => objects.get(key)?.content ?? null,
     delete: async (key) => {
       objects.delete(key);
     },
+    list: async function* (prefix) {
+      for (const [key, { modifiedAt }] of objects) {
+        if (key.startsWith(prefix)) yield { key, modifiedAt };
+      }
+    },
+    removeIncomplete: () => Promise.resolve(0),
   };
   /** The storage objects that belong to Feedback `id` (its key names it). */
   const objectsOf = (id: string) => [...objects.keys()].filter((key) => key.includes(id));
