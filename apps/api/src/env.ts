@@ -20,6 +20,7 @@ export type ApiConfig = Required<
     | 'redisUrl'
     | 'encryptionKey'
     | 'sessionCookieSecure'
+    | 'setupToken'
     | 'trustProxy'
     | 'widgetLimits'
   >
@@ -71,6 +72,18 @@ function sessionCookieSecureFromEnv(env: Env, warn: (message: string) => void): 
     );
   }
   return false;
+/** Shortest `NUDGE_SETUP_TOKEN` accepted: it guards the claim of the Instance. */
+const SETUP_TOKEN_MIN_LENGTH = 16;
+
+/** `NUDGE_SETUP_TOKEN`; absent: `null`, the api derives one from the Instance key. */
+function setupTokenFromEnv(env: Env): string | null {
+  const value = optionalEnv(env, 'NUDGE_SETUP_TOKEN');
+  if (value !== null && value.length < SETUP_TOKEN_MIN_LENGTH) {
+    throw new Error(
+      `Invalid NUDGE_SETUP_TOKEN (expected at least ${SETUP_TOKEN_MIN_LENGTH} characters)`,
+    );
+  }
+  return value;
 }
 
 /**
@@ -91,6 +104,7 @@ export function apiConfigFromEnv(
     // The same storage as the worker's: a shared volume, or an S3 bucket.
     storage: storageConfigFromEnv(env),
     sessionCookieSecure: sessionCookieSecureFromEnv(env, warn),
+    setupToken: setupTokenFromEnv(env),
     trustProxy: trustProxyFromEnv(env),
     widgetLimits: {
       perIp: {

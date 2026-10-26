@@ -40,7 +40,13 @@ Then:
 docker compose up -d
 ```
 
-When `docker compose ps` shows `nudge` as `healthy`, open <http://localhost:8080>. The first screen creates the first Member. The next ones are invited from the dashboard, with an invitation link.
+When `docker compose ps` shows `nudge` as `healthy`, open <http://localhost:8080>. The first screen creates the first Member. It asks for the setup token, which only someone with access to the server knows: the `nudge` container prints it at startup while no Member exists.
+
+```bash
+docker compose logs nudge | grep 'setup token'
+```
+
+The token is derived from `NUDGE_ENCRYPTION_KEY`, so every api replica prints the same one; set `NUDGE_SETUP_TOKEN` (16 characters or more) to choose it yourself. Once the first Member exists, the setup closes for good. The next Members are invited from the dashboard, with an invitation link; any Member can remove another one from the **Members** screen, where each Member also changes their password and signs out their other sessions.
 
 You can then:
 

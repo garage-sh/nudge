@@ -18,6 +18,7 @@ x-nudge-env: &nudge-env
   NUDGE_ENCRYPTION_KEY: ${NUDGE_ENCRYPTION_KEY:?set NUDGE_ENCRYPTION_KEY in .env (openssl rand -base64 32)}
   NUDGE_DASHBOARD_URL: ${NUDGE_DASHBOARD_URL:-}
   NUDGE_COOKIE_SECURE: ${NUDGE_COOKIE_SECURE:-true}
+  NUDGE_SETUP_TOKEN: ${NUDGE_SETUP_TOKEN:-}
   # The dashboard's proxy, plus those placed in front of it (see the README).
   NUDGE_TRUST_PROXY: ${NUDGE_TRUST_PROXY:-1}
   NUDGE_ROLES: ${NUDGE_ROLES:-}

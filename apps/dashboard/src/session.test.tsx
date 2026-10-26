@@ -38,6 +38,36 @@ describe('Dashboard session', () => {
     expect(email.getAttribute('aria-invalid')).toBeNull();
   });
 
+  it('creates the first account with the setup token printed in the server logs', async () => {
+    const api = fakeApi({
+      'GET /api/session': NO_SESSION,
+      'GET /api/setup': { status: 200, body: { required: true } },
+      'POST /api/setup': { status: 403, body: { error: 'invalid_setup_token' } },
+    });
+    renderDashboard('/setup');
+
+    await userEvent.type(await screen.findByLabelText('Setup token'), 'a-wrong-token');
+    await userEvent.type(screen.getByLabelText('Email'), MEMBER.email);
+    await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      expect.stringMatching(/setup token is incorrect/i),
+    );
+    expect(api.calls.find((c) => c.route === 'POST /api/setup')?.body).toEqual({
+      email: MEMBER.email,
+      password: 'a long enough password',
+      setupToken: 'a-wrong-token',
+    });
+
+    api.set('POST /api/setup', { status: 201, body: { member: MEMBER } });
+    api.set('GET /api/projects', { status: 200, body: [] });
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Projects' })).toBeTruthy();
+  });
+
   it('sends to sign in without a session, then back to the requested page', async () => {
     const api = fakeApi({
       'GET /api/session': NO_SESSION,

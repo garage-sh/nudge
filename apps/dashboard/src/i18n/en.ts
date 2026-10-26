@@ -103,6 +103,12 @@ export const en = {
     unknown_destination_type: 'This Instance does not support this Destination type.',
     session_required: 'Your session has expired: sign in again.',
     server_busy: 'The Instance is busy checking other passwords. Try again in a moment.',
+    invalid_setup_token:
+      'This setup token is incorrect: copy it from the nudge server logs, or from NUDGE_SETUP_TOKEN.',
+    invalid_current_password: 'Your current password is incorrect.',
+    member_not_found: 'This Member no longer exists.',
+    cannot_remove_self: 'You cannot remove yourself: ask another Member to do it.',
+    too_many_attempts: 'Too many attempts: wait a minute, then try again.',
   },
   unreachable: 'The Instance cannot be reached. Try again.',
   unexpectedError: (code: string) => `Unexpected error (${code}).`,
@@ -195,6 +201,9 @@ export const en = {
     title: 'Create the first account',
     intro: 'This Instance has no Member yet. The account created here can invite the others.',
     submit: 'Create the account',
+    token: 'Setup token',
+    tokenHelp:
+      'It proves you run this Instance: the nudge server prints it in its logs at startup (docker compose logs nudge), unless NUDGE_SETUP_TOKEN sets it.',
   },
 
   invitation: {
@@ -231,6 +240,27 @@ export const en = {
     list: 'Members of the Instance',
     you: ' (you)',
     since: (date: string) => `Member since ${date}`,
+    remove: 'Remove',
+    removeLabel: (email: string) => `Remove ${email}`,
+    removeQuestion: (email: string) => `Remove ${email}? Their sessions end at once.`,
+    removed: (email: string) => `${email} is no longer a Member.`,
+  },
+
+  /** The signed-in Member's own account, on the Members screen. */
+  ownAccount: {
+    title: 'Your account',
+    currentPassword: 'Current password',
+    newPassword: 'New password',
+    changePassword: 'Change password',
+    passwordChanged: 'Password changed. Your other sessions are signed out.',
+    sessionsTitle: 'Sessions',
+    sessionsHelp:
+      'A lost device, a shared computer: sign out everywhere else. This session stays open.',
+    signOutOthers: 'Sign out everywhere else',
+    signedOutOthers: (count: number) =>
+      count === 0
+        ? 'No other session was open.'
+        : `${count} other session${count > 1 ? 's' : ''} signed out.`,
   },
 
   inbox: {

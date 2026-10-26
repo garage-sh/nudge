@@ -8,6 +8,7 @@ import type { DestinationAdapterResolver } from '@nudge/core';
 import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
 import { AlertsController } from './alerts/alerts.controller.js';
 import { AlertsService } from './alerts/alerts.service.js';
+import { AccountController } from './auth/account.controller.js';
 import { AuthThrottleGuard } from './auth/auth-throttle.guard.js';
 import { InvitationsController } from './auth/invitations.controller.js';
 import { InvitationsService } from './auth/invitations.service.js';
@@ -18,6 +19,11 @@ import { SessionController } from './auth/session.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { SessionsService } from './auth/sessions.service.js';
 import { SetupController } from './auth/setup.controller.js';
+import {
+  SETUP_TOKEN_CONFIG,
+  SetupTokenService,
+  type SetupTokenConfig,
+} from './auth/setup-token.js';
 import { DestinationsController } from './destinations/destinations.controller.js';
 import { DestinationsService } from './destinations/destinations.service.js';
 import { AlertDestinationService } from './instance/alert-destination.service.js';
@@ -36,6 +42,8 @@ import { ClientHeaderMiddleware } from './client-header.middleware.js';
 
 export interface DashboardOptions {
   readonly sessionCookie: SessionCookieOptions;
+  /** The token that `POST /api/setup` requires. */
+  readonly setupToken: SetupTokenConfig;
   /** Destination adapters, for the test delivery of the "test" button. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
 }
@@ -46,6 +54,7 @@ const CONTROLLERS = [
   SessionController,
   InvitationsController,
   MembersController,
+  AccountController,
   ProjectsController,
   FeedbacksController,
   DeliveriesController,
@@ -67,9 +76,11 @@ export class DashboardModule implements NestModule {
       controllers: CONTROLLERS,
       providers: [
         { provide: SESSION_COOKIE_OPTIONS, useValue: options.sessionCookie },
+        { provide: SETUP_TOKEN_CONFIG, useValue: options.setupToken },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         MembersService,
         SessionsService,
+        SetupTokenService,
         InvitationsService,
         ProjectsService,
         FeedbacksService,

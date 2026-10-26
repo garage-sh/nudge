@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApi, type WidgetLimits, type TrustProxy } from '@nudge/api';
+import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -86,11 +86,18 @@ export interface PipelineOptions {
   readonly storage?: CaptureStorage;
   /** Period of the retention purge; the worker's otherwise. */
   readonly purge?: PurgeOptions;
+  /**
+   * The api's `NUDGE_SETUP_TOKEN`; by default none, the api derives the token from the
+   * Instance key, as in production.
+   */
+  readonly setupToken?: string;
 }
 
 export interface Pipeline {
   /** Base URL of the started api. */
   readonly url: string;
+  /** The token `POST /api/setup` requires, as the api prints it in its logs. */
+  readonly setupToken: string;
   /** The Judge plugged into the worker (throws if the pipeline runs without a Judge). */
   readonly judge: FakeJudge;
   /**
@@ -287,6 +294,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     resolveDestinationAdapter,
     ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
+    ...(options.setupToken ? { setupToken: options.setupToken } : {}),
   });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
@@ -311,8 +319,10 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   };
 
   let member: DashboardClient | undefined;
+  const setupToken = options.setupToken ?? deriveSetupToken(encryptionKey);
   const pipeline: Pipeline = {
     url,
+    setupToken,
     get judge() {
       if (!fakeJudge) throw new Error('This pipeline runs without a FakeJudge');
       return fakeJudge;
@@ -364,7 +374,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     dashboard: () => new DashboardClient(url),
     async signIn() {
       const client = new DashboardClient(url);
-      const setup = await client.post('/api/setup', DEFAULT_MEMBER);
+      const setup = await client.post('/api/setup', { ...DEFAULT_MEMBER, setupToken });
       if (setup.status === 201) return client;
       const session = await client.post('/api/session', DEFAULT_MEMBER);
       if (session.status !== 200) {

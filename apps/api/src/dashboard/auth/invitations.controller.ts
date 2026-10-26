@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   newMemberSchema,
   type CreatedInvitation,
@@ -6,7 +6,7 @@ import {
   type MemberView,
   type SessionView,
 } from '@nudge/shared';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthThrottleGuard } from './auth-throttle.guard.js';
 import { parseBody } from '../../validation.js';
 import { InvitationsService } from './invitations.service.js';
@@ -39,11 +39,12 @@ export class InvitationsController {
   async accept(
     @Param('token') token: string,
     @Body() body: unknown,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SessionView> {
     const { email, password } = parseBody(newMemberSchema, body);
     const member = await this.invitations.accept(token, email, password);
-    await this.sessions.start(response, member);
+    await this.sessions.start(request, response, member);
     return { member };
   }
 }
