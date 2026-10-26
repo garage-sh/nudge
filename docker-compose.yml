@@ -6,7 +6,9 @@
 # The port listens on 127.0.0.1 only (NUDGE_BIND): a client must not reach it without
 # going through that proxy, or it could choose its IP (see the README).
 #
-# The images come from ghcr.io; NUDGE_VERSION pins them (default: latest).
+# The nudge images come from ghcr.io; NUDGE_VERSION pins them (default: latest, pin an
+# exact version in production). Postgres and Redis are pinned by digest; Dependabot
+# proposes the new one.
 # Build from source: add `-f docker-compose.build.yml`. Replicate the worker
 # separately: add `-f docker-compose.worker.yml` (see the README).
 
@@ -46,7 +48,7 @@ x-nudge-env: &nudge-env
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
     restart: unless-stopped
     environment:
       POSTGRES_USER: nudge
@@ -62,7 +64,7 @@ services:
 
   # The BullMQ queues: persisted (AOF), and never evicted under memory pressure.
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     volumes:

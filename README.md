@@ -79,7 +79,7 @@ The session cookie is `Secure`, so HTTPS is required. Browsers make an exception
 ### Updating, backing up, scaling
 
 - **Updating**: `docker compose pull && docker compose up -d`. The `migrate` service applies the new migrations before `nudge` restarts. Read the [release notes](https://github.com/garage-sh/nudge/releases) before changing minor version. There are no down migrations: going back to a previous version means restoring the Postgres backup taken before the update.
-- **Pinning a version**: `NUDGE_VERSION` in `.env`. By default, `latest` follows the latest release. `0.1` receives the 0.1 fixes, and `0.1.2` never moves. Images built from `main`, not released, carry the `edge` tag.
+- **Pinning a version**: `NUDGE_VERSION` in `.env`. By default, `latest` follows the latest release. `0.1` receives the 0.1 fixes, and `0.1.2` never moves. Images built from `main`, not released, carry the `edge` tag. In production, pin an exact version and raise it on purpose, after verifying the new image: with `latest`, the next `pull` installs whatever was published last. The compose file pins Postgres and Redis by digest.
 - **Verifying an image**: every published image is signed with cosign, keyless, from the repository's CI.
 
   ```bash
