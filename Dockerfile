@@ -84,7 +84,9 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
 CMD ["node", "apps/api/dist/main.js"]
 
 # --- dashboard: static files, Widget and proxy to the api (same origin) --------------
-FROM nginx:1.31-alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417 AS dashboard
+# The unprivileged variant of the official image: nginx runs as `nginx` (uid 101), master
+# included, and keeps the same templates mechanism; it cannot bind below 1024, hence 8080.
+FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e AS dashboard
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge-dashboard" \
       org.opencontainers.image.description="nudge dashboard and Widget, served by nginx with a proxy to the api." \

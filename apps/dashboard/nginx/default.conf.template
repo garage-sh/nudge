@@ -1,7 +1,7 @@
 # The dashboard, the dashboard API (/api) and public ingestion (/v1) on a single
 # origin: the session cookie stays first-party, without CORS. The variables
 # NUDGE_API_UPSTREAM and NUDGE_DNS_RESOLVER are substituted when the container starts
-# (official nginx image, /etc/nginx/templates).
+# (nginx image templates, /etc/nginx/templates).
 
 # A name resolved on each request (cached at most 10 s) rather than once at startup.
 resolver ${NUDGE_DNS_RESOLVER} valid=10s ipv6=off;
