@@ -28,6 +28,8 @@ export const DASHBOARD_LIMITS = {
   passwordMin: 12,
   /** Upper bound: hashing an oversized password with argon2id would cost for nothing. */
   passwordMax: 256,
+  /** Upper bound of the setup token typed at first launch. */
+  setupToken: 256,
   projectName: 100,
   projectDescription: 2000,
   origins: 50,
@@ -45,17 +47,35 @@ export const DASHBOARD_LIMITS = {
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(DASHBOARD_LIMITS.email));
 
+/** A password being chosen: the policy applies (account creation, password change). */
+const newPassword = z
+  .string()
+  .min(DASHBOARD_LIMITS.passwordMin, {
+    message: `At least ${DASHBOARD_LIMITS.passwordMin} characters`,
+  })
+  .max(DASHBOARD_LIMITS.passwordMax);
+
 /** Creation of a Member account (setup, invitation). */
-export const newMemberSchema = z.strictObject({
-  email,
-  password: z
-    .string()
-    .min(DASHBOARD_LIMITS.passwordMin, {
-      message: `At least ${DASHBOARD_LIMITS.passwordMin} characters`,
-    })
-    .max(DASHBOARD_LIMITS.passwordMax),
-});
+export const newMemberSchema = z.strictObject({ email, password: newPassword });
 export type NewMember = z.input<typeof newMemberSchema>;
+
+/**
+ * First account of the Instance: the setup token, printed in the api logs (or set by
+ * `NUDGE_SETUP_TOKEN`), proves that whoever claims the Instance has access to the server.
+ */
+export const setupSchema = z.strictObject({
+  email,
+  password: newPassword,
+  setupToken: z.string().trim().min(1).max(DASHBOARD_LIMITS.setupToken),
+});
+export type SetupRequest = z.input<typeof setupSchema>;
+
+/** A Member changes their own password: the current one is required. */
+export const passwordChangeSchema = z.strictObject({
+  currentPassword: z.string().min(1).max(DASHBOARD_LIMITS.passwordMax),
+  newPassword,
+});
+export type PasswordChange = z.input<typeof passwordChangeSchema>;
 
 /** Sign-in: the password policy is not restated to someone who gets it wrong. */
 export const signInSchema = z.strictObject({
@@ -226,6 +246,11 @@ export interface MemberListItemView extends MemberView {
 
 export interface SessionView {
   readonly member: MemberView;
+}
+
+/** Result of "sign out everywhere else": how many sessions were revoked. */
+export interface RevokedSessions {
+  readonly revoked: number;
 }
 
 export interface SetupState {

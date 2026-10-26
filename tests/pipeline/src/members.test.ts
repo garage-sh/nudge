@@ -3,6 +3,14 @@ import { startPipeline, type Pipeline } from './harness/index.js';
 
 const ADA = { email: 'ada@nudge.test', password: 'a strong password' };
 
+/** Creates Ada as the first Member, with the setup token of the api logs. */
+async function setUp(pipeline: Pipeline): Promise<void> {
+  const setup = await pipeline
+    .dashboard()
+    .post('/api/setup', { ...ADA, setupToken: pipeline.setupToken });
+  expect(setup.status).toBe(201);
+}
+
 describe('Members: setup, session, invitation', () => {
   let pipeline: Pipeline;
 
@@ -22,7 +30,7 @@ describe('Members: setup, session, invitation', () => {
         body: { required: true },
       });
 
-      const setup = await browser.post('/api/setup', ADA);
+      const setup = await browser.post('/api/setup', { ...ADA, setupToken: pipeline.setupToken });
 
       expect(setup).toMatchObject({ status: 201, body: { member: { email: ADA.email } } });
       expect(await browser.get('/api/session')).toMatchObject({
@@ -34,8 +42,37 @@ describe('Members: setup, session, invitation', () => {
       const intruder = await pipeline.dashboard().post('/api/setup', {
         email: 'intruder@nudge.test',
         password: 'i am taking over',
+        setupToken: pipeline.setupToken,
       });
       expect(intruder).toMatchObject({ status: 409, body: { error: 'setup_completed' } });
+    });
+
+    it('refuses a setup without the setup token printed in the api logs', async () => {
+      const withoutToken = await pipeline.dashboard().post('/api/setup', ADA);
+      const wrongToken = await pipeline.dashboard().post('/api/setup', {
+        ...ADA,
+        setupToken: `${pipeline.setupToken}x`,
+      });
+
+      expect(withoutToken).toMatchObject({ status: 400, body: { error: 'invalid_request' } });
+      expect(wrongToken).toMatchObject({ status: 403, body: { error: 'invalid_setup_token' } });
+      expect(await pipeline.dashboard().get('/api/setup')).toMatchObject({
+        body: { required: true },
+      });
+    });
+
+    it('takes the setup token set in NUDGE_SETUP_TOKEN', async () => {
+      const chosen = await startPipeline({ setupToken: 'a token chosen by the self-hoster' });
+      try {
+        const setup = await chosen.dashboard().post('/api/setup', {
+          ...ADA,
+          setupToken: 'a token chosen by the self-hoster',
+        });
+
+        expect(setup.status).toBe(201);
+      } finally {
+        await chosen.stop();
+      }
     });
 
     it('creates a single first Member when several setups arrive together', async () => {
@@ -44,6 +81,7 @@ describe('Members: setup, session, invitation', () => {
           const response = await pipeline.dashboard().post('/api/setup', {
             email: `${letter}@nudge.test`,
             password: 'a strong password',
+            setupToken: pipeline.setupToken,
           });
           return response.status;
         }),
@@ -56,10 +94,12 @@ describe('Members: setup, session, invitation', () => {
       const invalidEmail = await pipeline.dashboard().post('/api/setup', {
         email: 'not-an-email',
         password: 'a strong password',
+        setupToken: pipeline.setupToken,
       });
       const shortPassword = await pipeline.dashboard().post('/api/setup', {
         email: ADA.email,
         password: 'short',
+        setupToken: pipeline.setupToken,
       });
 
       expect(invalidEmail).toMatchObject({ status: 400, body: { error: 'invalid_request' } });
@@ -72,7 +112,7 @@ describe('Members: setup, session, invitation', () => {
 
   describe('sign in and sign out', () => {
     beforeEach(async () => {
-      await pipeline.dashboard().post('/api/setup', ADA);
+      await setUp(pipeline);
     });
 
     it('signs a Member in by email and password, ignoring the email’s case', async () => {
@@ -128,11 +168,24 @@ describe('Members: setup, session, invitation', () => {
       const replay = pipeline.dashboard().withSessionCookie(oldCookie);
       expect(await replay.get('/api/session')).toMatchObject({ status: 401 });
     });
+
+    it('revokes the session a browser already had when it signs in again', async () => {
+      const browser = pipeline.dashboard();
+      await browser.post('/api/session', ADA);
+      const oldCookie = browser.sessionCookie;
+
+      expect(await browser.post('/api/session', ADA)).toMatchObject({ status: 200 });
+
+      expect(browser.sessionCookie).not.toBe(oldCookie);
+      expect(await browser.get('/api/session')).toMatchObject({ status: 200 });
+      const replay = pipeline.dashboard().withSessionCookie(oldCookie);
+      expect(await replay.get('/api/session')).toMatchObject({ status: 401 });
+    });
   });
 
   describe('public route protections', () => {
     beforeEach(async () => {
-      await pipeline.dashboard().post('/api/setup', ADA);
+      await setUp(pipeline);
     });
 
     it('refuses a write that does not come from the dashboard (CSRF)', async () => {

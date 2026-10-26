@@ -16,6 +16,7 @@ describe('Api configuration from environment variables', () => {
       encryptionKey: MINIMAL.NUDGE_ENCRYPTION_KEY,
       storage: { type: 'disk', dir: '/var/lib/nudge/captures' },
       sessionCookieSecure: true,
+      setupToken: null,
       trustProxy: false,
       widgetLimits: {
         perIp: { limit: 20, windowMs: 60_000 },
@@ -60,6 +61,7 @@ describe('Api configuration from environment variables', () => {
     ['NUDGE_WIDGET_RATE_LIMIT_IP', '0'],
     ['NUDGE_WIDGET_RATE_LIMIT_PROJECT', 'unlimited'],
     ['NUDGE_CAPTURES_DIR', 'captures'],
+    ['NUDGE_SETUP_TOKEN', 'too-short'],
   ])('refuses to start with %s=%s', (variable, value) => {
     expect(() => apiConfigFromEnv({ ...MINIMAL, [variable]: value })).toThrow(variable);
   });

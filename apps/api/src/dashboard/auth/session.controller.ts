@@ -38,12 +38,13 @@ export class SessionController {
   @HttpCode(200)
   async signIn(
     @Body() body: unknown,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SessionView> {
     const { email, password } = parseBody(signInSchema, body);
     const member = await this.members.authenticate(email, password);
     if (!member) throw new UnauthorizedException({ error: 'invalid_credentials' });
-    await this.sessions.start(response, member);
+    await this.sessions.start(request, response, member);
     return { member };
   }
 

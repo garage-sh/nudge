@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { members, sessions, type Db } from '@nudge/database';
 import type { MemberView } from '@nudge/shared';
-import { and, eq, gt, lte } from 'drizzle-orm';
+import { and, eq, gt, lte, ne } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { DB, SESSION_COOKIE_OPTIONS } from '../../infra/tokens.js';
 import { generateToken, hashToken } from './tokens.js';
@@ -13,6 +13,9 @@ import {
   type SessionCookieOptions,
 } from './session-cookie.js';
 
+/** The database, or a transaction opened on it. */
+export type Executor = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
+
 /** Dashboard sessions, stored in the database: signing out revokes them for good. */
 @Injectable()
 export class SessionsService {
@@ -21,8 +24,14 @@ export class SessionsService {
     @Inject(SESSION_COOKIE_OPTIONS) private readonly cookie: SessionCookieOptions,
   ) {}
 
-  /** Opens a session for the Member and sets its cookie on the response. */
-  async start(response: Response, member: MemberView): Promise<void> {
+  /**
+   * Opens a session for the Member and sets its cookie on the response. The session of
+   * a cookie the request already carries is revoked: the new cookie replaces it in this
+   * browser, so nothing could use it any more.
+   */
+  async start(request: Request, response: Response, member: MemberView): Promise<void> {
+    const previous = readSessionCookie(request);
+    if (previous) await this.close(previous);
     const token = generateToken();
     await this.db.insert(sessions).values({
       memberId: member.id,
@@ -37,6 +46,28 @@ export class SessionsService {
     const token = readSessionCookie(request);
     if (token) await this.close(token);
     clearSessionCookie(response, this.cookie);
+  }
+
+  /**
+   * Revokes every session of the Member except the request's one ("sign out
+   * everywhere else"), in `db` or a transaction; returns how many were revoked.
+   */
+  async revokeOthers(
+    request: Request,
+    member: MemberView,
+    db: Executor = this.db,
+  ): Promise<number> {
+    const token = readSessionCookie(request);
+    const revoked = await db
+      .delete(sessions)
+      .where(
+        and(
+          eq(sessions.memberId, member.id),
+          token ? ne(sessions.tokenHash, hashToken(token)) : undefined,
+        ),
+      )
+      .returning({ id: sessions.id });
+    return revoked.length;
   }
 
   /** The Member of a valid session, or `null` (token unknown, revoked or expired). */
