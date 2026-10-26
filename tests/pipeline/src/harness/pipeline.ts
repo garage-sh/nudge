@@ -6,6 +6,7 @@ import { createApi, type WidgetLimits, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
+  jobOptions,
   TRIAGE_QUEUE,
   type ReviewAction,
   type DestinationAdapterResolver,
@@ -181,6 +182,8 @@ export interface Pipeline {
   replayTriage(feedbackId: string): Promise<void>;
   /** Re-enqueues a Delivery's Dispatch job and waits until it is processed. */
   replayDispatch(deliveryId: string): Promise<void>;
+  /** Enqueues one more Dispatch job of a Delivery (new job id), without waiting for it. */
+  enqueueDispatch(deliveryId: string): Promise<void>;
   /**
    * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
    * a Redis that refuses writes. Returns the function that repairs it.
@@ -431,6 +434,13 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     undoReview: (feedbackId, action) => undoReview(db, feedbackId, action),
     replayTriage: (feedbackId) => replay(TRIAGE_QUEUE, { feedbackId }),
     replayDispatch: (deliveryId) => replay(DISPATCH_QUEUE, { deliveryId }),
+    async enqueueDispatch(deliveryId) {
+      await queues[DISPATCH_QUEUE].add(
+        DISPATCH_QUEUE,
+        { deliveryId },
+        { jobId: `extra-${randomUUID()}`, ...jobOptions(infra.retryPolicy) },
+      );
+    },
     async breakEnqueue(name) {
       // Each job add increments the queue's `id` counter: when it is not numeric, the
       // add fails before any write.

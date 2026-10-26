@@ -54,6 +54,8 @@ const pendingDelivery = (deliveryId: string) =>
  * - `auth`: the Destination is Suspended at once;
  * - `permanent`: the Delivery fails; the Destination answered, the streak starts over.
  *
+ * Every outcome releases the Delivery's claim (`DispatchProcessor`).
+ *
  * The Delivery of a Suspended Destination is held, without an outgoing call. The held
  * Deliveries of an active Destination are queued again on every probe run, until their
  * job picks them up: an interrupted release (restart, Redis unavailable) is caught up
@@ -120,6 +122,7 @@ export class SuspensionService {
         externalUrl,
         attempts: sql`${deliveries.attempts} + 1`,
         lastError: null,
+        claimedAt: null,
       })
       .where(pendingDelivery(delivery.id));
     await this.resetFailures(delivery.destinationId);
@@ -144,7 +147,7 @@ export class SuspensionService {
     if (result.failureClass === 'permanent') {
       await this.db
         .update(deliveries)
-        .set({ status: 'failed', attempts, lastError })
+        .set({ status: 'failed', attempts, lastError, claimedAt: null })
         .where(pendingDelivery(delivery.id));
       await this.resetFailures(delivery.destinationId);
       return 'failed';
@@ -172,18 +175,22 @@ export class SuspensionService {
       if (suspended) {
         await tx
           .update(deliveries)
-          .set({ status: 'held', heldAt: sql`now()`, attempts, lastError })
+          .set({ status: 'held', heldAt: sql`now()`, attempts, lastError, claimedAt: null })
           .where(pendingDelivery(delivery.id));
         return { outcome: 'held' as const, suspension };
       }
       if (lastAttempt) {
         await tx
           .update(deliveries)
-          .set({ status: 'failed', attempts, lastError })
+          .set({ status: 'failed', attempts, lastError, claimedAt: null })
           .where(pendingDelivery(delivery.id));
         return { outcome: 'failed' as const, suspension };
       }
-      await tx.update(deliveries).set({ attempts, lastError }).where(pendingDelivery(delivery.id));
+      // Still pending: released for the job's next attempt.
+      await tx
+        .update(deliveries)
+        .set({ attempts, lastError, claimedAt: null })
+        .where(pendingDelivery(delivery.id));
       return { outcome: 'retry' as const, suspension };
     });
 
