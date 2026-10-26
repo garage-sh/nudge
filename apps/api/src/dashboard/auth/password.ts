@@ -21,17 +21,30 @@ export async function hashPassword(password: string): Promise<string> {
 
 const PHC_FORMAT = /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([\w-]+)\$([\w-]+)$/;
 
-/** Compares in constant time; an unreadable hash never verifies. */
+/**
+ * Compares in constant time; an unreadable hash never verifies, nor does one whose
+ * parameters are weaker than `PARAMETERS`: whoever writes to the database cannot
+ * silently downgrade a Member's hash.
+ */
 export async function verifyPassword(password: string, phcHash: string): Promise<boolean> {
   const parts = PHC_FORMAT.exec(phcHash);
   if (!parts) return false;
   const [, memory, passes, parallelism, nonce, hash] = parts;
   const expected = Buffer.from(hash!, 'base64url');
-  const computed = await derive(password, Buffer.from(nonce!, 'base64url'), {
+  const parameters = {
     memory: Number(memory),
     passes: Number(passes),
     parallelism: Number(parallelism),
     tagLength: expected.length,
-  });
+  };
+  if (
+    parameters.memory < PARAMETERS.memory ||
+    parameters.passes < PARAMETERS.passes ||
+    parameters.parallelism < PARAMETERS.parallelism ||
+    parameters.tagLength < PARAMETERS.tagLength
+  ) {
+    return false;
+  }
+  const computed = await derive(password, Buffer.from(nonce!, 'base64url'), parameters);
   return timingSafeEqual(expected, computed);
 }
