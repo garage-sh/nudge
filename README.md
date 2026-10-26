@@ -158,7 +158,7 @@ The script also defines the `<nudge-widget>` custom element, which you can place
 
 An identity coming from the browser is recorded as **declared**, never as attested: anyone can forge it. For a trustworthy identity, send the Feedback from your server with the SDK.
 
-**Captures.** The Author can tick "Attach a screenshot of the page". They then see a preview, on which they can blur areas before sending, and nothing is captured without their consent. Mark sensitive elements with `data-nudge-mask`: they are always masked, in the browser, before the image leaves the page.
+**Captures.** The Author can tick "Attach a screenshot of the page". They then see a preview, on which they can blur areas before sending, and nothing is captured without their consent. Mark sensitive elements with `data-nudge-mask`: they are always masked, in the browser, before the image leaves the page. This covers open Shadow DOMs and same-origin iframes too. An iframe whose content the page cannot read (another site, a sandbox) is always masked whole.
 
 ```html
 <div data-nudge-mask>IBAN: FR76 …</div>
