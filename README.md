@@ -215,6 +215,8 @@ try {
 }
 ```
 
+The Instance `url` must use HTTPS: the secret key travels in every request, and `createClient` throws on a plain `http://` URL. The only exception is the machine itself (`localhost`, `127.0.0.1`, `[::1]`), for local development.
+
 The SDK does not retry a submission on its own. Pass `{ signal }` as the second argument to bound the call in time.
 
 ### HTTP API
