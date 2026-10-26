@@ -7,7 +7,7 @@ import type {
   Questions,
   JudgeRequest,
 } from '@nudge/judge';
-import { JudgeTransientError } from '@nudge/judge';
+import { JudgeRefusedError, JudgeTransientError, type JudgeRefusalReason } from '@nudge/judge';
 
 /**
  * Scripted Verdict, question by question (key = the question's key):
@@ -19,7 +19,7 @@ export type Script = Readonly<Record<string, string | number>>;
 
 /**
  * Test Judge plugged into the port: it returns scripted answers, records every
- * request it receives, and can fail (transient error) or be held.
+ * request it receives, and can fail (transient error), refuse or be held.
  */
 export class FakeJudge implements Judge {
   /** Every request received, in order. */
@@ -30,6 +30,10 @@ export class FakeJudge implements Judge {
   private confidence = 0.9;
   private remainingFailures = 0;
   private held: Promise<void> | null = null;
+  private refusal: {
+    reason: JudgeRefusalReason;
+    refuses: (request: JudgeRequest) => boolean;
+  } | null = null;
 
   /**
    * Sets the answers of the next requests. `confidence`: mass given to the
@@ -43,6 +47,17 @@ export class FakeJudge implements Judge {
   /** The next `times` requests fail with a `JudgeTransientError`. */
   fail(times = 1): void {
     this.remainingFailures = times;
+  }
+
+  /**
+   * From now on, every request `refuses` matches is refused with a lasting
+   * `JudgeRefusedError` (`request` by default), as a provider refusing some content.
+   */
+  refuse(
+    refuses: (request: JudgeRequest) => boolean,
+    reason: JudgeRefusalReason = 'request',
+  ): void {
+    this.refusal = { reason, refuses };
   }
 
   /** Blocks requests until the returned function is called (to observe the Received state). */
@@ -63,6 +78,9 @@ export class FakeJudge implements Judge {
   ): Promise<Answers<Qs>> {
     this.requests.push(request);
     if (this.held) await this.wait(this.held, request, signal);
+    if (this.refusal?.refuses(request)) {
+      throw new JudgeRefusedError(this.refusal.reason, 'FakeJudge: scripted refusal', 400);
+    }
     if (this.remainingFailures > 0) {
       this.remainingFailures -= 1;
       throw new JudgeTransientError('FakeJudge: scripted failure');

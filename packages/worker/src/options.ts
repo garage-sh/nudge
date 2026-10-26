@@ -67,6 +67,12 @@ export interface SweepOptions {
 
 export const DEFAULT_SWEEP: SweepOptions = { delayMs: 5 * 60_000, intervalMs: 60_000 };
 
+/**
+ * Longest wait between two re-Triages of the same Feedback by the sweep: the wait starts
+ * at the sweep delay and doubles every time, up to this bound.
+ */
+export const MAX_TRIAGE_SWEEP_BACKOFF_MS = 60 * 60_000;
+
 export interface ConcurrencyOptions {
   /** Triage jobs at the same time: as many Judge requests in flight. */
   readonly triage: number;
