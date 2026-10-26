@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { apiConfigFromEnv } from './env.js';
 
 const MINIMAL = {
@@ -26,13 +26,17 @@ describe('Api configuration from environment variables', () => {
 
   it('reads the port, the cookie, the Widget limits per minute', () => {
     expect(
-      apiConfigFromEnv({
-        ...MINIMAL,
-        NUDGE_API_PORT: '8081',
-        NUDGE_COOKIE_SECURE: 'false',
-        NUDGE_WIDGET_RATE_LIMIT_IP: '5',
-        NUDGE_WIDGET_RATE_LIMIT_PROJECT: '1000',
-      }),
+      apiConfigFromEnv(
+        {
+          ...MINIMAL,
+          NUDGE_API_PORT: '8081',
+          NUDGE_COOKIE_SECURE: 'false',
+          NUDGE_DASHBOARD_URL: 'http://localhost:8080',
+          NUDGE_WIDGET_RATE_LIMIT_IP: '5',
+          NUDGE_WIDGET_RATE_LIMIT_PROJECT: '1000',
+        },
+        () => {},
+      ),
     ).toMatchObject({
       port: 8081,
       sessionCookieSecure: false,
@@ -41,6 +45,37 @@ describe('Api configuration from environment variables', () => {
         perProject: { limit: 1000, windowMs: 60_000 },
       },
     });
+  });
+
+  it.each([
+    ['http://localhost:8080', false],
+    ['http://127.0.0.1:8080', false],
+    ['http://nudge.lan:8080', true],
+    [undefined, true],
+  ])(
+    'warns about NUDGE_COOKIE_SECURE=false with the dashboard at %s unless on localhost',
+    (dashboardUrl, warned) => {
+      const warn = vi.fn();
+
+      const config = apiConfigFromEnv(
+        { ...MINIMAL, NUDGE_COOKIE_SECURE: 'false', NUDGE_DASHBOARD_URL: dashboardUrl },
+        warn,
+      );
+
+      expect(config.sessionCookieSecure).toBe(false);
+      if (warned) expect(warn).toHaveBeenCalledWith(expect.stringContaining('NUDGE_COOKIE_SECURE'));
+      else expect(warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses NUDGE_COOKIE_SECURE=false with a dashboard served over HTTPS', () => {
+    expect(() =>
+      apiConfigFromEnv({
+        ...MINIMAL,
+        NUDGE_COOKIE_SECURE: 'false',
+        NUDGE_DASHBOARD_URL: 'https://nudge.example.com',
+      }),
+    ).toThrow('NUDGE_COOKIE_SECURE');
   });
 
   it.each([
