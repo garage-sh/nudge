@@ -81,8 +81,14 @@ export const captureFileName = (feedbackId: string, contentType: CaptureType): s
 const base64Bytes = (data: string): number =>
   (data.length / 4) * 3 - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
 
-const firstBytes = (data: string): number[] =>
-  Array.from(atob(data.slice(0, 12)), (char) => char.charCodeAt(0));
+/** The first decoded bytes; `null` if `data` is not base64 (the field already says so). */
+function firstBytes(data: string): number[] | null {
+  try {
+    return Array.from(atob(data.slice(0, 12)), (char) => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Capture of the page attached by the Author, already masked and blurred in their browser:
@@ -105,7 +111,9 @@ export const captureInputSchema = z
       });
       return;
     }
+    // Zod runs this refinement even when `data` failed its own checks.
     const bytes = firstBytes(data);
+    if (!bytes) return;
     if (!CAPTURE_SIGNATURES[contentType].every((byte, index) => bytes[index] === byte)) {
       context.addIssue({
         code: 'custom',

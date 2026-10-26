@@ -102,6 +102,7 @@ export const en = {
     destination_not_found: 'This Destination no longer exists.',
     unknown_destination_type: 'This Instance does not support this Destination type.',
     session_required: 'Your session has expired: sign in again.',
+    server_busy: 'The Instance is busy checking other passwords. Try again in a moment.',
   },
   unreachable: 'The Instance cannot be reached. Try again.',
   unexpectedError: (code: string) => `Unexpected error (${code}).`,

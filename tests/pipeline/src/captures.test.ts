@@ -56,6 +56,8 @@ describe('Captures', () => {
     expect(image.status).toBe(200);
     expect(image.headers.get('content-type')).toBe('image/png');
     expect(image.headers.get('x-content-type-options')).toBe('nosniff');
+    // Erased with its Feedback, it must not outlive it in the browser cache.
+    expect(image.headers.get('cache-control')).toBe('no-store');
     expect(image.bytes).toEqual(new Uint8Array(PNG));
   });
 
@@ -144,6 +146,7 @@ describe('Captures', () => {
       },
     ],
     ['content that is not base64', { contentType: 'image/png', data: 'not base64 at all' }],
+    ['base64 too short to decode', { contentType: 'image/png', data: 'A' }],
     ['an empty Capture', { contentType: 'image/png', data: '' }],
     [
       'a too heavy Capture',

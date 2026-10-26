@@ -73,7 +73,7 @@ export class FeedbacksController {
     response.set({
       'x-content-type-options': 'nosniff',
       'content-security-policy': "default-src 'none'; sandbox",
-      'cache-control': 'private, max-age=3600',
+      'cache-control': 'no-store',
     });
     return new StreamableFile(content, {
       type: contentType,

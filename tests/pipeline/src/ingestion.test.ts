@@ -76,3 +76,29 @@ describe('Ingestion by secret key', () => {
     });
   });
 });
+
+describe('Ingestion by secret key, unknown keys', () => {
+  let pipeline: Pipeline;
+
+  beforeAll(async () => {
+    pipeline = await startPipeline();
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+  });
+
+  it('refuses an IP that tried too many unknown keys, before looking the key up', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Guessed' });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const unknownKey = await pipeline.postFeedback(`nk_sec_unknown${attempt}`, { text: 'Hi' });
+      expect(unknownKey.status).toBe(401);
+    }
+
+    const refusal = await pipeline.postFeedback(secretKey, { text: 'Hello' });
+
+    expect(refusal.status).toBe(429);
+    expect(await refusal.json()).toEqual({ error: 'too_many_attempts' });
+    expect(refusal.headers.get('retry-after')).toMatch(/^\d+$/);
+  });
+});

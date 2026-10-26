@@ -7,6 +7,10 @@ import {
   type Script,
 } from './harness/index.js';
 
+/** A cursor as the api encodes one: `[instant, id]` in base64url JSON. */
+const cursor = (instant: string, id: string) =>
+  Buffer.from(JSON.stringify([instant, id])).toString('base64url');
+
 describe('Feedback inbox', () => {
   let pipeline: Pipeline;
   let member: DashboardClient;
@@ -137,6 +141,10 @@ describe('Feedback inbox', () => {
     ['a zero limit', '?limit=0'],
     ['an oversized limit', '?limit=1000'],
     ['a forged cursor', '?cursor=not-a-cursor'],
+    [
+      'a cursor whose instant does not exist',
+      `?cursor=${cursor('2026-13-01T00:00:00.000000Z', '00000000-0000-4000-8000-000000000000')}`,
+    ],
     ['an unknown filter', '?priority=high'],
     ['an Uncertain flag that is not a boolean', '?uncertain=maybe'],
   ])('refuses %s', async (_case, query) => {
