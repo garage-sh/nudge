@@ -46,6 +46,10 @@ export interface WorkerOptions {
   readonly sweep?: SweepOptions;
   /** Period of the retention purge; `DEFAULT_PURGE` by default. */
   readonly purge?: PurgeOptions;
+  /** Sweep of the orphaned Captures; `DEFAULT_CAPTURE_SWEEP` by default. */
+  readonly captureSweep?: CaptureSweepOptions;
+  /** Jobs each worker runs at the same time, per queue; `DEFAULT_CONCURRENCY` by default. */
+  readonly concurrency?: ConcurrencyOptions;
   /** Suspension threshold, cooldown and probe period; `DEFAULT_SUSPENSION` by default. */
   readonly suspension?: SuspensionOptions;
   /**
@@ -70,6 +74,37 @@ export interface SweepOptions {
 }
 
 export const DEFAULT_SWEEP: SweepOptions = { delayMs: 5 * 60_000, intervalMs: 60_000 };
+
+/**
+ * Longest wait between two re-Triages of the same Feedback by the sweep: the wait starts
+ * at the sweep delay and doubles every time, up to this bound.
+ */
+export const MAX_TRIAGE_SWEEP_BACKOFF_MS = 60 * 60_000;
+
+export interface CaptureSweepOptions {
+  /**
+   * Age under which an object of the storage is left alone: the api writes the image
+   * before its database row, and an interrupted write may still be in progress.
+   */
+  readonly graceMs: number;
+  /** Period of the sweep. */
+  readonly intervalMs: number;
+}
+
+/** Once an hour, objects older than an hour. */
+export const DEFAULT_CAPTURE_SWEEP: CaptureSweepOptions = {
+  graceMs: 60 * 60_000,
+  intervalMs: 60 * 60_000,
+};
+
+export interface ConcurrencyOptions {
+  /** Triage jobs at the same time: as many Judge requests in flight. */
+  readonly triage: number;
+  /** Dispatch jobs at the same time: a slow Destination only holds one of them. */
+  readonly dispatch: number;
+}
+
+export const DEFAULT_CONCURRENCY: ConcurrencyOptions = { triage: 2, dispatch: 10 };
 
 export interface PurgeOptions {
   /**

@@ -187,6 +187,59 @@ describe('S3-compatible Capture storage', () => {
     );
   });
 
+  it('lists the objects under the prefix, page after page, with a signed ListObjectsV2', async () => {
+    const page = (contents: string, next: string | null) =>
+      new Response(
+        `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>nudge-captures</Name>${contents}<IsTruncated>${next ? 'true' : 'false'}</IsTruncated>${next ? `<NextContinuationToken>${next}</NextContinuationToken>` : ''}</ListBucketResult>`,
+        { status: 200, headers: { 'content-type': 'application/xml' } },
+      );
+    const object = (key: string, at: string) =>
+      `<Contents><Key>${key}</Key><LastModified>${at}</LastModified><Size>9</Size></Contents>`;
+    const s3 = s3Service(
+      page(
+        object('instance-1/feedbacks/a.png', '2026-10-24T08:00:00.000Z') +
+          // Not a key nudge could have written: never listed, so never swept.
+          object('instance-1/feedbacks/../x.png', '2026-10-24T08:00:00.000Z'),
+        'token+/=&1',
+      ),
+      page(object('instance-1/feedbacks/b.webp', '2026-10-24T08:10:00.000Z'), null),
+    );
+
+    const listed = [];
+    for await (const stored of s3Storage(CONFIG, { fetch: s3.fetch, now: NOW }).list(
+      'feedbacks/',
+    )) {
+      listed.push(stored);
+    }
+
+    expect(listed).toEqual([
+      { key: 'feedbacks/a.png', modifiedAt: new Date('2026-10-24T08:00:00.000Z') },
+      { key: 'feedbacks/b.webp', modifiedAt: new Date('2026-10-24T08:10:00.000Z') },
+    ]);
+    expect(s3.requests.map((request) => [request.method, request.url])).toEqual([
+      [
+        'GET',
+        'https://s3.example.test/nudge-captures/?list-type=2&prefix=instance-1%2Ffeedbacks%2F',
+      ],
+      [
+        'GET',
+        'https://s3.example.test/nudge-captures/?continuation-token=token%2B%2F%3D%261&list-type=2&prefix=instance-1%2Ffeedbacks%2F',
+      ],
+    ]);
+    expect(s3.requests[0]!.headers.get('authorization')).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKFAKEKEY\/20261024\/eu-west-3\/s3\/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$/,
+    );
+  });
+
+  it('throws when listing is refused', async () => {
+    const s3 = s3Service(s3Error(403, 'AccessDenied'));
+
+    const listing = s3Storage(CONFIG, { fetch: s3.fetch, now: NOW }).list('feedbacks/');
+    await expect(listing[Symbol.asyncIterator]().next()).rejects.toThrow(
+      'S3 LIST feedbacks/: HTTP 403 AccessDenied',
+    );
+  });
+
   it('rejects a key that would escape the prefix', async () => {
     const s3 = s3Service();
 

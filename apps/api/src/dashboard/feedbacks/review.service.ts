@@ -33,10 +33,9 @@ export class ReviewService {
   }
 
   /**
-   * The triage job dispatches a Triaged Feedback. A Feedback becomes Triaged again only
-   * once: a review-specific jobId is enough not to enqueue it twice. If the queueing
-   * fails, the transition is undone so that the Member can try again rather than leave
-   * a Triaged Feedback that nothing will dispatch.
+   * The triage job dispatches a Triaged Feedback; each review has its own job
+   * (`reviewJobId`). If the queueing fails, the transition is undone so that the Member
+   * can try again rather than leave a Triaged Feedback that nothing will dispatch.
    */
   private async dispatch(feedbackId: string, action: ReviewAction): Promise<void> {
     try {

@@ -108,12 +108,25 @@ export const feedbacks = pgTable(
     author: jsonb('author').$type<Author>(),
     authorTrust: authorTrustEnum('author_trust'),
     context: jsonb('context').$type<Context>().notNull().default({}),
+    /** Times the sweep sent the Feedback, left Received, back to Triage (D18). */
+    triageSweeps: integer('triage_sweeps').notNull().default(0),
+    /**
+     * When the sweep may look at the Feedback again if it is still Received; `null`: as
+     * soon as it is past the sweep delay. Pushed back further at each re-Triage, so a
+     * Feedback the Judge keeps refusing neither calls it without end nor takes the place
+     * of the other Feedbacks left Received.
+     */
+    nextTriageSweepAt: timestamp('next_triage_sweep_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
     index('feedbacks_project_created_at_idx').on(t.projectId, t.createdAt),
     // Inbox: across all Projects, newest first.
     index('feedbacks_created_at_id_idx').on(t.createdAt, t.id),
+    // Sweep of the Feedbacks left Received, the ones due first.
+    index('feedbacks_received_sweep_idx')
+      .on(t.nextTriageSweepAt.asc().nullsFirst(), t.createdAt)
+      .where(sql`${t.state} = 'received'`),
   ],
 );
 
@@ -200,6 +213,13 @@ export const deliveries = pgTable(
      * successive holds of the same Delivery, and so their release jobs.
      */
     heldAt: timestamp('held_at', { withTimezone: true }),
+    /**
+     * When a dispatch job took the pending Delivery to send it, `null` when none is
+     * sending it: two jobs of the same Delivery (a sweep's and a late retry's) never
+     * send it at the same time. A claim older than `DELIVERY_CLAIM_TTL_MS` belongs to a
+     * job that died while sending; another job may take it over.
+     */
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

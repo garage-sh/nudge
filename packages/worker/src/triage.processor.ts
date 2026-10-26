@@ -18,7 +18,7 @@ import {
   type Judge,
   type JudgeRequest,
 } from '@nudge/judge';
-import type { Queue } from 'bullmq';
+import { UnrecoverableError, type Queue } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import { AlertsService } from './alerts.service.js';
 import { withTimeout } from './timeout.js';
@@ -118,12 +118,16 @@ export class TriageProcessor {
         (signal) => judge.judge(request, { signal }),
       );
     } catch (error) {
-      // A lasting refusal (key refused, request rejected) does not resolve on its own: it
-      // is retried like the rest, but reported so that a Member fixes the configuration.
+      // A lasting refusal does not resolve on its own: it is reported so that a Member
+      // fixes the configuration. A refused key is retried like the rest, as it holds back
+      // every Feedback until it is fixed. A request or a response refused for this
+      // Feedback would be refused again: the job fails at once, and the sweep of the
+      // Feedbacks left Received retries it later, less and less often.
       if (error instanceof JudgeRefusedError) {
         this.logger.error(
           `Judge: "${error.reason}" refusal for Feedback ${feedbackId}: ${error.message}`,
         );
+        if (error.reason !== 'auth') throw new UnrecoverableError(error.message);
       }
       throw error;
     }

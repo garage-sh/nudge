@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { triageJobId, TRIAGE_JOB, type TriageJob } from '@nudge/core';
+import { captureKey, triageJobId, TRIAGE_JOB, type TriageJob } from '@nudge/core';
 import { captures, feedbacks, type Db } from '@nudge/database';
 import type {
   Author,
@@ -12,7 +12,6 @@ import type {
 import type { CaptureStorage } from '@nudge/storage';
 import type { Queue } from 'bullmq';
 import { DB, CAPTURE_STORAGE, TRIAGE_QUEUE_TOKEN } from '../infra/tokens.js';
-import { captureKey } from './capture.js';
 
 /** Use case shared by both ingestion paths (public key, secret key). */
 @Injectable()
@@ -57,7 +56,8 @@ export class IngestionService {
         if (capture) await tx.insert(captures).values({ feedbackId: id, ...capture });
       });
     } catch (error) {
-      // Without a database row, the image would never be read or deleted.
+      // Without a database row, the image would never be read or deleted. A process
+      // stopped before this point leaves it to the worker's sweep of orphaned Captures.
       if (capture) await this.storage.delete(capture.key).catch(() => undefined);
       throw error;
     }

@@ -6,6 +6,7 @@ import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from 
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
+  jobOptions,
   TRIAGE_QUEUE,
   type ReviewAction,
   type DestinationAdapterResolver,
@@ -25,6 +26,7 @@ import {
   readFeedback,
   feedbacks,
   runMigrations,
+  undoReview,
   type DestinationRow,
   type Project,
   type LoadedFeedback,
@@ -35,6 +37,8 @@ import type { FeedbackState, FeedbackInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
+  type CaptureSweepOptions,
+  type ConcurrencyOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,
@@ -97,6 +101,10 @@ export interface PipelineOptions {
    * Instance key, as in production.
    */
   readonly setupToken?: string;
+  /** Sweep of the orphaned Captures; the worker's (hourly) otherwise. */
+  readonly captureSweep?: CaptureSweepOptions;
+  /** Jobs each worker runs at the same time; the worker's otherwise. */
+  readonly concurrency?: ConcurrencyOptions;
 }
 
 export interface Pipeline {
@@ -181,6 +189,8 @@ export interface Pipeline {
    * `POST /api/feedbacks/:id/review`, by the Member of `signIn()`.
    */
   review(feedbackId: string, action: ReviewAction): Promise<ReviewResult>;
+  /** Undoes a review transition, as the api does when queueing its job fails. */
+  undoReview(feedbackId: string, action: ReviewAction): Promise<void>;
   /**
    * Re-enqueues a Feedback's Triage job (new job id, like a replayed job) and
    * waits until it is processed.
@@ -188,6 +198,8 @@ export interface Pipeline {
   replayTriage(feedbackId: string): Promise<void>;
   /** Re-enqueues a Delivery's Dispatch job and waits until it is processed. */
   replayDispatch(deliveryId: string): Promise<void>;
+  /** Enqueues one more Dispatch job of a Delivery (new job id), without waiting for it. */
+  enqueueDispatch(deliveryId: string): Promise<void>;
   /**
    * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
    * a Redis that refuses writes. Returns the function that repairs it.
@@ -292,6 +304,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.sweep ? { sweep: options.sweep } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
     ...(options.purge ? { purge: options.purge } : {}),
+    ...(options.captureSweep ? { captureSweep: options.captureSweep } : {}),
+    ...(options.concurrency ? { concurrency: options.concurrency } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     onSuspension: (suspension) => {
       suspensions.push(suspension);
@@ -444,8 +458,16 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       if (status === 404) return { status: 'not_found' };
       throw new Error(`review: unexpected response ${status} ${JSON.stringify(body)}`);
     },
+    undoReview: (feedbackId, action) => undoReview(db, feedbackId, action),
     replayTriage: (feedbackId) => replay(TRIAGE_QUEUE, { feedbackId }),
     replayDispatch: (deliveryId) => replay(DISPATCH_QUEUE, { deliveryId }),
+    async enqueueDispatch(deliveryId) {
+      await queues[DISPATCH_QUEUE].add(
+        DISPATCH_QUEUE,
+        { deliveryId },
+        { jobId: `extra-${randomUUID()}`, ...jobOptions(infra.retryPolicy) },
+      );
+    },
     async breakEnqueue(name) {
       // Each job add increments the queue's `id` counter: when it is not numeric, the
       // add fails before any write.
