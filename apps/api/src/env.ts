@@ -77,6 +77,8 @@ function sessionCookieSecureFromEnv(env: Env, warn: (message: string) => void): 
     );
   }
   return false;
+}
+
 /** Shortest `NUDGE_SETUP_TOKEN` accepted: it guards the claim of the Instance. */
 const SETUP_TOKEN_MIN_LENGTH = 16;
 
