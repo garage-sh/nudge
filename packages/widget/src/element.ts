@@ -3,7 +3,7 @@ import { blurArea, capturePage, encodeCapture, type Rectangle } from './capture.
 import { LIMITS } from './domain.js';
 import { en } from './locales/en.js';
 import { LOCALES, resolveLocale, type Locale, type Messages } from './locales/index.js';
-import type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
+import type { DeclaredAuthor, Metadata, RedactUrl, WidgetOptions } from './options.js';
 import { STYLES } from './styles.js';
 import { postFeedback } from './submission.js';
 
@@ -56,18 +56,20 @@ const HtmlElement = (
   typeof HTMLElement === 'undefined' ? class {} : HTMLElement
 ) as typeof HTMLElement;
 
-const PROPERTIES = ['publicKey', 'api', 'author', 'metadata', 'locale'] as const;
+const PROPERTIES = ['publicKey', 'api', 'author', 'metadata', 'locale', 'redactUrl'] as const;
 
 /**
  * The Widget: an always-reachable button that opens a Feedback form, all inside a
  * Shadow DOM. Attributes `public-key`, `api` and `locale`; properties `author` and
- * `metadata` for the identity and context the host provides.
+ * `metadata` for the identity and context the host provides, and `redactUrl` to rewrite
+ * the page URL sent with the Feedback.
  */
 export class NudgeWidget extends HtmlElement {
   static readonly observedAttributes = ['locale'];
 
   #author: DeclaredAuthor | undefined;
   #metadata: Metadata | undefined;
+  #redactUrl: RedactUrl | undefined;
   readonly #root: ShadowRoot;
   /**
    * The Capture the Author chose to attach: the original masked image, which
@@ -160,13 +162,25 @@ export class NudgeWidget extends HtmlElement {
     this.#metadata = value;
   }
 
-  /** Sets the key, the Instance, the language, the identity and the host metadata at once. */
+  /** Rewrites the page URL sent with the Feedback; by default, its fragment is dropped. */
+  get redactUrl(): RedactUrl | undefined {
+    return this.#redactUrl;
+  }
+  set redactUrl(value: RedactUrl | undefined) {
+    this.#redactUrl = value;
+  }
+
+  /**
+   * Sets the key, the Instance, the language, the identity, the host metadata and the
+   * URL redaction at once.
+   */
   configure(options: WidgetOptions): void {
     this.publicKey = options.publicKey;
     this.api = options.api;
     this.locale = options.locale;
     this.#author = options.author;
     this.#metadata = options.metadata;
+    this.#redactUrl = options.redactUrl;
   }
 
   #el<E extends HTMLElement = HTMLElement>(selector: string): E {
@@ -337,6 +351,7 @@ export class NudgeWidget extends HtmlElement {
               api: this.api,
               author: this.#author,
               metadata: this.#metadata,
+              redactUrl: this.#redactUrl,
             },
             {
               text: text.value,

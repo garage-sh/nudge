@@ -15,13 +15,15 @@ const widgetIn = (container: HTMLElement) => {
 const launcherText = (widget: WidgetElement) =>
   widget.shadowRoot?.querySelector('.launcher')?.textContent;
 
-it('mounts the Widget with the host key, Instance, identity and metadata', () => {
+it('mounts the Widget with the host key, Instance, identity, metadata and URL redaction', () => {
+  const redactUrl = (url: URL) => url.origin;
   const { container } = render(
     <NudgeWidget
       publicKey="nk_pub_react"
       api="https://nudge.example"
       author={{ id: 'u-1', name: 'Ada' }}
       metadata={{ version: '1.0.0' }}
+      redactUrl={redactUrl}
     />,
   );
 
@@ -32,6 +34,7 @@ it('mounts the Widget with the host key, Instance, identity and metadata', () =>
     api: 'https://nudge.example',
     author: { id: 'u-1', name: 'Ada' },
     metadata: { version: '1.0.0' },
+    redactUrl,
   });
 });
 
