@@ -38,6 +38,9 @@
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
+  "resolutions": {
+    "multer": "^2.5.0"
+  },
   "engines": {
     "node": ">=22"
   }
