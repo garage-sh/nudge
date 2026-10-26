@@ -132,7 +132,8 @@ async function slackFailure(
 function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
   const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
   const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
-  const projectName = escapeControls(project.name);
+  // Typed by a Member: no `@channel` either, as in the alerts.
+  const projectName = escapeControls(neutralizeBroadMentions(project.name));
   const title = `${isTest ? 'Test · ' : ''}${type} · ${projectName}`;
   const footer = [
     feedback.uncertain ? 'nudge · Uncertain verdict' : 'nudge',
