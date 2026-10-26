@@ -292,6 +292,30 @@ describe('Webhook adapter', () => {
     expect(result.status === 'failed' && result.message.length).toBeLessThan(400);
   });
 
+  it('reads only the start of a refusal: an endless body is cancelled, not downloaded', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1024;
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetch = (async () => new Response(endless, { status: 500 })) as typeof globalThis.fetch;
+
+    const result = await webhook(fetch).send(DELIVERY);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      message: expect.stringMatching(/^HTTP 500: x+…$/),
+    });
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(64 * 1024);
+  });
+
   it('a network error is transient', async () => {
     const { fetch } = receiver(new TypeError('fetch failed'));
 

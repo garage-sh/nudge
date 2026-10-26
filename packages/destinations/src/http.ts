@@ -1,4 +1,5 @@
 import type { FailureClass } from '@nudge/core';
+import { readTextPrefix } from '@nudge/shared';
 import { truncate } from './text.js';
 
 /** Maximum length of an external service's response carried over into a failure message. */
@@ -36,9 +37,10 @@ export async function httpFailure(
   return { failureClass: classify(response.status), message: await failureMessage(response) };
 }
 
-/** "422: <start of the response>", bounded. */
+/** "422: <start of the response>", bounded: the rest of the body is never downloaded. */
 export async function failureMessage(response: Response): Promise<string> {
-  const text = (await response.text().catch(() => '')).trim();
+  // At most 4 bytes per character in UTF-8.
+  const text = (await readTextPrefix(response, EXCERPT_MAX * 4)).trim();
   const excerpt = truncate(text, EXCERPT_MAX);
   return excerpt ? `HTTP ${response.status}: ${excerpt}` : `HTTP ${response.status}`;
 }
