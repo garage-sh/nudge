@@ -1,16 +1,17 @@
 # A complete nudge Instance: `docker compose up -d`, then http://localhost:8080.
-# The configuration is read from `.env` (copy `.env.example`); see the README.
+# The configuration is read from `.env` (copy `.env.example`); see
+# https://github.com/garage-sh/nudge/blob/main/docs/self-hosting.md
 #
 # Only the dashboard publishes a port: it also serves the api (/api, /v1) and the Widget
 # (/widget/nudge-widget.js) on the same origin. Put a TLS reverse proxy in front of it.
 # The port listens on 127.0.0.1 only (NUDGE_BIND): a client must not reach it without
-# going through that proxy, or it could choose its IP (see the README).
+# going through that proxy, or it could choose its IP (see "In production: HTTPS").
 #
 # The nudge images come from ghcr.io; NUDGE_VERSION pins them (default: latest, pin an
 # exact version in production). Postgres and Redis are pinned by digest; Dependabot
 # proposes the new one.
 # Build from source: add `-f docker-compose.build.yml`. Replicate the worker
-# separately: add `-f docker-compose.worker.yml` (see the README).
+# separately: add `-f docker-compose.worker.yml` (see "Scaling").
 
 x-nudge-env: &nudge-env
   DATABASE_URL: postgres://nudge:${NUDGE_POSTGRES_PASSWORD:?set NUDGE_POSTGRES_PASSWORD in .env}@postgres:5432/nudge
@@ -19,7 +20,7 @@ x-nudge-env: &nudge-env
   NUDGE_DASHBOARD_URL: ${NUDGE_DASHBOARD_URL:-}
   NUDGE_COOKIE_SECURE: ${NUDGE_COOKIE_SECURE:-true}
   NUDGE_SETUP_TOKEN: ${NUDGE_SETUP_TOKEN:-}
-  # The dashboard's proxy, plus those placed in front of it (see the README).
+  # The dashboard's proxy, plus those placed in front of it (see "In production: HTTPS").
   NUDGE_TRUST_PROXY: ${NUDGE_TRUST_PROXY:-1}
   NUDGE_ROLES: ${NUDGE_ROLES:-}
   NUDGE_WIDGET_RATE_LIMIT_IP: ${NUDGE_WIDGET_RATE_LIMIT_IP:-}
