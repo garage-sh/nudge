@@ -1,0 +1,374 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "nudge public API",
+    "version": "v1",
+    "description": "Posts a Feedback to a Project of a nudge Instance. The server URL is the Instance’s own."
+  },
+  "servers": [
+    {
+      "url": "https://nudge.example.com"
+    }
+  ],
+  "paths": {
+    "/v1/feedbacks": {
+      "post": {
+        "operationId": "postFeedback",
+        "summary": "Post a Feedback",
+        "description": "With the public key (`nk_pub_…`), the call must come from one of the Project’s Allowed origins and the Author is declared. With the secret key (`nk_sec_…`), from a server only, the Author is attested.",
+        "security": [
+          {
+            "projectKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "description": "The Author's words, not blank. Control characters are removed before the length is checked.",
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "suggestion",
+                      "opinion",
+                      "question"
+                    ],
+                    "description": "The type the Author chose: a hint, the Judge resolves the type of the Verdict."
+                  },
+                  "author": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "The user's id in the application.",
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      "email": {
+                        "description": "320 characters at most.",
+                        "type": "string",
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 255
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "The signed-in user. Declared when sent with the public key, attested with the secret key."
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "description": "The page the Feedback is about, 2048 characters at most.",
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "userAgent": {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      "viewport": {
+                        "type": "object",
+                        "properties": {
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100000
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100000
+                          }
+                        },
+                        "required": [
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Size of the browser window, in CSS pixels."
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "description": "What the application knows and the Feedback does not say: plan, release, feature flag… 50 entries at most, with non-blank keys and scalar values only."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "capture": {
+                    "type": "object",
+                    "properties": {
+                      "contentType": {
+                        "type": "string",
+                        "enum": [
+                          "image/png",
+                          "image/jpeg"
+                        ]
+                      },
+                      "data": {
+                        "type": "string",
+                        "maxLength": 2796204,
+                        "format": "base64",
+                        "contentEncoding": "base64",
+                        "pattern": "^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$",
+                        "description": "The image, base64-encoded: 2097152 bytes at most once decoded, and its first bytes must match `contentType`."
+                      }
+                    },
+                    "required": [
+                      "contentType",
+                      "data"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Screenshot of the page, masked and blurred before it leaves the browser."
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false,
+                "description": "Every object is strict: an unknown field refuses the whole Feedback."
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The Feedback is stored and awaits its Triage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "state": {
+                      "type": "string",
+                      "const": "received"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_feedback"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The key is missing or rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_key",
+                        "invalid_key"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The origin is not allowed for this Project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "origin_refused"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many Feedbacks (public key) or too many rejected secret keys (from this IP).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "too_many_feedbacks",
+                        "too_many_attempts"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "projectKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The Project’s public key (Widget) or secret key (server)."
+      }
+    }
+  }
+}

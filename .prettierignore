@@ -7,3 +7,4 @@ yarn.lock
 LICENSE
 test-results
 playwright-report
+docs/api/openapi.json

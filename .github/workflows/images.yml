@@ -3,7 +3,8 @@
 # - PR: built without being pushed, to check the Dockerfile.
 # - main: pushed as `edge` and `sha-<commit>`.
 # - tag vX.Y.Z: pushed as X.Y.Z, X.Y, X (from 1.0 on) and latest, then the
-#   GitHub Release is created with its notes, the compose file and `env.example`.
+#   GitHub Release is created with its notes, the compose file, `env.example` and the
+#   OpenAPI description of the public API.
 #
 # The images are built for amd64 only, on the self-hosted x64 runners; the `arch`
 # matrix and the `publish` join are kept so that adding an architecture is one line.
@@ -171,15 +172,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The compose file and the example configuration are attached to the release: the
-      # README downloads them from releases/latest, without cloning the repository.
+      # The compose file, the example configuration and the public API description are
+      # attached to the release: the README and the integration skill fetch them from
+      # releases/latest, without cloning the repository.
       - name: Create the release, its notes and its files
         run: |
           prerelease=""
           case "$TAG" in *-*) prerelease="--prerelease" ;; esac
           cp .env.example env.example
           gh release create "$TAG" --verify-tag --generate-notes $prerelease \
-            docker-compose.yml docker-compose.worker.yml env.example
+            docker-compose.yml docker-compose.worker.yml env.example docs/api/openapi.json
         env:
           TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -153,6 +153,16 @@ By default, Captures are written to disk (`NUDGE_CAPTURES_STORAGE=disk`), in the
 
 ## Integrating a Project
 
+### With a coding agent
+
+The `integrate-nudge` skill teaches a coding agent (Claude Code, Cursor, Codex…) to integrate nudge into your application: which path to take, the payload rules, and the values it must ask you for. Install it in the application's repository:
+
+```sh
+npx skills add garage-sh/nudge --skill integrate-nudge
+```
+
+Then ask your agent to integrate nudge, and give it the Instance URL and the Project's key from the dashboard. The skill lives in [`skills/integrate-nudge`](skills/integrate-nudge/SKILL.md).
+
 ### Widget: script tag
 
 ```html
@@ -249,22 +259,9 @@ The SDK does not retry a submission on its own. Pass `{ signal }` as the second 
 
 ### HTTP API
 
-The Widget and the SDK both call `POST /v1/feedbacks`, with the `Authorization: Bearer <key>` header. The public key is the Widget's and requires the `Origin` header; the secret key is the server's.
+The Widget and the SDK both call `POST /v1/feedbacks`, with the `Authorization: Bearer <key>` header. The public key is the Widget's and requires the `Origin` header; the secret key is the server's. The API answers `202 { id, state: 'received' }`, or `{ error, details? }` on refusal; on `429`, wait for `Retry-After`.
 
-| Field     | Content                                                                                 |
-| --------- | --------------------------------------------------------------------------------------- |
-| `text`    | required, 5,000 characters at most                                                      |
-| `type`    | optional: `bug`, `suggestion`, `opinion` or `question`                                  |
-| `author`  | optional: `id`, `email`, `name`                                                         |
-| `context` | optional: `url`, `userAgent`, `viewport {width, height}`, `metadata` (50 keys at most)  |
-| `capture` | optional: `{ contentType: 'image/png' \| 'image/jpeg', data: <base64> }`, 2 MiB at most |
-
-The API answers `202 { id, state: 'received' }`. On refusal, it returns `{ error, details? }` with one of these codes:
-
-- `400 invalid_feedback`: the body is malformed (`details` lists the refused fields as `{ path, message }`);
-- `401 missing_key` or `invalid_key`: the key is missing or rejected;
-- `403 origin_refused`: the origin is not allowed for this Project;
-- `429 too_many_feedbacks`: the rate limit is reached. The response carries `Retry-After`.
+The fields, their bounds and the error codes are described in [`docs/api/openapi.json`](docs/api/openapi.json) (OpenAPI 3.1, also attached to every release). It is generated from the schema the api validates with, and a test fails when the two diverge. Every object is strict: an unknown field refuses the whole Feedback, and whatever is specific to your application goes in `context.metadata`, as flat scalar values.
 
 ### Webhook Destination
 

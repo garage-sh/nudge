@@ -18,6 +18,7 @@ The procedure is in the [Development](README.md#development) section of the READ
 - **The domain vocabulary** is defined in [`CONTEXT.md`](CONTEXT.md): Feedback, Verdict, Destination, Delivery… Code, tests, the interface and commit messages use it.
 - **Architecture decisions** live in [`docs/adr/`](docs/adr/). A PR that goes back on one of them says so and proposes a new ADR.
 - **The dashboard interface** follows [`docs/design-system.md`](docs/design-system.md).
+- **The public API** (`POST /v1/feedbacks`) is described by [`docs/api/openapi.json`](docs/api/openapi.json), generated from `feedbackInputSchema`: after changing the schema, regenerate it with `yarn workspace @nudge/shared vitest run -u`. A change to the Widget's options, the SDK or the public API also updates the [`integrate-nudge`](skills/integrate-nudge/SKILL.md) skill, which coding agents follow to integrate nudge.
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/), in English: `feat(dashboard): …`, `fix(api): …`, `docs: …`. Release notes are generated from them.
 - **Tests** accompany every behavior change. The pipeline tests (`tests/pipeline`) start Postgres and Redis with testcontainers: Docker must be running.
 

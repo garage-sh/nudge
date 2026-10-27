@@ -38,20 +38,39 @@ const metadata = z
   .record(boundedString(FEEDBACK_LIMITS.metadataKey).refine(nonBlank), metadataValueSchema)
   .refine((value) => Object.keys(value).length <= FEEDBACK_LIMITS.metadataKeys, {
     message: `${FEEDBACK_LIMITS.metadataKeys} metadata entries at most`,
-  });
+  })
+  .describe(
+    `What the application knows and the Feedback does not say: plan, release, feature flag… ` +
+      `${FEEDBACK_LIMITS.metadataKeys} entries at most, with non-blank keys and scalar values only.`,
+  );
 
 const dimension = z.number().int().min(0).max(FEEDBACK_LIMITS.viewportDimension);
 
-export const authorSchema = z.strictObject({
-  id: boundedString(FEEDBACK_LIMITS.authorField).optional(),
-  email: boundedString(FEEDBACK_LIMITS.email).pipe(z.email()).optional(),
-  name: boundedString(FEEDBACK_LIMITS.authorField).optional(),
-});
+export const authorSchema = z
+  .strictObject({
+    id: boundedString(FEEDBACK_LIMITS.authorField)
+      .describe("The user's id in the application.")
+      .optional(),
+    email: boundedString(FEEDBACK_LIMITS.email)
+      .pipe(z.email())
+      .describe(`${FEEDBACK_LIMITS.email} characters at most.`)
+      .optional(),
+    name: boundedString(FEEDBACK_LIMITS.authorField).optional(),
+  })
+  .describe(
+    'The signed-in user. Declared when sent with the public key, attested with the secret key.',
+  );
 
 export const contextSchema = z.strictObject({
-  url: boundedString(FEEDBACK_LIMITS.url).pipe(z.url()).optional(),
+  url: boundedString(FEEDBACK_LIMITS.url)
+    .pipe(z.url())
+    .describe(`The page the Feedback is about, ${FEEDBACK_LIMITS.url} characters at most.`)
+    .optional(),
   userAgent: boundedString(FEEDBACK_LIMITS.userAgent).optional(),
-  viewport: z.strictObject({ width: dimension, height: dimension }).optional(),
+  viewport: z
+    .strictObject({ width: dimension, height: dimension })
+    .describe('Size of the browser window, in CSS pixels.')
+    .optional(),
   metadata: metadata.optional(),
 });
 
@@ -100,7 +119,11 @@ export const captureInputSchema = z
     data: z
       .base64()
       .max(CAPTURE_MAX_BASE64_LENGTH)
-      .refine((data) => data.length > 0, { message: 'Empty capture' }),
+      .refine((data) => data.length > 0, { message: 'Empty capture' })
+      .describe(
+        `The image, base64-encoded: ${CAPTURE_MAX_BYTES} bytes at most once decoded, ` +
+          'and its first bytes must match `contentType`.',
+      ),
   })
   .superRefine(({ contentType, data }, context) => {
     if (base64Bytes(data) > CAPTURE_MAX_BYTES) {
@@ -124,13 +147,24 @@ export const captureInputSchema = z
   });
 
 /** Body of a Feedback posted to the public API (Widget or secret key). */
-export const feedbackInputSchema = z.strictObject({
-  text: boundedString(FEEDBACK_LIMITS.text).refine(nonBlank, { message: 'Empty text' }),
-  type: z.enum(FEEDBACK_TYPES).optional(),
-  author: authorSchema.optional(),
-  context: contextSchema.optional(),
-  capture: captureInputSchema.optional(),
-});
+export const feedbackInputSchema = z
+  .strictObject({
+    text: boundedString(FEEDBACK_LIMITS.text)
+      .refine(nonBlank, { message: 'Empty text' })
+      .describe(
+        "The Author's words, not blank. Control characters are removed before the length is checked.",
+      ),
+    type: z
+      .enum(FEEDBACK_TYPES)
+      .describe('The type the Author chose: a hint, the Judge resolves the type of the Verdict.')
+      .optional(),
+    author: authorSchema.optional(),
+    context: contextSchema.optional(),
+    capture: captureInputSchema
+      .describe('Screenshot of the page, masked and blurred before it leaves the browser.')
+      .optional(),
+  })
+  .describe('Every object is strict: an unknown field refuses the whole Feedback.');
 
 /** What the caller sends. */
 export type FeedbackInput = z.input<typeof feedbackInputSchema>;
