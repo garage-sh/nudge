@@ -34,7 +34,7 @@
     "cookie": "^1",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
-    "ioredis": "^5.8.0",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.1.0"

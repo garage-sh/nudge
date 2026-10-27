@@ -30,7 +30,7 @@
     "@nudge/storage": "workspace:*",
     "bullmq": "^5.60.0",
     "drizzle-orm": "^0.45.2",
-    "ioredis": "^5.8.0",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
