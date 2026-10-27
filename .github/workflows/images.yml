@@ -5,12 +5,12 @@
 # - tag vX.Y.Z: pushed as X.Y.Z, X.Y, X (from 1.0 on) and latest, then the
 #   GitHub Release is created with its notes, the compose file and `env.example`.
 #
-# Each architecture (amd64, arm64) is built in its own job on the self-hosted x64
-# runners, arm64 under QEMU emulation; both are joined under the same tag. Each
-# architecture is scanned once pushed by digest, before any tag or signature: a
-# critical vulnerability fixed upstream stops the publication. Every published image
-# carries an SBOM and a provenance attestation and is signed by cosign (keyless,
-# through GitHub's OIDC).
+# The images are built for amd64 only, on the self-hosted x64 runners; the `arch`
+# matrix and the `publish` join are kept so that adding an architecture is one line.
+# Each image is scanned once pushed by digest, before any tag or signature: a critical
+# vulnerability fixed upstream stops the publication. Every published image carries an
+# SBOM and a provenance attestation and is signed by cosign (keyless, through GitHub's
+# OIDC).
 #
 # `publish` and `release` run in the `release` environment, whose protection rules
 # (allowed refs, reviewers) are set in the repository settings.
@@ -46,12 +46,9 @@ jobs:
         image:
           - { name: nudge, target: server }
           - { name: nudge-dashboard, target: dashboard }
-        arch: [amd64, arm64]
+        arch: [amd64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The runners are x64 only: arm64 is built under QEMU emulation.
-      - if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -75,8 +72,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image.target }}-${{ matrix.arch }}
           provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
           sbom: ${{ github.event_name != 'pull_request' }}
-          # Pushed by digest only: the tags are set once both architectures are
-          # joined (`publish` job).
+          # Pushed by digest only: the tags are set once every architecture of the
+          # matrix is joined (`publish` job).
           outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, github.repository_owner, matrix.image.name) || 'type=cacheonly' }}
       # Before `publish` tags and signs anything: a failure here leaves the digest
       # untagged and unsigned.

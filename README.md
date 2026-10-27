@@ -17,7 +17,7 @@ The vocabulary is defined in [`CONTEXT.md`](CONTEXT.md), and architecture decisi
 
 ## Running an Instance
 
-You need Docker and Docker Compose v2. An Instance is made of four containers: `nudge` (the api and the worker), `dashboard`, Postgres and Redis. A fifth container, `migrate`, applies the migrations then stops. The images are published to `ghcr.io/garage-sh/nudge` and `ghcr.io/garage-sh/nudge-dashboard`, for amd64 and arm64.
+You need Docker and Docker Compose v2. An Instance is made of four containers: `nudge` (the api and the worker), `dashboard`, Postgres and Redis. A fifth container, `migrate`, applies the migrations then stops. The images are published to `ghcr.io/garage-sh/nudge` and `ghcr.io/garage-sh/nudge-dashboard`, for amd64.
 
 No need to clone the repository: the compose file and the example configuration are enough.
 
