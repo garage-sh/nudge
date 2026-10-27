@@ -51,7 +51,7 @@ jobs:
       # Known false positives: .gitleaksignore. The image is pinned by digest, like the
       # actions: Dependabot does not update it, raise tag and digest together.
       - name: gitleaks
-        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0@sha256:cdbb955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 git /repo --redact --verbose
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 git /repo --redact --verbose
 
   audit:
     name: Dependency advisories
