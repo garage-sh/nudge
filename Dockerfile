@@ -93,6 +93,11 @@ LABEL org.opencontainers.image.title="nudge-dashboard" \
       org.opencontainers.image.source="https://github.com/garage-sh/nudge" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
+# Alpine fixes land before the upstream image is rebuilt: apply them, or the CI scan
+# blocks the publication on a critical one.
+USER root
+RUN apk upgrade --no-cache
+USER 101
 # Address of the api as seen from this container, and the DNS server that resolves it
 # (Docker's): re-resolved every 10 s, the api can restart or have several replicas.
 ENV NUDGE_API_UPSTREAM=http://nudge:3000 NUDGE_DNS_RESOLVER=127.0.0.11

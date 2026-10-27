@@ -9,6 +9,11 @@
 [![Images](https://github.com/garage-sh/nudge/actions/workflows/images.yml/badge.svg)](https://github.com/garage-sh/nudge/pkgs/container/nudge)
 [![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/flow-dark.svg" />
+  <img src="docs/assets/flow.svg" alt="Feedback from several Projects reaches nudge, which triages it and dispatches it to Linear, GitHub Issues, Slack, Discord and webhooks" width="100%" />
+</picture>
+
 nudge collects feedback from the users of several applications, triages it and sends it where the team works. It is open-source (AGPL-3.0) and self-hosted.
 
 Each **Project** embeds the **Widget**, or calls the public API from its server. Incoming **Feedback** goes through **Triage**: a **Judge**, a System One decision model (through TypeSafe, OpenRouter or your own server), determines its Type and Severity, and spots Junk feedback and Manipulation attempts. It is then dispatched to the Project's **Destinations** (signed webhook, Discord, Linear, Slack, GitHub Issues) whose **Filter** accepts it. **Members** follow everything from a dashboard, available in English and French (language selector in the dashboard).
