@@ -1,5 +1,7 @@
+import { isIPv6 } from 'node:net';
+
 /**
- * In-process memory rate limiter, token bucket, per key (IP…).
+ * In-process memory rate limiter, token bucket, per key (a client, see `clientKey`…).
  * Accepted limit: it counts per api replica (no Redis for this, D8).
  */
 /**
@@ -77,4 +79,26 @@ export class RateLimiter {
     const oldest = this.buckets.keys().next();
     if (!oldest.done) this.buckets.delete(oldest.value);
   }
+}
+
+/**
+ * The key a client is counted under: its IPv4 address, or the /64 prefix of its IPv6
+ * address. A single client commonly holds a whole /64, so counting each IPv6 address
+ * apart would give it billions of buckets.
+ */
+export function clientKey(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1]!;
+  const address = ip.split('%')[0]!;
+  if (!isIPv6(address)) return ip;
+  // An embedded IPv4 address (always last) stands for two groups.
+  const groups = (part: string) =>
+    part ? part.split(':').flatMap((group) => (group.includes('.') ? ['0', '0'] : [group])) : [];
+  const [head = '', tail] = address.split('::');
+  const leading = groups(head);
+  const trailing = tail === undefined ? [] : groups(tail);
+  const zeros = Array<string>(8 - leading.length - trailing.length).fill('0');
+  const prefix = [...leading, ...zeros, ...trailing].slice(0, 4);
+  return `${prefix.map((group) => parseInt(group, 16).toString(16)).join(':')}::/64`;
 }

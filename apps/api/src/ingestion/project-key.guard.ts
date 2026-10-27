@@ -12,7 +12,7 @@ import { projects, type Db, type Project } from '@nudge/database';
 import { PUBLIC_KEY_PREFIX, type Source } from '@nudge/shared';
 import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
-import { RateLimiter } from '../infra/rate-limiter.js';
+import { clientKey, RateLimiter } from '../infra/rate-limiter.js';
 import { DB } from '../infra/tokens.js';
 import { WidgetAccess, TooManyFeedbacks } from './widget-access.js';
 
@@ -68,7 +68,7 @@ export class ProjectKeyGuard implements CanActivate {
     ip: string | undefined,
     response: Response,
   ): Promise<Project> {
-    const client = ip ?? 'unknown';
+    const client = clientKey(ip);
     const wait = this.invalidSecretKeys.msUntilReset(client);
     if (wait > 0) {
       response.setHeader('Retry-After', String(Math.ceil(wait / 1000)));
