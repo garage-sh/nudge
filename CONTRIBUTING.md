@@ -10,7 +10,7 @@ Thank you for your interest. nudge is maintained in its author's spare time: a w
 
 ## Setting up your machine
 
-The procedure is in the [Development](README.md#development) section of the README: Node 26, Docker, `yarn install`, `yarn dev`.
+The procedure is in the [Development](docs/development.md) guide: Node 26, Docker, `yarn install`, `yarn dev`.
 
 ## Conventions
 
