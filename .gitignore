@@ -37,3 +37,6 @@ coverage
 # Playwright
 test-results
 playwright-report
+
+# Claude Code (agent worktrees, local settings)
+.claude/

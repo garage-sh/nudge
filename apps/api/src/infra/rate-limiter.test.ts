@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RateLimiter } from './rate-limiter.js';
+import { clientKey, RateLimiter } from './rate-limiter.js';
 
 const attempts = (limiter: RateLimiter, key: string, count: number, now: number) =>
   Array.from({ length: count }, () => limiter.consume(key, now));
@@ -61,5 +61,34 @@ describe('Rate limiter', () => {
 
     // A scan of the 50,000 live keys on each attempt took seconds for these 10,000.
     expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe('Client key', () => {
+  it('keeps an IPv4 address whole', () => {
+    expect(clientKey('203.0.113.7')).toBe('203.0.113.7');
+  });
+
+  it('reads an IPv4-mapped IPv6 address as its IPv4 address', () => {
+    expect(clientKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+  });
+
+  it('shortens an IPv6 address to its /64: one client holds the whole prefix', () => {
+    const key = clientKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd');
+
+    expect(key).toBe('2001:db8:1:2::/64');
+    expect(clientKey('2001:0db8:0001:0002::1')).toBe(key);
+    expect(clientKey('2001:db8:1:2::abcd%eth0')).toBe(key);
+    expect(clientKey('2001:db8:1:3::1')).not.toBe(key);
+  });
+
+  it('expands a compressed IPv6 prefix', () => {
+    expect(clientKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(clientKey('::1')).toBe('0:0:0:0::/64');
+    expect(clientKey('64:ff9b::192.0.2.1')).toBe('64:ff9b:0:0::/64');
+  });
+
+  it('groups clients without an address together', () => {
+    expect(clientKey(undefined)).toBe('unknown');
   });
 });

@@ -1,6 +1,6 @@
 import { ForbiddenException, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Project } from '@nudge/database';
-import { RateLimiter, type RateLimit } from '../infra/rate-limiter.js';
+import { clientKey, RateLimiter, type RateLimit } from '../infra/rate-limiter.js';
 
 /** Rate limit of the public-key ingestion (D8: in memory, per api replica). */
 export interface WidgetLimits {
@@ -9,9 +9,9 @@ export interface WidgetLimits {
 }
 
 /**
- * By default: 20 Feedbacks per minute for an IP (all Projects together), 600 per
- * minute for a Project. An Author does not write twenty Feedbacks a minute; a Project
- * that receives ten a second is flooded.
+ * By default: 20 Feedbacks per minute for an IP (an IPv6 /64 counts as one, all
+ * Projects together), 600 per minute for a Project. An Author does not write twenty
+ * Feedbacks a minute; a Project that receives ten a second is flooded.
  */
 export const DEFAULT_WIDGET_LIMITS: WidgetLimits = {
   perIp: { limit: 20, windowMs: 60_000 },
@@ -39,7 +39,7 @@ export class WidgetAccess {
 
   /** Counts an attempt from the IP, before even looking up the key. */
   limitIp(ip: string | undefined): void {
-    limit(this.perIp, ip ?? 'unknown');
+    limit(this.perIp, clientKey(ip));
   }
 
   /** The exact origin (scheme, host, port) must be allowed; a request without an origin is not. */
