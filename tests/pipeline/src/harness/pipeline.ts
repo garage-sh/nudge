@@ -2,10 +2,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApi, type WidgetLimits, type TrustProxy } from '@nudge/api';
+import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
+  jobOptions,
   TRIAGE_QUEUE,
   type ReviewAction,
   type DestinationAdapterResolver,
@@ -25,16 +26,19 @@ import {
   readFeedback,
   feedbacks,
   runMigrations,
+  undoReview,
   type DestinationRow,
   type Project,
   type LoadedFeedback,
 } from '@nudge/database';
 import type { JudgeConfig } from '@nudge/judge';
-import { resolveDestinationAdapter as realAdapters } from '@nudge/destinations';
+import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
 import type { FeedbackState, FeedbackInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
+  type CaptureSweepOptions,
+  type ConcurrencyOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,
@@ -69,6 +73,12 @@ export interface PipelineOptions {
    * receivers. By default, each Destination is served by its `FakeDestination`.
    */
   readonly destinations?: 'fakes' | 'real';
+  /**
+   * Internal hosts the real adapters and the Instance's Judge may reach
+   * (`NUDGE_OUTBOUND_ALLOWED_HOSTS`): by default `127.0.0.1`, where the test receivers
+   * and servers listen.
+   */
+  readonly outboundAllowedHosts?: readonly string[];
   /** Suspension threshold, cooldown and probe; the worker's otherwise. */
   readonly suspension?: SuspensionOptions;
   /** Public URL of the dashboard (`NUDGE_DASHBOARD_URL`): links in Deliveries and alerts. */
@@ -86,11 +96,22 @@ export interface PipelineOptions {
   readonly storage?: CaptureStorage;
   /** Period of the retention purge; the worker's otherwise. */
   readonly purge?: PurgeOptions;
+  /**
+   * The api's `NUDGE_SETUP_TOKEN`; by default none, the api derives the token from the
+   * Instance key, as in production.
+   */
+  readonly setupToken?: string;
+  /** Sweep of the orphaned Captures; the worker's (hourly) otherwise. */
+  readonly captureSweep?: CaptureSweepOptions;
+  /** Jobs each worker runs at the same time; the worker's otherwise. */
+  readonly concurrency?: ConcurrencyOptions;
 }
 
 export interface Pipeline {
   /** Base URL of the started api. */
   readonly url: string;
+  /** The token `POST /api/setup` requires, as the api prints it in its logs. */
+  readonly setupToken: string;
   /** The Judge plugged into the worker (throws if the pipeline runs without a Judge). */
   readonly judge: FakeJudge;
   /**
@@ -168,6 +189,8 @@ export interface Pipeline {
    * `POST /api/feedbacks/:id/review`, by the Member of `signIn()`.
    */
   review(feedbackId: string, action: ReviewAction): Promise<ReviewResult>;
+  /** Undoes a review transition, as the api does when queueing its job fails. */
+  undoReview(feedbackId: string, action: ReviewAction): Promise<void>;
   /**
    * Re-enqueues a Feedback's Triage job (new job id, like a replayed job) and
    * waits until it is processed.
@@ -175,6 +198,8 @@ export interface Pipeline {
   replayTriage(feedbackId: string): Promise<void>;
   /** Re-enqueues a Delivery's Dispatch job and waits until it is processed. */
   replayDispatch(deliveryId: string): Promise<void>;
+  /** Enqueues one more Dispatch job of a Delivery (new job id), without waiting for it. */
+  enqueueDispatch(deliveryId: string): Promise<void>;
   /**
    * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
    * a Redis that refuses writes. Returns the function that repairs it.
@@ -252,8 +277,13 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const suspensions: Suspension[] = [];
   const encryptionKey = randomBytes(32).toString('base64');
   const cipher = createSecretCipher(encryptionKey);
+  const outboundFetch = guardedFetch({
+    allowedHosts: options.outboundAllowedHosts ?? ['127.0.0.1'],
+  });
   const resolveDestinationAdapter: DestinationAdapterResolver =
-    options.destinations === 'real' ? realAdapters : (destination) => fakeFor(destination.id);
+    options.destinations === 'real'
+      ? destinationAdapterResolver({ fetch: outboundFetch })
+      : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
     redisUrl,
@@ -266,12 +296,16 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   };
   const workerOptions = {
     ...infra,
-    ...(judge === 'instance' ? { defaultJudge: options.defaultJudge ?? null } : { judge }),
+    ...(judge === 'instance'
+      ? { defaultJudge: options.defaultJudge ?? null, outboundFetch }
+      : { judge }),
     ...(options.triageThresholds ? { triageThresholds: options.triageThresholds } : {}),
     ...(options.judgeTimeoutMs ? { judgeTimeoutMs: options.judgeTimeoutMs } : {}),
     ...(options.sweep ? { sweep: options.sweep } : {}),
     ...(options.suspension ? { suspension: options.suspension } : {}),
     ...(options.purge ? { purge: options.purge } : {}),
+    ...(options.captureSweep ? { captureSweep: options.captureSweep } : {}),
+    ...(options.concurrency ? { concurrency: options.concurrency } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     onSuspension: (suspension) => {
       suspensions.push(suspension);
@@ -287,6 +321,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     resolveDestinationAdapter,
     ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
+    ...(options.setupToken ? { setupToken: options.setupToken } : {}),
   });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();
@@ -311,8 +346,10 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   };
 
   let member: DashboardClient | undefined;
+  const setupToken = options.setupToken ?? deriveSetupToken(encryptionKey);
   const pipeline: Pipeline = {
     url,
+    setupToken,
     get judge() {
       if (!fakeJudge) throw new Error('This pipeline runs without a FakeJudge');
       return fakeJudge;
@@ -364,7 +401,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     dashboard: () => new DashboardClient(url),
     async signIn() {
       const client = new DashboardClient(url);
-      const setup = await client.post('/api/setup', DEFAULT_MEMBER);
+      const setup = await client.post('/api/setup', { ...DEFAULT_MEMBER, setupToken });
       if (setup.status === 201) return client;
       const session = await client.post('/api/session', DEFAULT_MEMBER);
       if (session.status !== 200) {
@@ -421,8 +458,16 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
       if (status === 404) return { status: 'not_found' };
       throw new Error(`review: unexpected response ${status} ${JSON.stringify(body)}`);
     },
+    undoReview: (feedbackId, action) => undoReview(db, feedbackId, action),
     replayTriage: (feedbackId) => replay(TRIAGE_QUEUE, { feedbackId }),
     replayDispatch: (deliveryId) => replay(DISPATCH_QUEUE, { deliveryId }),
+    async enqueueDispatch(deliveryId) {
+      await queues[DISPATCH_QUEUE].add(
+        DISPATCH_QUEUE,
+        { deliveryId },
+        { jobId: `extra-${randomUUID()}`, ...jobOptions(infra.retryPolicy) },
+      );
+    },
     async breakEnqueue(name) {
       // Each job add increments the queue's `id` counter: when it is not numeric, the
       // add fails before any write.

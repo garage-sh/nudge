@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
+import { OutboundRefusedError } from './outbound.js';
 import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { webhookAdapter } from './webhook.js';
 
@@ -292,6 +293,30 @@ describe('Webhook adapter', () => {
     expect(result.status === 'failed' && result.message.length).toBeLessThan(400);
   });
 
+  it('reads only the start of a refusal: an endless body is cancelled, not downloaded', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1024;
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetch = (async () => new Response(endless, { status: 500 })) as typeof globalThis.fetch;
+
+    const result = await webhook(fetch).send(DELIVERY);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      message: expect.stringMatching(/^HTTP 500: x+…$/),
+    });
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(64 * 1024);
+  });
+
   it('a network error is transient', async () => {
     const { fetch } = receiver(new TypeError('fetch failed'));
 
@@ -299,6 +324,29 @@ describe('Webhook adapter', () => {
       status: 'failed',
       failureClass: 'transient',
       message: expect.stringContaining('fetch failed'),
+    });
+  });
+
+  it('a host the outbound policy refuses is a permanent failure: retrying changes nothing', async () => {
+    const { fetch } = receiver(new OutboundRefusedError('receiver.test'));
+
+    expect(await webhook(fetch).send(DELIVERY)).toEqual({
+      status: 'failed',
+      failureClass: 'permanent',
+      message: expect.stringContaining('NUDGE_OUTBOUND_ALLOWED_HOSTS'),
+    });
+  });
+
+  it('the registry calls a non-public URL through the guarded fetch: refused', async () => {
+    const internal = {
+      ...DESTINATION,
+      config: { url: 'http://169.254.169.254/latest/meta-data/' },
+    };
+
+    expect(await resolveDestinationAdapter(internal).healthCheck()).toMatchObject({
+      reachable: false,
+      failureClass: 'permanent',
+      message: expect.stringContaining('169.254.169.254'),
     });
   });
 

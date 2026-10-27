@@ -1,5 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
-import { checkKey, type CaptureStorage } from './port.js';
+import { checkKey, type CaptureStorage, type StoredObject } from './port.js';
 
 /** An S3-compatible service (AWS S3, MinIO, Garage, R2…). */
 export interface S3Config {
@@ -41,8 +41,11 @@ export function s3Storage(config: S3Config, options: S3Options = {}): CaptureSto
   const base = new URL(config.endpoint);
   const credentials = { ...config, service: 's3' };
 
-  function objectUrl(key: string): URL {
-    const path = [...(prefix ? [prefix] : []), checkKey(key)].join('/');
+  const objectUrl = (key: string): URL =>
+    bucketUrl([...(prefix ? [prefix] : []), checkKey(key)].join('/'));
+
+  /** The URL of `path` in the bucket (`''`: the bucket itself). */
+  function bucketUrl(path: string): URL {
     const url = new URL(base);
     const root = base.pathname.replace(/\/+$/, '');
     if (config.forcePathStyle) {
@@ -56,10 +59,9 @@ export function s3Storage(config: S3Config, options: S3Options = {}): CaptureSto
 
   async function call(
     method: 'PUT' | 'GET' | 'DELETE',
-    key: string,
+    url: URL,
     body?: { content: Uint8Array; contentType: string },
   ): Promise<Response> {
-    const url = objectUrl(key);
     const date = now();
     const bodyHash = sha256Hex(body?.content ?? new Uint8Array());
     const headers: Record<string, string> = {
@@ -83,14 +85,41 @@ export function s3Storage(config: S3Config, options: S3Options = {}): CaptureSto
     return new Error(`S3 ${method} ${key}: HTTP ${response.status}${code ? ` ${code}` : ''}`);
   }
 
+  /** One ListObjectsV2 page of the keys under `keyPrefix`, from `token` (`null`: the first). */
+  async function listPage(
+    keyPrefix: string,
+    token: string | null,
+  ): Promise<{ objects: StoredObject[]; next: string | null }> {
+    const url = bucketUrl('');
+    url.search = canonicalQuery({
+      'list-type': '2',
+      prefix: `${prefix ? `${prefix}/` : ''}${keyPrefix}`,
+      ...(token ? { 'continuation-token': token } : {}),
+    });
+    const response = await call('GET', url);
+    if (!response.ok) throw await failure('LIST', keyPrefix, response);
+    const body = await response.text();
+    const objects: StoredObject[] = [];
+    for (const [, contents = ''] of body.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+      const fullKey = xmlText(contents, 'Key') ?? '';
+      const key = prefix ? fullKey.slice(prefix.length + 1) : fullKey;
+      const modifiedAt = new Date(xmlText(contents, 'LastModified') ?? '');
+      // An object no Capture key could name is not nudge's: it is never listed.
+      if (!isValidKey(key) || Number.isNaN(modifiedAt.getTime())) continue;
+      objects.push({ key, modifiedAt });
+    }
+    const truncated = xmlText(body, 'IsTruncated') === 'true';
+    return { objects, next: truncated ? xmlText(body, 'NextContinuationToken') : null };
+  }
+
   return {
     async save(key, content, contentType) {
-      const response = await call('PUT', key, { content, contentType });
+      const response = await call('PUT', objectUrl(key), { content, contentType });
       if (!response.ok) throw await failure('PUT', key, response);
       await response.body?.cancel();
     },
     async read(key) {
-      const response = await call('GET', key);
+      const response = await call('GET', objectUrl(key));
       if (response.status === 404) {
         await response.body?.cancel();
         return null;
@@ -99,12 +128,64 @@ export function s3Storage(config: S3Config, options: S3Options = {}): CaptureSto
       return new Uint8Array(await response.arrayBuffer());
     },
     async delete(key) {
-      const response = await call('DELETE', key);
+      const response = await call('DELETE', objectUrl(key));
       if (!response.ok && response.status !== 404) throw await failure('DELETE', key, response);
       await response.body?.cancel();
     },
+    async *list(keyPrefix) {
+      let token: string | null = null;
+      do {
+        const page = await listPage(keyPrefix, token);
+        yield* page.objects;
+        token = page.next;
+      } while (token);
+    },
+    // A PUT is atomic: an interrupted write leaves nothing behind.
+    removeIncomplete: () => Promise.resolve(0),
   };
 }
+
+const isValidKey = (key: string): boolean => {
+  try {
+    checkKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const XML_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+};
+
+/** The text of the first `<tag>` element of `xml`, unescaped; `null` if there is none. */
+function xmlText(xml: string, tag: string): string | null {
+  const text = new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml)?.[1];
+  return text === undefined
+    ? null
+    : text.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity: string) => XML_ENTITIES[entity] ?? '');
+}
+
+/** URI encoding of Signature V4: everything but the RFC 3986 unreserved characters. */
+const uriEncode = (value: string): string =>
+  encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+/**
+ * A query string in the canonical form of Signature V4 (names sorted, names and values
+ * encoded): sent as is, it is also the one signed.
+ */
+const canonicalQuery = (query: Readonly<Record<string, string>>): string =>
+  Object.keys(query)
+    .sort()
+    .map((name) => `${uriEncode(name)}=${uriEncode(query[name] ?? '')}`)
+    .join('&');
 
 export interface RequestToSign {
   readonly method: string;
@@ -125,7 +206,8 @@ export interface Credentials {
 /**
  * The `Authorization` header value of a request signed with Signature V4
  * (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html).
- * The path is taken as is (S3 does not normalize it); the request has no query.
+ * The path is taken as is (S3 does not normalize it), and so is the query: the caller
+ * builds it in canonical form (`canonicalQuery`).
  */
 export function signV4(request: RequestToSign, credentials: Credentials, date: Date): string {
   const headers = new Map<string, string>([['host', request.url.host]]);

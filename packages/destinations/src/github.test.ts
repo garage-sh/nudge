@@ -126,6 +126,23 @@ describe('GitHub Issues adapter', () => {
   });
 
   it.each([
+    ['a javascript: URL', 'javascript:alert(1)'],
+    ['an http URL', 'http://github.com/shop/issues/1'],
+    ['an overlong URL', `${ISSUE_URL}?${'a'.repeat(2048)}`],
+    ['no URL', 42],
+  ])('keeps no link when GitHub returns %s', async (_, htmlUrl) => {
+    const recording = {
+      ...GITHUB.issueCreated,
+      body: { ...GITHUB.issueCreated.body, html_url: htmlUrl },
+    };
+
+    expect(await adapter(github(recording).fetch).send(DELIVERY)).toEqual({
+      status: 'delivered',
+      externalUrl: null,
+    });
+  });
+
+  it.each([
     ['401 bad credentials', 'auth', GITHUB.badCredentials],
     ['403 permission denied', 'auth', GITHUB.permissionDenied],
     // Unknown repository or out of the token's reach, issues disabled: every Delivery

@@ -1,4 +1,8 @@
-import type { CaptureStorage } from '@nudge/storage';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { captureKey } from '@nudge/core';
+import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   CAPTURE_MAX_BYTES,
   captureUrl,
@@ -56,6 +60,8 @@ describe('Captures', () => {
     expect(image.status).toBe(200);
     expect(image.headers.get('content-type')).toBe('image/png');
     expect(image.headers.get('x-content-type-options')).toBe('nosniff');
+    // Erased with its Feedback, it must not outlive it in the browser cache.
+    expect(image.headers.get('cache-control')).toBe('no-store');
     expect(image.bytes).toEqual(new Uint8Array(PNG));
   });
 
@@ -144,6 +150,7 @@ describe('Captures', () => {
       },
     ],
     ['content that is not base64', { contentType: 'image/png', data: 'not base64 at all' }],
+    ['base64 too short to decode', { contentType: 'image/png', data: 'A' }],
     ['an empty Capture', { contentType: 'image/png', data: '' }],
     [
       'a too heavy Capture',
@@ -172,6 +179,11 @@ describe('Captures, storage unavailable', () => {
     save: () => Promise.reject(new Error('disk full')),
     read: () => Promise.reject(new Error('disk unreadable')),
     delete: () => Promise.resolve(),
+    // eslint-disable-next-line require-yield
+    list: async function* () {
+      throw new Error('disk unreadable');
+    },
+    removeIncomplete: () => Promise.resolve(0),
   };
 
   beforeAll(async () => {
@@ -197,5 +209,53 @@ describe('Captures, storage unavailable', () => {
     const member = await pipeline.signIn();
     const page = await member.get<FeedbackPage>(`/api/feedbacks?project=${project.id}`);
     expect(page.body.feedbacks).toEqual([]);
+  });
+});
+
+/**
+ * The api writes the image before its database row: stopped in between, it leaves an
+ * image nothing references. The worker's sweep deletes it once past a grace period.
+ */
+describe('Sweep of orphaned Captures', () => {
+  let pipeline: Pipeline;
+  let dir: string;
+  let storage: CaptureStorage;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'nudge-orphans-'));
+    storage = diskStorage(dir);
+    pipeline = await startPipeline({ storage, captureSweep: { graceMs: 1000, intervalMs: 100 } });
+  });
+
+  afterAll(async () => {
+    await pipeline?.stop();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const storedKeys = async () => {
+    const keys: string[] = [];
+    for await (const { key } of storage.list('')) keys.push(key);
+    return keys;
+  };
+
+  it('deletes an image no Capture references once past the grace period, and only that one', async () => {
+    const { publicKey } = await pipeline.createProject({
+      name: 'Orphans',
+      allowedOrigins: [ORIGIN],
+    });
+    const response = await pipeline.postWidgetFeedback(publicKey, ORIGIN, {
+      text: 'A Capture that made it to the database',
+      capture: pngCapture,
+    });
+    const { id } = (await response.json()) as { id: string };
+    const orphan = captureKey('00000000-0000-4000-8000-000000000001', 'image/png');
+    await storage.save(orphan, PNG, 'image/png');
+
+    // Within the grace period, its database row may still be on its way.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await storedKeys()).toContain(orphan);
+
+    await expect.poll(storedKeys, { timeout: 10_000 }).not.toContain(orphan);
+    expect(await storedKeys()).toEqual([captureKey(id, 'image/png')]);
   });
 });

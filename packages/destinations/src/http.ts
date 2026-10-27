@@ -1,4 +1,6 @@
 import type { FailureClass } from '@nudge/core';
+import { errorMessage, readTextPrefix } from '@nudge/shared';
+import { OutboundRefusedError } from './outbound.js';
 import { truncate } from './text.js';
 
 /** Maximum length of an external service's response carried over into a failure message. */
@@ -36,9 +38,10 @@ export async function httpFailure(
   return { failureClass: classify(response.status), message: await failureMessage(response) };
 }
 
-/** "422: <start of the response>", bounded. */
+/** "422: <start of the response>", bounded: the rest of the body is never downloaded. */
 export async function failureMessage(response: Response): Promise<string> {
-  const text = (await response.text().catch(() => '')).trim();
+  // At most 4 bytes per character in UTF-8.
+  const text = (await readTextPrefix(response, EXCERPT_MAX * 4)).trim();
   const excerpt = truncate(text, EXCERPT_MAX);
   return excerpt ? `HTTP ${response.status}: ${excerpt}` : `HTTP ${response.status}`;
 }
@@ -51,6 +54,30 @@ export async function responseText(response: Response): Promise<string> {
       .text()
       .catch(() => '')
   ).trim();
+}
+
+/** Longest link to a created issue that a Delivery keeps. */
+export const EXTERNAL_URL_MAX = 2048;
+
+/**
+ * The link to what the target created, as the service returned it: kept only if it is
+ * an https URL of bounded length, otherwise the Delivery has no link. The dashboard
+ * shows it as a link: a third-party value never sets its scheme.
+ */
+export function externalLink(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > EXTERNAL_URL_MAX) return null;
+  return URL.parse(value)?.protocol === 'https:' ? value : null;
+}
+
+/**
+ * Class and message of a `fetch` exception: a host the outbound policy refuses is
+ * permanent (only a configuration change fixes it), a network error or a timeout transient.
+ */
+export function networkFailure(error: unknown): { failureClass: FailureClass; message: string } {
+  return {
+    failureClass: error instanceof OutboundRefusedError ? 'permanent' : 'transient',
+    message: errorMessage(error),
+  };
 }
 
 /** Message of a `fetch` exception (network, timeout). */

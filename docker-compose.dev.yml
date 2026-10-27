@@ -1,14 +1,15 @@
 # Development infrastructure: Postgres (source of truth) and Redis (BullMQ queues).
-# The apps run on the host (`yarn dev`).
+# The apps run on the host (`yarn dev`). The ports listen on 127.0.0.1 only: the
+# password is `nudge` and Redis has none.
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
     environment:
       POSTGRES_USER: nudge
       POSTGRES_PASSWORD: nudge
       POSTGRES_DB: nudge
     ports:
-      - '${NUDGE_POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${NUDGE_POSTGRES_PORT:-5432}:5432'
     volumes:
       - nudge_postgres:/var/lib/postgresql/data
     healthcheck:
@@ -17,9 +18,9 @@ services:
       timeout: 3s
       retries: 15
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
     ports:
-      - '${NUDGE_REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${NUDGE_REDIS_PORT:-6379}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 2s

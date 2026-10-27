@@ -10,6 +10,7 @@ import {
   createSecretCipher,
   jobOptions,
   ALERTS_QUEUE,
+  SWEEP_CAPTURES_JOB,
   SWEEP_DELIVERIES_JOB,
   SWEEP_RECEIVED_JOB,
   PURGE_RETENTION_JOB,
@@ -42,6 +43,8 @@ import {
 } from './tokens.js';
 import { JudgeResolver } from './judge-resolver.js';
 import {
+  DEFAULT_CAPTURE_SWEEP,
+  DEFAULT_CONCURRENCY,
   DEFAULT_SWEEP,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
@@ -173,10 +176,18 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: purge.intervalMs },
       { name: PURGE_RETENTION_JOB },
     );
+    const captureSweep = this.options.captureSweep ?? DEFAULT_CAPTURE_SWEEP;
+    await this.maintenanceQueue.upsertJobScheduler(
+      SWEEP_CAPTURES_JOB,
+      { every: captureSweep.intervalMs },
+      { name: SWEEP_CAPTURES_JOB },
+    );
+    const concurrency = this.options.concurrency ?? DEFAULT_CONCURRENCY;
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
         connection: this.redis,
         prefix,
+        concurrency: concurrency.triage,
       }),
       new Worker<DispatchJob>(
         DISPATCH_QUEUE,
@@ -184,7 +195,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           this.dispatch.handle(job.data, {
             lastAttempt: isLastAttempt(job),
           }),
-        { connection: this.redis, prefix },
+        { connection: this.redis, prefix, concurrency: concurrency.dispatch },
       ),
       new Worker<AlertJob>(
         ALERTS_QUEUE,
@@ -203,6 +214,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           if (job.name === SWEEP_DELIVERIES_JOB) await this.sweep.sweepDeliveries();
           if (job.name === PROBE_SUSPENDED_JOB) await this.suspension.probe();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
+          if (job.name === SWEEP_CAPTURES_JOB) await this.sweep.sweepCaptures();
         },
         { connection: this.redis, prefix },
       ),

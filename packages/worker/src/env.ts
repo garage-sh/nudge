@@ -7,9 +7,11 @@ import {
   DEFAULT_TRIAGE_THRESHOLDS,
   type Env,
 } from '@nudge/core';
+import { outboundPolicyFromEnv, type OutboundPolicy } from '@nudge/destinations';
 import { judgeConfigFromEnv } from '@nudge/judge';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import {
+  DEFAULT_CONCURRENCY,
   DEFAULT_JUDGE_TIMEOUT_MS,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
@@ -29,8 +31,9 @@ export type WorkerConfig = Required<
     | 'judgeTimeoutMs'
     | 'suspension'
     | 'purge'
+    | 'concurrency'
   >
-> & { readonly storage: StorageConfig };
+> & { readonly storage: StorageConfig; readonly outbound: OutboundPolicy };
 
 const probabilityBounds = { min: 0, max: 1 };
 const durationBounds = { min: 1 };
@@ -50,6 +53,8 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
     defaultJudge: judgeConfigFromEnv(env),
     // The same storage as the api's: a shared volume, or an S3 bucket.
     storage: storageConfigFromEnv(env),
+    // Internal hosts a Member-configured URL may reach (Judge, Destinations).
+    outbound: outboundPolicyFromEnv(env),
     dashboardUrl: httpUrlEnv(env, 'NUDGE_DASHBOARD_URL'),
     triageThresholds: {
       junk: numberEnv(env, 'NUDGE_TRIAGE_JUNK_THRESHOLD', thresholds.junk, probabilityBounds),
@@ -99,6 +104,14 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
         DEFAULT_PURGE.intervalMs,
         durationBounds,
       ),
+    },
+    concurrency: {
+      triage: integerEnv(env, 'NUDGE_TRIAGE_CONCURRENCY', DEFAULT_CONCURRENCY.triage, {
+        min: 1,
+      }),
+      dispatch: integerEnv(env, 'NUDGE_DISPATCH_CONCURRENCY', DEFAULT_CONCURRENCY.dispatch, {
+        min: 1,
+      }),
     },
   };
 }

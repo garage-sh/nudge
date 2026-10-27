@@ -1,4 +1,6 @@
 import {
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -10,6 +12,7 @@ import { projects, type Db, type Project } from '@nudge/database';
 import { PUBLIC_KEY_PREFIX, type Source } from '@nudge/shared';
 import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
+import { RateLimiter } from '../infra/rate-limiter.js';
 import { DB } from '../infra/tokens.js';
 import { WidgetAccess, TooManyFeedbacks } from './widget-access.js';
 
@@ -23,6 +26,12 @@ export type AuthenticatedRequest = Request & { project: Project; source: Source 
  */
 @Injectable()
 export class ProjectKeyGuard implements CanActivate {
+  /**
+   * Unknown secret keys per IP: 20 per minute. Guessing a 256-bit key is hopeless, but
+   * each attempt costs a Postgres lookup; past the limit, the IP is refused before it.
+   */
+  private readonly invalidSecretKeys = new RateLimiter({ limit: 20, windowMs: 60_000 });
+
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly widgetAccess: WidgetAccess,
@@ -34,7 +43,7 @@ export class ProjectKeyGuard implements CanActivate {
     const [scheme, key] = (request.headers.authorization ?? '').split(' ');
     if (scheme !== 'Bearer' || !key) throw new UnauthorizedException({ error: 'missing_key' });
     if (!key.startsWith(PUBLIC_KEY_PREFIX)) {
-      request.project = await this.project(eq(projects.secretKeyHash, hashSecretKey(key)));
+      request.project = await this.secretKeyProject(key, request.ip, http.getResponse<Response>());
       request.source = 'api';
       return true;
     }
@@ -50,6 +59,25 @@ export class ProjectKeyGuard implements CanActivate {
       if (error instanceof TooManyFeedbacks) {
         http.getResponse<Response>().setHeader('Retry-After', String(error.retryAfterSeconds));
       }
+      throw error;
+    }
+  }
+
+  private async secretKeyProject(
+    key: string,
+    ip: string | undefined,
+    response: Response,
+  ): Promise<Project> {
+    const client = ip ?? 'unknown';
+    const wait = this.invalidSecretKeys.msUntilReset(client);
+    if (wait > 0) {
+      response.setHeader('Retry-After', String(Math.ceil(wait / 1000)));
+      throw new HttpException({ error: 'too_many_attempts' }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    try {
+      return await this.project(eq(projects.secretKeyHash, hashSecretKey(key)));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) this.invalidSecretKeys.consume(client);
       throw error;
     }
   }

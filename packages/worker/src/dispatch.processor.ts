@@ -16,11 +16,18 @@ import {
   type Db,
   type DestinationRow,
 } from '@nudge/database';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { TransientFailure } from './transient-failure.js';
 import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
+
+/**
+ * Beyond this, the claim of a Delivery belongs to a job that died while sending it (a
+ * send lasts at most the adapter's timeout); shorter than the default sweep delay and
+ * than the retries of a dispatch job, which take it over.
+ */
+export const DELIVERY_CLAIM_TTL_MS = 2 * 60_000;
 
 @Injectable()
 export class DispatchProcessor {
@@ -67,6 +74,24 @@ export class DispatchProcessor {
       this.logger.error(`Delivery ${deliveryId} without a Verdict, ignored`);
       return;
     }
+    // Deliveries are only created for a Triaged or Dispatched Feedback: one of a
+    // Feedback that is not (any more) is never sent.
+    if (feedback.state !== 'triaged' && feedback.state !== 'dispatched') {
+      this.logger.error(`Delivery ${deliveryId} of a Feedback ${feedback.state}: not sent`);
+      await this.db
+        .update(deliveries)
+        .set({
+          status: 'failed',
+          lastError: `permanent: Feedback ${feedback.state}, not dispatchable`,
+          claimedAt: null,
+        })
+        .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'pending')));
+      return;
+    }
+    if (!(await this.claim(deliveryId))) {
+      // Another job is sending it: this one comes back later, in case that one died.
+      throw new TransientFailure(`Delivery ${deliveryId} is being sent by another job`);
+    }
 
     let captureUnreadable = false;
     const outgoing: OutgoingDelivery = {
@@ -106,6 +131,33 @@ export class DispatchProcessor {
       internal: exception || captureUnreadable,
     });
     if (outcome === 'retry') throw new TransientFailure(result.message);
+  }
+
+  /**
+   * Takes the pending Delivery for this job, unless another job holds it: two jobs of
+   * the same Delivery never send it at the same time. The outcome of the send
+   * (`SuspensionService`) releases it; the claim of a job that died while sending
+   * expires after `DELIVERY_CLAIM_TTL_MS`.
+   */
+  private async claim(deliveryId: string): Promise<boolean> {
+    const claimed = await this.db
+      .update(deliveries)
+      .set({ claimedAt: sql`now()` })
+      .where(
+        and(
+          eq(deliveries.id, deliveryId),
+          eq(deliveries.status, 'pending'),
+          or(
+            isNull(deliveries.claimedAt),
+            lt(
+              deliveries.claimedAt,
+              sql`now() - ${DELIVERY_CLAIM_TTL_MS} * interval '1 millisecond'`,
+            ),
+          ),
+        ),
+      )
+      .returning({ id: deliveries.id });
+    return claimed.length > 0;
   }
 
   /**

@@ -120,6 +120,33 @@ describe('Webhook Destination end to end', () => {
     });
   });
 
+  it.each([
+    ['cloud metadata', 'http://169.254.169.254/latest/meta-data/'],
+    ['a unique local IPv6 address', 'http://[fd00:ec2::254]/'],
+  ])(
+    '"test" refuses %s without connecting: only public hosts and the allowed ones',
+    async (_, url) => {
+      const { project } = await pipeline.createProject({ name: `Internal ${url}` });
+      const creation = await member.post<DestinationWithGeneratedSecrets>(
+        `/api/projects/${project.id}/destinations`,
+        {
+          type: 'webhook',
+          name: 'Internal',
+          config: { url },
+          filter: { types: ['bug'], minimumSeverity: null },
+        },
+      );
+
+      const trial = await member.post(`/api/destinations/${creation.body.destination.id}/test`);
+
+      expect(trial.body).toEqual({
+        status: 'failed',
+        failureClass: 'permanent',
+        message: expect.stringContaining('NUDGE_OUTBOUND_ALLOWED_HOSTS'),
+      });
+    },
+  );
+
   it('after regeneration, only the new secret verifies the signature', async () => {
     const { path, destination, generatedSecrets } = await webhookDestination('Rotation');
     const regeneration = await member.post<DestinationWithGeneratedSecrets>(

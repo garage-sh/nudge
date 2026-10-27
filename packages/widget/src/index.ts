@@ -3,7 +3,7 @@ import type { WidgetOptions } from './options.js';
 
 export { ELEMENT_NAME, NudgeWidget } from './element.js';
 export type { Locale } from './locales/index.js';
-export type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
+export type { DeclaredAuthor, Metadata, RedactUrl, WidgetOptions } from './options.js';
 
 /** Registers `<nudge-widget>` (no effect if it already is). */
 export function defineWidget(): void {

@@ -19,6 +19,11 @@ export const SWEEP_DELIVERIES_JOB = 'sweep-deliveries';
 export const PROBE_SUSPENDED_JOB = 'probe-suspended';
 /** Purge of the Feedback (and its Captures) older than the retention period. */
 export const PURGE_RETENTION_JOB = 'purge-retention';
+/**
+ * Sweep of the Capture storage: the images no Capture references (a process stopped
+ * between the image and its database row) and the leftovers of interrupted writes.
+ */
+export const SWEEP_CAPTURES_JOB = 'sweep-captures';
 
 /** Default BullMQ key prefix; the api and the worker must share the same one. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';
@@ -40,8 +45,13 @@ export interface DispatchJob {
 /** First Triage job of a Feedback (ingestion, sweep D18): it is queued only once. */
 export const triageJobId = (feedbackId: string): string => feedbackId;
 
-/** A Feedback becomes Triaged again through a review only once: a review-specific job is enough. */
-export const reviewJobId = (feedbackId: string): string => `${feedbackId}-review`;
+/**
+ * A review that makes the Feedback Triaged (approve, reinstate): a fresh job per review.
+ * The conditional transition already prevents a double review; a fixed id would make
+ * BullMQ ignore the job of a review retried after an undone one (queueing failed after
+ * Redis stored the job), leaving a Triaged Feedback that nothing dispatches.
+ */
+export const reviewJobId = (feedbackId: string): string => `${feedbackId}-review-${randomUUID()}`;
 
 /**
  * First dispatch job of a Delivery (after Triage or a redispatch, D22): a Delivery is

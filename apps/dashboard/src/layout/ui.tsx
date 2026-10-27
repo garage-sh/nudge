@@ -360,11 +360,14 @@ export function Confirmation({
  */
 export function ConfirmAction({
   label,
+  accessibleLabel,
   question,
   pending,
   onConfirm,
 }: {
   label: string;
+  /** The button's name for assistive technologies, when `label` alone is ambiguous in a list. */
+  accessibleLabel?: string;
   question: string;
   pending?: boolean;
   onConfirm: () => void;
@@ -384,7 +387,13 @@ export function ConfirmAction({
   };
   if (!open) {
     return (
-      <button ref={trigger} type="button" className="secondary" onClick={() => setOpen(true)}>
+      <button
+        ref={trigger}
+        type="button"
+        className="secondary"
+        aria-label={accessibleLabel}
+        onClick={() => setOpen(true)}
+      >
         {label}
       </button>
     );

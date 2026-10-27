@@ -1,7 +1,7 @@
 # The dashboard, the dashboard API (/api) and public ingestion (/v1) on a single
 # origin: the session cookie stays first-party, without CORS. The variables
 # NUDGE_API_UPSTREAM and NUDGE_DNS_RESOLVER are substituted when the container starts
-# (official nginx image, /etc/nginx/templates).
+# (nginx image templates, /etc/nginx/templates).
 
 # A name resolved on each request (cached at most 10 s) rather than once at startup.
 resolver ${NUDGE_DNS_RESOLVER} valid=10s ipv6=off;
@@ -24,7 +24,10 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         # The api reads the client IP here (Widget rate limit, brute-force protection):
-        # NUDGE_TRUST_PROXY counts this proxy, and the ones in front of it.
+        # NUDGE_TRUST_PROXY counts this proxy, and the ones in front of it. Appended,
+        # not overwritten, so that a TLS proxy in front can pass the client IP on; the
+        # compose file therefore keeps this port off the network (NUDGE_BIND), or a
+        # client skipping that proxy would write its own entry.
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
@@ -48,5 +51,10 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header Referrer-Policy "same-origin" always;
+        # Everything comes from this origin: Vite's script and stylesheet, the fonts
+        # (small ones inlined as data:), the Captures (/api) and the api calls. No
+        # inline script nor style element; React sets the style attributes through the
+        # DOM, which CSP does not restrict.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
     }
 }

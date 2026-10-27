@@ -5,10 +5,15 @@ import type { DestinationAdapterResolver } from '@nudge/core';
 import { CAPTURE_MAX_BASE64_LENGTH } from '@nudge/shared';
 import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
+import { setupTokenConfig } from './dashboard/auth/setup-token.js';
 import type { InfraOptions } from './infra/infra.module.js';
 
-/** Express `trust proxy` setting: boolean, number of proxies, or trusted addresses. */
-export type TrustProxy = boolean | number | string;
+/**
+ * Express `trust proxy` setting: none (`false`), number of proxies, or trusted
+ * addresses. Never `true`, which trusts the leftmost, client-supplied
+ * `X-Forwarded-For`.
+ */
+export type TrustProxy = false | number | string;
 
 export interface ApiOptions extends InfraOptions, IngestionOptions {
   /** `false` turns off Nest logs (tests). */
@@ -18,6 +23,12 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
    * dashboard served over HTTP (local development, tests).
    */
   readonly sessionCookieSecure?: boolean;
+  /**
+   * Token required to create the first Member (`NUDGE_SETUP_TOKEN`). Absent: derived
+   * from the Instance key, the same on every replica, and printed in the logs at
+   * startup while no Member exists.
+   */
+  readonly setupToken?: string | null;
   /**
    * Express `trust proxy` setting: behind a reverse proxy, the client IP (Widget rate
    * limit, sign-in brute-force protection) is read from `X-Forwarded-For`.
@@ -37,6 +48,7 @@ export async function createApi(options: ApiOptions): Promise<NestExpressApplica
     ApiModule.forRoot({
       ...options,
       sessionCookie: { secure: options.sessionCookieSecure ?? true },
+      setupToken: setupTokenConfig(options.setupToken, options.encryptionKey),
     }),
     {
       logger: options.logger ?? ['log', 'warn', 'error'],
@@ -44,6 +56,7 @@ export async function createApi(options: ApiOptions): Promise<NestExpressApplica
     },
   );
   app.set('trust proxy', options.trustProxy ?? false);
+  app.disable('x-powered-by');
   // A Feedback can carry a Capture (base64): its route alone accepts a heavy body.
   app.use('/v1/feedbacks', json({ limit: FEEDBACK_BODY_LIMIT }));
   app.useBodyParser('json', { limit: '100kb' });

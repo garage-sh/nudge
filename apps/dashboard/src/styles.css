@@ -2105,9 +2105,14 @@ fieldset.segmented {
   font-variant-numeric: tabular-nums;
 }
 
+.members {
+  margin-bottom: 1rem;
+}
+
 .members > li {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 0.25rem 1rem;
 }
@@ -2119,6 +2124,13 @@ fieldset.segmented {
 
 .members .muted {
   font-size: var(--t-s);
+}
+
+.member-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
 }
 
 .feedback {

@@ -376,6 +376,12 @@ describe('Slack adapter', () => {
         expect(text).not.toContain('<https://trap.test');
       }
     });
+    it('breaks the broad mentions of the Project name, as in the alerts', async () => {
+      const body = await message('Hello', { ...DELIVERY.project, name: '@channel @here Shop' });
+
+      expect(body.text).toBe('Bug · @\u200bchannel @\u200bhere Shop');
+      for (const { text } of texts(body)) expect(text).not.toMatch(/@(channel|here|everyone)\b/);
+    });
   });
 
   it('is registered for the "slack" type in the adapter registry', () => {

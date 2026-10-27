@@ -20,6 +20,7 @@ import {
   classifyStatus,
   httpFailure,
   errorMessage,
+  externalLink,
 } from './http.js';
 import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
 import { titleWithType, truncate } from './text.js';
@@ -234,7 +235,7 @@ export function linearAdapter(
           }
         : failed(creation);
     }
-    return { status: 'delivered', externalUrl: issue.url };
+    return { status: 'delivered', externalUrl: externalLink(issue.url) };
   }
 
   return {
@@ -316,7 +317,7 @@ interface FileData {
 interface CreationData {
   readonly issueCreate: {
     readonly success: boolean;
-    readonly issue: { readonly url: string } | null;
+    readonly issue: { readonly url: unknown } | null;
   };
 }
 

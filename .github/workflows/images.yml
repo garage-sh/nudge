@@ -5,10 +5,15 @@
 # - tag vX.Y.Z: pushed as X.Y.Z, X.Y, X (from 1.0 on) and latest, then the
 #   GitHub Release is created with its notes, the compose file and `env.example`.
 #
-# Each architecture (amd64, arm64) is built on a native runner, without emulation;
-# both are joined under the same tag. Every published image carries an SBOM and a
-# provenance attestation, is signed by cosign (keyless, through GitHub's OIDC) and
-# scanned: a critical vulnerability fixed upstream fails the publication.
+# The images are built for amd64 only, on the self-hosted x64 runners; the `arch`
+# matrix and the `publish` join are kept so that adding an architecture is one line.
+# Each image is scanned once pushed by digest, before any tag or signature: a critical
+# vulnerability fixed upstream stops the publication. Every published image carries an
+# SBOM and a provenance attestation and is signed by cosign (keyless, through GitHub's
+# OIDC).
+#
+# `publish` and `release` run in the `release` environment, whose protection rules
+# (allowed refs, reviewers) are set in the repository settings.
 name: Images
 
 on:
@@ -29,8 +34,8 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.image.name }} (${{ matrix.platform.arch }})
-    runs-on: ${{ matrix.platform.runner }}
+    name: ${{ matrix.image.name }} (${{ matrix.arch }})
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 30
     permissions:
       contents: read
@@ -41,9 +46,7 @@ jobs:
         image:
           - { name: nudge, target: server }
           - { name: nudge-dashboard, target: dashboard }
-        platform:
-          - { arch: amd64, runner: ubuntu-24.04 }
-          - { arch: arm64, runner: ubuntu-24.04-arm }
+        arch: [amd64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -62,16 +65,26 @@ jobs:
         with:
           context: .
           target: ${{ matrix.image.target }}
-          platforms: linux/${{ matrix.platform.arch }}
+          platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.image.target }}-${{ matrix.platform.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image.target }}-${{ matrix.platform.arch }}
+          cache-from: type=gha,scope=${{ matrix.image.target }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.target }}-${{ matrix.arch }}
           provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
           sbom: ${{ github.event_name != 'pull_request' }}
-          # Pushed by digest only: the tags are set once both architectures are
-          # joined (`publish` job).
+          # Pushed by digest only: the tags are set once every architecture of the
+          # matrix is joined (`publish` job).
           outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0}/{1}/{2},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, github.repository_owner, matrix.image.name) || 'type=cacheonly' }}
+      # Before `publish` tags and signs anything: a failure here leaves the digest
+      # untagged and unsigned.
+      - if: github.event_name != 'pull_request'
+        name: Scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }}@${{ steps.build.outputs.digest }}
+          severity-cutoff: critical
+          only-fixed: true
+          output-format: table
       - if: github.event_name != 'pull_request'
         name: Digest
         run: |
@@ -82,7 +95,7 @@ jobs:
       - if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digests-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          name: digests-${{ matrix.image.name }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -91,8 +104,9 @@ jobs:
     name: Publish ${{ matrix.name }}
     if: github.event_name != 'pull_request'
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 20
+    environment: release
     permissions:
       contents: read
       packages: write
@@ -144,20 +158,14 @@ jobs:
         run: cosign sign --yes "$IMAGE@$DIGEST"
         env:
           DIGEST: ${{ steps.digest.outputs.digest }}
-      - name: Scan
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        with:
-          image: ${{ env.IMAGE }}@${{ steps.digest.outputs.digest }}
-          severity-cutoff: critical
-          only-fixed: true
-          output-format: table
 
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: publish
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
+    environment: release
     permissions:
       contents: write
     steps:

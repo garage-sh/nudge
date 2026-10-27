@@ -5,6 +5,7 @@ import { and, eq, gt, isNull } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
 import { generateToken, hashToken } from './tokens.js';
 import { MembersService } from './members.service.js';
+import { hashPassword } from './password.js';
 
 /** Validity period of an invitation link. */
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -44,9 +45,14 @@ export class InvitationsService {
 
   /**
    * Consumes the invitation and creates the Member in the same transaction: an email
-   * already taken cancels everything, and the link stays usable.
+   * already taken cancels everything, and the link stays usable. The password is
+   * hashed before the transaction, which would otherwise hold a connection and the
+   * invitation's lock meanwhile; an unusable link is refused before, without hashing.
+   * The claim itself stays the atomic `UPDATE … RETURNING`.
    */
   async accept(token: string, email: string, password: string): Promise<MemberView> {
+    await this.read(token);
+    const passwordHash = await hashPassword(password);
     return this.db.transaction(async (tx) => {
       const [invitation] = await tx
         .update(invitations)
@@ -54,7 +60,7 @@ export class InvitationsService {
         .where(this.usable(token))
         .returning({ id: invitations.id });
       if (!invitation) throw invalidInvitation();
-      const member = await this.members.create(tx, email, password);
+      const member = await this.members.create(tx, email, passwordHash);
       await tx
         .update(invitations)
         .set({ memberId: member.id })

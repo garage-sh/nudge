@@ -70,7 +70,19 @@ export class InstanceJudgeService {
       return choice.apiKey === null ? null : this.cipher.encrypt(choice.apiKey, JUDGE_KEY_CONTEXT);
     }
     const sameServer =
-      choice.provider === current.provider && (choice.baseUrl ?? null) === current.baseUrl;
+      choice.provider === current.provider &&
+      serverAddress(choice.baseUrl ?? null) === serverAddress(current.baseUrl);
     return sameServer ? current.encryptedKey : null;
   }
+}
+
+/**
+ * A base URL as the Judge adapters call it: host case, default port and trailing
+ * slashes do not change the server. An unparsable value stays as is (never equal to
+ * another server's).
+ */
+function serverAddress(baseUrl: string | null): string | null {
+  if (baseUrl === null) return null;
+  const url = URL.parse(baseUrl);
+  return url ? url.href.replace(/\/+$/, '') : baseUrl;
 }

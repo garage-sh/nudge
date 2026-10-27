@@ -3,7 +3,7 @@ import { defineWidget, ELEMENT_NAME, type NudgeWidget as WidgetElement } from '.
 import type { WidgetOptions } from './options.js';
 
 export type { Locale } from './locales/index.js';
-export type { DeclaredAuthor, Metadata, WidgetOptions } from './options.js';
+export type { DeclaredAuthor, Metadata, RedactUrl, WidgetOptions } from './options.js';
 
 export type NudgeWidgetProps = WidgetOptions;
 
@@ -12,12 +12,19 @@ export type NudgeWidgetProps = WidgetOptions;
  * The element is mounted once; a props change updates its properties without
  * recreating it, so a form being filled in stays open.
  */
-export function NudgeWidget({ publicKey, api, author, metadata, locale }: NudgeWidgetProps) {
+export function NudgeWidget({
+  publicKey,
+  api,
+  author,
+  metadata,
+  locale,
+  redactUrl,
+}: NudgeWidgetProps) {
   const ref = useRef<WidgetElement>(null);
   useLayoutEffect(() => {
     // Defined before writing the properties: the element is then upgraded.
     defineWidget();
-    ref.current?.configure({ publicKey, api, author, metadata, locale });
-  }, [publicKey, api, author, metadata, locale]);
+    ref.current?.configure({ publicKey, api, author, metadata, locale, redactUrl });
+  }, [publicKey, api, author, metadata, locale, redactUrl]);
   return createElement(ELEMENT_NAME, { ref });
 }
