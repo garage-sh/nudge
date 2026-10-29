@@ -496,6 +496,9 @@ describe('GitHub Issues adapter', () => {
       ['403 permission denied', 'auth', GITHUB.permissionDenied],
       ['404 not found', 'auth', GITHUB.notFound],
       ['422 validation failed', 'permanent', GITHUB.validationFailed],
+      // The issue alone is gone: the Destination keeps working, it is not Suspended.
+      ['410 issue deleted', 'permanent', GITHUB.issuesDisabled],
+      ['301 issue transferred', 'permanent', GITHUB.moved],
       ['403 primary rate limit', 'transient', GITHUB.primaryRateLimit],
       ['503 unavailable', 'transient', GITHUB.unavailable],
     ] as const)(
@@ -550,6 +553,14 @@ describe('GitHub Issues adapter', () => {
       ]);
       expect(jsonBody(requests[0]).title).toMatch(/^Closed · Error · /);
       expect(JSON.parse(requests[1]!.body!)).toMatchObject({ state: 'closed' });
+    });
+
+    it('"opened then closed" whose immediate closing fails stays delivered: a replay would make a second issue', async () => {
+      const { fetch } = github(GITHUB.issueCreated, GITHUB.unavailable);
+
+      expect(
+        await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!)),
+      ).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
     });
 
     it('"opened then closed" whose creation is refused closes nothing', async () => {

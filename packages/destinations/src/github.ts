@@ -77,6 +77,7 @@ export function gitHubAdapter(
     path: string,
     method: 'POST' | 'PATCH',
     payload: unknown,
+    classify: (response: Response) => Promise<Refusal> = gitHubFailure,
   ): Promise<{ ok: true; body: unknown } | { ok: false; failure: DeliveryResult }> {
     let response: Response;
     try {
@@ -92,7 +93,7 @@ export function gitHubAdapter(
       };
     }
     if (!response.ok) {
-      return { ok: false, failure: { status: 'failed', ...(await gitHubFailure(response)) } };
+      return { ok: false, failure: { status: 'failed', ...(await classify(response)) } };
     }
     return { ok: true, body: await response.json().catch(() => ({})) };
   }
@@ -107,7 +108,12 @@ export function gitHubAdapter(
 
   /** "Update an issue" to closed, as completed: closing a closed issue changes nothing. */
   const closeIssue = (number: number) =>
-    write(`/issues/${number}`, 'PATCH', { state: 'closed', state_reason: 'completed' });
+    write(
+      `/issues/${number}`,
+      'PATCH',
+      { state: 'closed', state_reason: 'completed' },
+      closingFailure,
+    );
 
   /** The number of an issue of the configured repository a link points at, or `null`. */
   const issueNumberOf = (link: string | null): number | null => {
@@ -202,9 +208,9 @@ export function gitHubAdapter(
  *   transferred) reject the Destination: every Delivery would fail (D21);
  * - 400 and 422 (validation, content deemed spam) target this issue.
  */
-async function gitHubFailure(
-  response: Response,
-): Promise<{ failureClass: FailureClass; message: string }> {
+type Refusal = { failureClass: FailureClass; message: string };
+
+async function gitHubFailure(response: Response): Promise<Refusal> {
   if (response.status >= 300 && response.status < 400) {
     await response.body?.cancel();
     return {
@@ -218,6 +224,22 @@ async function gitHubFailure(
   return httpFailure(response, (status) =>
     status === 404 || status === 410 ? 'auth' : classifyStatus(status),
   );
+}
+
+/**
+ * Class of a refused closing: the issue itself, deleted (410) or transferred to another
+ * repository (3xx), is gone for this Delivery only — the Destination still works, so
+ * it is permanent rather than Suspending it. Everything else as `gitHubFailure`.
+ */
+async function closingFailure(response: Response): Promise<Refusal> {
+  if (response.status === 410 || (response.status >= 300 && response.status < 400)) {
+    await response.body?.cancel();
+    return {
+      failureClass: 'permanent',
+      message: `HTTP ${response.status}: the issue was deleted or transferred, nothing to close`,
+    };
+  }
+  return gitHubFailure(response);
 }
 
 async function isRateLimited(response: Response): Promise<boolean> {

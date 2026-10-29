@@ -34,7 +34,7 @@ export interface LinearOptions {
   readonly teams?: Map<string, LoadedTeam>;
 }
 
-/** A Destination's team, as read from Linear: its id, its labels by name, its Done state. */
+/** A Destination's team, as read from Linear: its id, its labels by name, its completed state. */
 export interface LoadedTeam {
   readonly id: string;
   /** The first workflow state of type `completed` by position, where a closed issue goes. */
@@ -267,11 +267,7 @@ export function linearAdapter(
       // A label or the team may have changed in Linear: the next Delivery reads them again.
       teams.delete(cacheKey);
       return creation.ok
-        ? {
-            status: 'failed',
-            failureClass: 'permanent',
-            message: 'Linear did not create the issue (success: false)',
-          }
+        ? permanentFailure('Linear did not create the issue (success: false)')
         : failed(creation);
     }
     return { status: 'delivered', externalUrl: externalLink(issue.url) };
@@ -330,11 +326,7 @@ export function linearAdapter(
     async closeIncident(closing) {
       const identifier = issueIdentifierOf(closing.opening.externalUrl);
       if (!identifier) {
-        return {
-          status: 'failed',
-          failureClass: 'permanent',
-          message: 'The opening kept no link to a Linear issue: nothing to close',
-        };
+        return permanentFailure('The opening kept no link to a Linear issue: nothing to close');
       }
       const target = await completedState();
       if (!target.ok) return failed(target);
@@ -342,25 +334,19 @@ export function linearAdapter(
         id: identifier,
         input: { stateId: target.data.stateId },
       });
-      if (!update.ok) return failed(update);
-      const issue = update.data.issueUpdate.issue;
-      if (!update.data.issueUpdate.success || !issue) {
-        return {
-          status: 'failed',
-          failureClass: 'permanent',
-          message: 'Linear did not close the issue (success: false)',
-        };
+      const issue = update.ok ? update.data.issueUpdate.issue : null;
+      if (!update.ok || !update.data.issueUpdate.success || !issue) {
+        // The completed state may have been deleted in Linear: the next closing reads it again.
+        teams.delete(cacheKey);
+        if (!update.ok) return failed(update);
+        return permanentFailure('Linear did not close the issue (success: false)');
       }
       const comment = await graphql<CommentData>(COMMENT_MUTATION, {
         input: { issueId: issue.id, body: incidentToMarkdown(closing, escapedText) },
       });
       if (!comment.ok) return failed(comment);
       if (!comment.data.commentCreate.success) {
-        return {
-          status: 'failed',
-          failureClass: 'permanent',
-          message: 'Linear did not comment the closing (success: false)',
-        };
+        return permanentFailure('Linear did not comment the closing (success: false)');
       }
       return { status: 'delivered', externalUrl: closing.opening.externalUrl };
     },
@@ -520,6 +506,13 @@ interface TeamAndLabels {
  * rejected key, rather than each Delivery failing.
  */
 const refusal = (message: string): Failure => ({ ok: false, failureClass: 'auth', message });
+
+/** A refusal that targets this Delivery only: a retry would get the same answer. */
+const permanentFailure = (message: string): DeliveryResult => ({
+  status: 'failed',
+  failureClass: 'permanent',
+  message,
+});
 
 const failed = ({ failureClass, message }: Failure): DeliveryResult => ({
   status: 'failed',

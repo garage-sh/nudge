@@ -756,6 +756,28 @@ describe('Linear adapter', () => {
       },
     );
 
+    it('after a refused closing, reads the team again: a completed state deleted since shows up', async () => {
+      const teams = new Map();
+      const { fetch, requests } = linear(
+        LINEAR.team,
+        LINEAR.invalidInput,
+        LINEAR.team,
+        LINEAR.issueUpdated,
+        LINEAR.commentCreated,
+      );
+
+      await linearAdapter(DESTINATION, { fetch, teams }).closeIncident(CLOSING);
+      await linearAdapter(DESTINATION, { fetch, teams }).closeIncident(CLOSING);
+
+      expect(requests.map((r) => Object.keys(r.variables)[0])).toEqual([
+        'team',
+        'id',
+        'team',
+        'id',
+        'input',
+      ]);
+    });
+
     it('a team without a completed state rejects the Destination (auth), closing nothing', async () => {
       const { fetch, requests } = linear(LINEAR.teamWithoutCompletedState, LINEAR.issueUpdated);
 
