@@ -1,6 +1,9 @@
 import {
   presentAlert,
+  presentIncident,
   type Alert,
+  type OutgoingIncidentClosing,
+  type OutgoingIncidentDelivery,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -21,7 +24,6 @@ import {
   errorMessage,
   responseText,
 } from './http.js';
-import { incidentsNotDelivered } from './incidents.js';
 
 export interface SlackOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -31,7 +33,9 @@ export interface SlackOptions {
 
 /**
  * Slack: an incoming webhook, tied to a channel
- * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks).
+ * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks). It answers
+ * `ok` and nothing else: a posted message cannot be found again, to reply in its thread
+ * or edit it.
  */
 export function slackAdapter(
   destination: ConfiguredDestination,
@@ -66,8 +70,12 @@ export function slackAdapter(
 
   return {
     send: (delivery) => publish(slackBody(delivery)),
-    deliverIncident: () => incidentsNotDelivered('Slack'),
-    closeIncident: () => incidentsNotDelivered('Slack'),
+    deliverIncident: (delivery) => publish(incidentBody(delivery)),
+    /**
+     * An incoming webhook returns no message id: the closing cannot go in the opening's
+     * thread nor edit it. It is a message of its own, titled like the opening.
+     */
+    closeIncident: (closing) => publish(incidentBody(closing)),
     alert: (alert) => publish(alertBody(alert)),
     /**
      * An incoming webhook cannot be read: the probe posts it an empty message, which it
@@ -185,6 +193,41 @@ function alertBody(alert: Alert) {
           mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
         ),
       },
+      { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
+    ],
+  };
+}
+
+/**
+ * An Incident as blocks: its title, what happened, the short details as fields and the
+ * long ones (message, context) in code blocks. Every text of the sender goes through
+ * the same encoding as the Author's text of a Feedback.
+ */
+function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
+  const { title, summary, details } = presentIncident(delivery);
+  const text = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
+  const short = details.filter((detail) => !detail.long);
+  const long = details.filter((detail) => detail.long);
+  const { dashboardUrl } = delivery.incident;
+  const footer = [
+    'nudge · Incident',
+    ...(isSafeSlackLink(dashboardUrl) ? [`<${dashboardUrl}|Open in nudge>`] : []),
+  ];
+  return {
+    text: truncate(text(title), FIELD_MAX),
+    blocks: [
+      { type: 'section', text: mrkdwn(`*${truncate(text(title), FIELD_MAX)}*`) },
+      { type: 'section', text: mrkdwn(text(summary)) },
+      {
+        type: 'section',
+        fields: short.map(({ label, value }) =>
+          mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
+        ),
+      },
+      ...long.flatMap(({ label, value }) => [
+        { type: 'section', text: mrkdwn(`*${label}*`) },
+        { type: 'section', text: mrkdwn(codeBlock(value)) },
+      ]),
       { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
     ],
   };

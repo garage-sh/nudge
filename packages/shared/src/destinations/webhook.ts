@@ -227,7 +227,7 @@ export const WEBHOOK_EXAMPLES: {
     event: 'incident.closed',
     delivery: { id: '8c2f5a17-3e9d-4b60-a4c8-7d1e9f3b5a02' },
     project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
-    title: 'Critical · Payment provider timed out',
+    title: 'Closed · Critical · Payment provider timed out',
     summary: 'An Incident of Shop closed: its Quiet period went by without a new Occurrence.',
     incident: {
       id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',

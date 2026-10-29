@@ -23,7 +23,7 @@ export function presentIncident({
   const context = Object.entries(incident.context);
   const { closure } = incident;
   return {
-    title: `${level} · ${incident.title}`,
+    title: `${closure ? 'Closed · ' : ''}${level} · ${incident.title}`,
     summary: closure
       ? CLOSED_SUMMARIES[closure.cause](project.name)
       : moment === 'raised'

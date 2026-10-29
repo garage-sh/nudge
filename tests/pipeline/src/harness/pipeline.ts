@@ -77,6 +77,11 @@ export interface PipelineOptions {
    */
   readonly destinations?: 'fakes' | 'real';
   /**
+   * With `destinations: 'real'`: the HTTP client of the adapters, in place of the guarded
+   * one — a recorded target (Discord, Slack) whose fixed host a test cannot reach.
+   */
+  readonly adapterFetch?: typeof globalThis.fetch;
+  /**
    * Internal hosts the real adapters and the Instance's Judge may reach
    * (`NUDGE_OUTBOUND_ALLOWED_HOSTS`): by default `127.0.0.1`, where the test receivers
    * and servers listen.
@@ -298,7 +303,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const mailer = new FakeMailer();
   const resolveDestinationAdapter: DestinationAdapterResolver =
     options.destinations === 'real'
-      ? destinationAdapterResolver({ fetch: outboundFetch, mailer })
+      ? destinationAdapterResolver({ fetch: options.adapterFetch ?? outboundFetch, mailer })
       : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),

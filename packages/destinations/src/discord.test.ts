@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { discordAdapter } from './discord.js';
 import { resolveDestinationAdapter } from './index.js';
 import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   DISCORD,
   MESSAGE_ID,
@@ -384,6 +385,130 @@ describe('Discord adapter', () => {
       expect(projectField?.value).not.toContain('](');
       expect(projectField?.value).not.toMatch(/@(everyone|here)/);
       expect(embed.title).not.toContain('](');
+    });
+  });
+
+  describe('Incidents', () => {
+    const MESSAGE_LINK = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID}/${MESSAGE_ID}`;
+    const OPENING = incidentOpening(DESTINATION.projectId!);
+    const CLOSING = incidentClosing(DESTINATION.projectId!, MESSAGE_LINK);
+
+    it('posts the opening of an Incident as an embed, and returns the message link to find it again', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+
+      expect(await adapter(fetch).deliverIncident(OPENING)).toEqual({
+        status: 'delivered',
+        externalUrl: MESSAGE_LINK,
+      });
+
+      expect(requests[0]?.url).toBe(`${ENDPOINT}?wait=true`);
+      expect(requests[0]?.init.method).toBe('POST');
+      const body = jsonBody(requests[0]);
+      expect(body.allowed_mentions).toEqual({ parse: [] });
+      const [embed] = body.embeds;
+      expect(embed.title).toBe('Error · @​everyone \\<b\\>Payment\\</b\\> timed out');
+      expect(embed.url).toBe(OPENING.incident.dashboardUrl);
+      // Escaped like every text it may carry: Discord displays it unchanged.
+      expect(embed.description).toBe('An Incident opened in Shop \\(production\\).');
+      expect(embed.fields).toContainEqual({
+        name: 'Level',
+        value: 'Error \\(declared\\)',
+        inline: true,
+      });
+      expect(embed.fields).toContainEqual({ name: 'Occurrences', value: '3', inline: true });
+      expect(embed.fields).toContainEqual({
+        name: 'Context',
+        value: 'service: checkout\nretried: true',
+        inline: false,
+      });
+    });
+
+    it('lets no text of the sender fire a mention or a masked link', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+      const hostile = '@everyone [login](https://trap.test) <@80351110224678912>';
+
+      await adapter(fetch).deliverIncident({
+        ...OPENING,
+        incident: {
+          ...OPENING.incident,
+          title: hostile,
+          message: hostile,
+          environment: hostile,
+          context: { service: hostile },
+        },
+      });
+
+      const [embed] = jsonBody(requests[0]).embeds;
+      for (const text of [embed.title, embed.description, ...embed.fields.map((f) => f.value)]) {
+        expect(text).not.toMatch(/@(everyone|here)/);
+        expect(text).not.toContain('](');
+      }
+    });
+
+    it('closes by editing the opening message into its closed state', async () => {
+      const { fetch, requests } = discord(DISCORD.editedMessage);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toEqual({
+        status: 'delivered',
+        externalUrl: MESSAGE_LINK,
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(`${ENDPOINT}/messages/${MESSAGE_ID}`);
+      expect(requests[0]?.init.method).toBe('PATCH');
+      const body = jsonBody(requests[0]);
+      expect(body.allowed_mentions).toEqual({ parse: [] });
+      const [embed] = body.embeds;
+      expect(embed.title).toBe('Closed · Error · @​everyone \\<b\\>Payment\\</b\\> timed out');
+      expect(embed.description).toBe('An Incident of Shop was resolved by its sender.');
+      expect(embed.fields).toContainEqual({
+        name: 'Closed',
+        value: '2026\\-10\\-24T09:31:00.000Z',
+        inline: true,
+      });
+    });
+
+    it('posts the closing as a new message when the opening message was deleted', async () => {
+      const { fetch, requests } = discord(
+        DISCORD.unknownMessage,
+        DISCORD.createdMessage,
+        DISCORD.webhook,
+      );
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toMatchObject({ status: 'delivered' });
+
+      expect(requests.map((r) => r.init.method ?? 'GET')).toEqual(['PATCH', 'POST', 'GET']);
+      expect(requests[1]?.url).toBe(`${ENDPOINT}?wait=true`);
+      expect(jsonBody(requests[1]).embeds[0].title).toMatch(/^Closed · /);
+    });
+
+    it('posts the closing as a new message when the opening left no link', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+
+      await adapter(fetch).closeIncident(incidentClosing(DESTINATION.projectId!, null));
+
+      expect(requests[0]?.init.method).toBe('POST');
+      expect(requests[0]?.url).toBe(`${ENDPOINT}?wait=true`);
+    });
+
+    it('classifies a refused edit like a Delivery: a deleted webhook is auth', async () => {
+      const { fetch, requests } = discord(DISCORD.unknownWebhook);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
+      });
+      expect(requests).toHaveLength(1);
+    });
+
+    it('"opened then closed" after a suspension is a single message, in its final state', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage, DISCORD.webhook);
+
+      await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!));
+
+      const posts = requests.filter((r) => r.init.method === 'POST');
+      expect(posts).toHaveLength(1);
+      expect(jsonBody(posts[0]).embeds[0].title).toMatch(/^Closed · Error · /);
     });
   });
 

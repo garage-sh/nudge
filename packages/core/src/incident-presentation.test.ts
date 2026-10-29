@@ -83,7 +83,7 @@ describe('The presentation of an Incident, shared by the adapters', () => {
 
   it('a closed Incident says why it closed, and when it was last seen and closed', () => {
     expect(presentIncident(closed('quiet_period'))).toEqual({
-      title: 'Error · Payment provider timed out',
+      title: 'Closed · Error · Payment provider timed out',
       summary: 'An Incident of Shop closed: its Quiet period went by without a new Occurrence.',
       details: [
         { label: 'Project', value: 'Shop' },

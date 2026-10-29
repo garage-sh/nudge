@@ -1,5 +1,20 @@
-import { presentAlert, type Alert, type MailMessage, type OutgoingDelivery } from '@nudge/core';
-import { FEEDBACK_TYPE_LABELS, SEVERITY_LABELS, type Severity, type Source } from '@nudge/shared';
+import {
+  presentAlert,
+  presentIncident,
+  type Alert,
+  type MailMessage,
+  type OutgoingDelivery,
+  type OutgoingIncidentClosing,
+  type OutgoingIncidentDelivery,
+} from '@nudge/core';
+import {
+  FEEDBACK_TYPE_LABELS,
+  LEVEL_LABELS,
+  SEVERITY_LABELS,
+  type Level,
+  type Severity,
+  type Source,
+} from '@nudge/shared';
 import { isSafeLink } from './markdown.js';
 import { firstLine, truncate } from './text.js';
 
@@ -183,6 +198,76 @@ export function alertEmail(alert: Alert, to: readonly string[]): MailMessage {
     stripe: alert.event === 'feedback_in_review' ? COLORS.review : COLORS.held,
   };
   return { to, subject: subject(title), html: render(content), text: plainText(content) };
+}
+
+/** The Level ramp, from info to critical, on the Severity one. */
+const LEVEL_COLORS: Readonly<Record<Level, string>> = {
+  info: '#87938e',
+  warning: '#b7791f',
+  error: '#d0531d',
+  critical: '#b4161b',
+};
+
+/**
+ * An Incident Delivery to an email Destination: its opening (or a Level rise that reached
+ * the Destination), then its closing as a reply to that mail. Both carry the subject of
+ * the opening, which names no Level (it may rise in between), and the closing names the
+ * opening's Message-ID: mail clients thread them. An Incident that closed before its
+ * opening went out is a single mail, in its final state.
+ */
+export function incidentEmail(
+  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
+  to: readonly string[],
+): MailMessage {
+  const { deliveryId, project, incident } = delivery;
+  const { title, summary, details } = presentIncident(delivery);
+  const closing = delivery.moment === 'closed';
+  const level = LEVEL_LABELS[incident.level];
+  const content: EmailContent = {
+    eyebrow: incident.closure
+      ? 'Incident closed'
+      : delivery.moment === 'raised'
+        ? 'Incident level raised'
+        : 'Incident opened',
+    title,
+    pills: [
+      {
+        label: level,
+        color: COLORS.text,
+        background: COLORS.canvas,
+        dot: LEVEL_COLORS[incident.level],
+      },
+      ...(incident.environment
+        ? [{ label: incident.environment, color: COLORS.muted, background: COLORS.canvas }]
+        : []),
+      ...(incident.closure
+        ? [{ label: 'Closed', color: COLORS.accent, background: COLORS.accentSoft }]
+        : []),
+    ],
+    notice: null,
+    intro: summary,
+    quote: null,
+    details: [
+      ...details.map(({ label, value, long }) => ({ label, value, code: long ?? false })),
+      { label: 'Incident', value: incident.id, code: true },
+    ],
+    action: isSafeLink(incident.dashboardUrl)
+      ? { label: 'Open in nudge', url: incident.dashboardUrl }
+      : null,
+    footer: `You receive this email because this address is a recipient of an email Destination of the ${project.name} project in nudge.`,
+    stripe: incident.closure ? COLORS.accent : LEVEL_COLORS[incident.level],
+  };
+  const openingId = `incident.${deliveryId}`;
+  const openingSubject = subject(`Incident · ${project.name} · ${incident.title}`);
+  return {
+    to,
+    subject: closing ? `Re: ${openingSubject}` : openingSubject,
+    html: render(content),
+    text: plainText(content),
+    ...(closing
+      ? { messageId: `${openingId}.closed`, inReplyTo: openingId }
+      : { messageId: openingId }),
+  };
 }
 
 /** The message sent by the "send a test email" button of the SMTP settings. */

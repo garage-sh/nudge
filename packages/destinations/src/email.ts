@@ -6,8 +6,7 @@ import type {
   OutgoingDelivery,
 } from '@nudge/core';
 import { emailDefinition } from '@nudge/shared';
-import { alertEmail, feedbackEmail } from './email-template.js';
-import { incidentsNotDelivered } from './incidents.js';
+import { alertEmail, feedbackEmail, incidentEmail } from './email-template.js';
 
 export interface EmailOptions {
   /** The Instance's SMTP server (`smtpMailer`). */
@@ -16,8 +15,9 @@ export interface EmailOptions {
 
 /**
  * Email: one message per Feedback to the Destination's recipients, through the
- * Instance's SMTP server. The Capture travels as an attachment. Nothing is created
- * on the other side: a Delivery has no link.
+ * Instance's SMTP server. The Capture travels as an attachment. An Incident is an
+ * opening mail, then a closing mail that replies to it. Nothing is created on the other
+ * side: a Delivery has no link.
  */
 export function emailAdapter(
   destination: ConfiguredDestination,
@@ -33,8 +33,8 @@ export function emailAdapter(
       const capture = await captureAttachment(delivery);
       return mailer.send(capture ? { ...message, attachments: [capture] } : message);
     },
-    deliverIncident: () => incidentsNotDelivered('Email'),
-    closeIncident: () => incidentsNotDelivered('Email'),
+    deliverIncident: (delivery) => mailer.send(incidentEmail(delivery, recipients)),
+    closeIncident: (closing) => mailer.send(incidentEmail(closing, recipients)),
     alert: (alert) => mailer.send(alertEmail(alert, recipients)),
     /** Connects and authenticates to the SMTP server, without sending anything. */
     healthCheck: () => mailer.verify(),

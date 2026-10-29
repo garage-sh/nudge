@@ -1,6 +1,9 @@
 import {
   presentAlert,
+  presentIncident,
   type Alert,
+  type OutgoingIncidentClosing,
+  type OutgoingIncidentDelivery,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -11,13 +14,13 @@ import {
   SEVERITY_LABELS,
   FEEDBACK_TYPE_LABELS,
   parseDiscordWebhook,
+  type Level,
   type Severity,
   type DiscordSecrets,
 } from '@nudge/shared';
 import { DEFAULT_HTTP_TIMEOUT_MS, classifyStatus, httpFailure, errorMessage } from './http.js';
 import { isSafeLink } from './markdown.js';
 import { truncate } from './text.js';
-import { incidentsNotDelivered } from './incidents.js';
 
 export interface DiscordOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -109,14 +112,60 @@ export function discordAdapter(
     return { ok: true, created: (await response.json().catch(() => ({}))) as CreatedMessage };
   }
 
+  /** Posts a message: delivered with its link, or the classified failure. */
+  async function post(body: unknown): Promise<DeliveryResult> {
+    const execution = await execute(body);
+    if (!execution.ok) return execution.failure;
+    return { status: 'delivered', externalUrl: await messageLink(execution.created) };
+  }
+
+  /**
+   * "Edit Webhook Message": `'gone'` when the message no longer exists (deleted from
+   * the channel), which the webhook itself survives.
+   */
+  async function edit(messageId: string, body: unknown): Promise<DeliveryResult | 'gone'> {
+    let response: Response;
+    try {
+      response = await call(`${endpoint}/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
+    }
+    if (response.ok) {
+      await response.body?.cancel();
+      return { status: 'delivered', externalUrl: null };
+    }
+    if (response.status === 404 && (await jsonCode(response)) === UNKNOWN_MESSAGE_CODE) {
+      await response.body?.cancel();
+      return 'gone';
+    }
+    return { status: 'failed', ...(await discordFailure(response)) };
+  }
+
   return {
-    async send(delivery) {
-      const execution = await execute(discordBody(delivery));
-      if (!execution.ok) return execution.failure;
-      return { status: 'delivered', externalUrl: await messageLink(execution.created) };
+    send: (delivery) => post(discordBody(delivery)),
+    /** The message's link is what finds it again to close it. */
+    deliverIncident: (delivery) => post(incidentBody(delivery)),
+    /**
+     * Edits the opening message into the closed Incident. Without it (no link kept, or
+     * the message deleted from the channel), the closing is a message of its own.
+     */
+    async closeIncident(closing) {
+      const body = incidentBody(closing);
+      const messageId = messageIdOf(closing.opening.externalUrl);
+      if (messageId) {
+        const edited = await edit(messageId, body);
+        if (edited !== 'gone') {
+          return edited.status === 'delivered'
+            ? { status: 'delivered', externalUrl: closing.opening.externalUrl }
+            : edited;
+        }
+      }
+      return post(body);
     },
-    deliverIncident: () => incidentsNotDelivered('Discord'),
-    closeIncident: () => incidentsNotDelivered('Discord'),
     /** The message link is kept nowhere: the guild is not read for the alert. */
     async alert(alert) {
       const execution = await execute(alertBody(alert));
@@ -142,6 +191,18 @@ export function discordAdapter(
 interface CreatedMessage {
   readonly id?: string;
   readonly channel_id?: string;
+}
+
+/** JSON code 10008 "Unknown message" (docs.discord.com/developers/topics/opcodes-and-status-codes). */
+const UNKNOWN_MESSAGE_CODE = 10008;
+
+/**
+ * The id of the message a link of this adapter points at
+ * (`https://discord.com/channels/<guild>/<channel>/<message>`), or `null`.
+ */
+function messageIdOf(link: string | null): string | null {
+  const match = link ? /^https:\/\/discord\.com\/channels\/\d+\/\d+\/(\d+)$/.exec(link) : null;
+  return match?.[1] ?? null;
 }
 
 /**
@@ -237,7 +298,43 @@ function alertBody(alert: Alert) {
   };
 }
 
+/**
+ * An Incident as one embed: the text of the sender escaped like the Project name, the
+ * long details (message, context) at full width.
+ */
+function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
+  const { title, summary, details } = presentIncident(delivery);
+  const { incident } = delivery;
+  return {
+    allowed_mentions: { parse: [] },
+    embeds: [
+      {
+        title: truncate(escapeMarkdown(title), TITLE_MAX),
+        ...(isSafeLink(incident.dashboardUrl) ? { url: incident.dashboardUrl } : {}),
+        description: truncate(escapeMarkdown(summary), DESCRIPTION_MAX),
+        timestamp: (incident.closure?.closedAt ?? incident.firstSeenAt).toISOString(),
+        color: incident.closure ? CLOSED_COLOR : LEVEL_COLORS[incident.level],
+        fields: details.map(({ label, value, long }) => ({
+          name: label,
+          value: truncate(escapeMarkdown(value), FIELD_MAX),
+          inline: !long,
+        })),
+        footer: { text: 'nudge · Incident' },
+      },
+    ],
+  };
+}
+
 const ALERT_COLOR = 0xf1c40f;
+
+/** Embed stripe of an Open Incident, from blue (info) to red (critical); green once Closed. */
+const LEVEL_COLORS: Readonly<Record<Level, number>> = {
+  info: 0x3498db,
+  warning: 0xf1c40f,
+  error: 0xe67e22,
+  critical: 0xe74c3c,
+};
+const CLOSED_COLOR = 0x2ecc71;
 
 /** Embed stripe, from grey (cosmetic) to red (blocking). */
 const COLORS: Readonly<Record<Severity | 'none', number>> = {

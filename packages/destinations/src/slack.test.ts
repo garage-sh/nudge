@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { slackAdapter } from './slack.js';
 import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   TEAM_ID,
   SERVICE_ID,
@@ -381,6 +382,108 @@ describe('Slack adapter', () => {
 
       expect(body.text).toBe('Bug · @\u200bchannel @\u200bhere Shop');
       for (const { text } of texts(body)) expect(text).not.toMatch(/@(channel|here|everyone)\b/);
+    });
+  });
+
+  describe('Incidents', () => {
+    const OPENING = incidentOpening(DESTINATION.projectId!);
+    const CLOSING = incidentClosing(DESTINATION.projectId!, null);
+
+    it('posts the opening of an Incident as blocks: Level and title, summary, details and link', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+
+      expect(await adapter(fetch).deliverIncident(OPENING)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(WEBHOOK_URL);
+      const body = jsonBody(requests[0]);
+      expect(body.text).toBe('Error · @​everyone &lt;b&gt;Payment&lt;/b&gt; timed out');
+      const content = texts(body).map((t) => t.text);
+      expect(content).toContainEqual('An Incident opened in Shop (production).');
+      expect(content).toContainEqual('*Environment*\nproduction');
+      expect(content).toContainEqual('*Level*\nError (declared)');
+      expect(content).toContainEqual('*Occurrences*\n3');
+      expect(content.join('\n')).toContain('POST /charges took 30 s');
+      expect(content.join('\n')).toContain('service: checkout\nretried: true');
+      expect(content.join('\n')).toContain(`<${OPENING.incident.dashboardUrl}|Open in nudge>`);
+      expect(texts(body).every((t) => t.verbatim === true)).toBe(true);
+    });
+
+    it('posts a raised Incident with its new Level', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+
+      await adapter(fetch).deliverIncident({ ...OPENING, moment: 'raised' });
+
+      expect(texts(jsonBody(requests[0])).map((t) => t.text)).toContainEqual(
+        'An Incident of Shop rose to Error.',
+      );
+    });
+
+    it('lets no text of the sender fire a mention, a link or close its block', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+      const hostile = '<!channel> @here <https://trap.test|login> ```';
+
+      await adapter(fetch).deliverIncident({
+        ...OPENING,
+        incident: {
+          ...OPENING.incident,
+          title: hostile,
+          message: hostile,
+          environment: hostile,
+          context: { service: hostile },
+        },
+      });
+
+      const body = jsonBody(requests[0]);
+      for (const text of [body.text, ...texts(body).map((t) => t.text)]) {
+        expect(text).not.toContain('<!channel>');
+        expect(text).not.toContain('<https://trap.test');
+        expect(text).not.toMatch(/@(channel|here|everyone)\b/);
+      }
+    });
+
+    it('posts the closing as a message of the same Incident: the incoming webhook can neither thread nor edit', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      const body = jsonBody(requests[0]);
+      expect(body.text).toBe('Closed · Error · @​everyone &lt;b&gt;Payment&lt;/b&gt; timed out');
+      const content = texts(body).map((t) => t.text);
+      expect(content).toContainEqual('An Incident of Shop was resolved by its sender.');
+      expect(content).toContainEqual('*First seen*\n2026-10-24T09:00:00.000Z');
+      expect(content).toContainEqual('*Closed*\n2026-10-24T09:31:00.000Z');
+      expect(content).toContainEqual('*Occurrences*\n5');
+    });
+
+    it('"opened then closed" after a suspension is a single message, in its final state', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+
+      await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!));
+
+      expect(requests).toHaveLength(1);
+      const body = jsonBody(requests[0]);
+      expect(body.text).toMatch(/^Closed · Error · /);
+      expect(texts(body).map((t) => t.text)).toContainEqual(
+        'An Incident of Shop was resolved by its sender.',
+      );
+    });
+
+    it('classifies a refusal like a Feedback Delivery', async () => {
+      expect(await adapter(slack(SLACK.noService).fetch).deliverIncident(OPENING)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
+      });
+      expect(await adapter(slack(SLACK.rollupError).fetch).closeIncident(CLOSING)).toMatchObject({
+        status: 'failed',
+        failureClass: 'transient',
+      });
     });
   });
 
