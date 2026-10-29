@@ -90,23 +90,29 @@ export function discordAdapter(
     }
   }
 
-  /** "Execute Webhook": the created message, or the classified failure. */
-  async function execute(
+  /** A JSON call to the webhook: its response, or the network failure as transient. */
+  async function request(
+    url: string,
+    method: 'POST' | 'PATCH',
     body: unknown,
-  ): Promise<{ ok: true; created: CreatedMessage } | { ok: false; failure: DeliveryResult }> {
-    let response: Response;
+  ): Promise<Response | Extract<DeliveryResult, { status: 'failed' }>> {
     try {
-      response = await call(`${endpoint}?wait=true`, {
-        method: 'POST',
+      return await call(url, {
+        method,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
     } catch (error) {
-      return {
-        ok: false,
-        failure: { status: 'failed', failureClass: 'transient', message: errorMessage(error) },
-      };
+      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
     }
+  }
+
+  /** "Execute Webhook": the created message, or the classified failure. */
+  async function execute(
+    body: unknown,
+  ): Promise<{ ok: true; created: CreatedMessage } | { ok: false; failure: DeliveryResult }> {
+    const response = await request(`${endpoint}?wait=true`, 'POST', body);
+    if (!(response instanceof Response)) return { ok: false, failure: response };
     if (!response.ok)
       return { ok: false, failure: { status: 'failed', ...(await discordFailure(response)) } };
     return { ok: true, created: (await response.json().catch(() => ({}))) as CreatedMessage };
@@ -124,16 +130,8 @@ export function discordAdapter(
    * the channel), which the webhook itself survives.
    */
   async function edit(messageId: string, body: unknown): Promise<DeliveryResult | 'gone'> {
-    let response: Response;
-    try {
-      response = await call(`${endpoint}/messages/${messageId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
-    }
+    const response = await request(`${endpoint}/messages/${messageId}`, 'PATCH', body);
+    if (!(response instanceof Response)) return response;
     if (response.ok) {
       await response.body?.cancel();
       return { status: 'delivered', externalUrl: null };

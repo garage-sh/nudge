@@ -144,7 +144,7 @@ function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
   const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
   const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
   // Typed by a Member: no `@channel` either, as in the alerts.
-  const projectName = escapeControls(neutralizeBroadMentions(project.name));
+  const projectName = slackText(project.name);
   const title = `${isTest ? 'Test · ' : ''}${type} · ${projectName}`;
   const footer = [
     feedback.uncertain ? 'nudge · Uncertain verdict' : 'nudge',
@@ -177,20 +177,19 @@ function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
  */
 function alertBody(alert: Alert) {
   const { title, summary, details } = presentAlert(alert);
-  const text = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
   const footer = [
     alert.isTest ? 'nudge · test alert' : 'nudge · alert',
     ...(isSafeSlackLink(alert.dashboardUrl) ? [`<${alert.dashboardUrl}|Open in nudge>`] : []),
   ];
   return {
-    text: text(title),
+    text: slackText(title),
     blocks: [
-      { type: 'section', text: mrkdwn(`*${text(title)}*`) },
+      { type: 'section', text: mrkdwn(`*${slackText(title)}*`) },
       { type: 'section', text: mrkdwn(summary) },
       {
         type: 'section',
         fields: details.map(({ label, value }) =>
-          mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
+          mrkdwn(`*${label}*\n${truncate(slackText(value), FIELD_MAX)}`),
         ),
       },
       { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
@@ -205,7 +204,6 @@ function alertBody(alert: Alert) {
  */
 function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
   const { title, summary, details } = presentIncident(delivery);
-  const text = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
   const short = details.filter((detail) => !detail.long);
   const long = details.filter((detail) => detail.long);
   const { dashboardUrl } = delivery.incident;
@@ -214,14 +212,14 @@ function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosi
     ...(isSafeSlackLink(dashboardUrl) ? [`<${dashboardUrl}|Open in nudge>`] : []),
   ];
   return {
-    text: truncate(text(title), FIELD_MAX),
+    text: truncate(slackText(title), FIELD_MAX),
     blocks: [
-      { type: 'section', text: mrkdwn(`*${truncate(text(title), FIELD_MAX)}*`) },
-      { type: 'section', text: mrkdwn(text(summary)) },
+      { type: 'section', text: mrkdwn(`*${truncate(slackText(title), FIELD_MAX)}*`) },
+      { type: 'section', text: mrkdwn(slackText(summary)) },
       {
         type: 'section',
         fields: short.map(({ label, value }) =>
-          mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
+          mrkdwn(`*${label}*\n${truncate(slackText(value), FIELD_MAX)}`),
         ),
       },
       ...long.flatMap(({ label, value }) => [
@@ -276,6 +274,9 @@ function codeBlock(text: string): string {
   }
   return `${OPENING}${bounded}${CLOSING}`;
 }
+
+/** A text from outside nudge shown as is: control characters escaped, broad mentions broken. */
+const slackText = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
 
 /** Escaping of Slack's control characters (docs.slack.dev, Formatting message text). */
 const escapeControls = (text: string) =>

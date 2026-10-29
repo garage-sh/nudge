@@ -227,7 +227,7 @@ export function incidentEmail(
     eyebrow: incident.closure
       ? 'Incident closed'
       : delivery.moment === 'raised'
-        ? 'Incident level raised'
+        ? 'Incident Level raised'
         : 'Incident opened',
     title,
     pills: [
