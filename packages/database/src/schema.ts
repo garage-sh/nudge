@@ -342,6 +342,11 @@ export const deliveries = pgTable(
     index('deliveries_held_idx')
       .on(t.destinationId)
       .where(sql`${t.status} = 'held'`),
+    // The delivered openings of Incidents: the Quiet period sweep looks among them for
+    // a closing to re-arm.
+    index('deliveries_delivered_opening_idx')
+      .on(t.incidentId)
+      .where(sql`${t.status} = 'delivered' and ${t.incidentMoment} <> 'closed'`),
   ],
 );
 

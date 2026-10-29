@@ -501,7 +501,7 @@ export const fr: Messages = {
     deliveries: 'Envois',
     close: {
       action: 'Clore l’Incident',
-      help: 'Clôturez-le quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
+      help: 'Clore l’Incident quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
       question:
         'L’Incident sera Clos définitivement et ses Destinations prévenues. Une nouvelle Occurrence ouvrira un nouvel Incident. Le clore ?',
     },

@@ -1,5 +1,8 @@
 import type { DeliveryResult, DestinationAdapter } from '@nudge/core';
-import type { DeliverySubject } from '@nudge/database';
+import type { DeliverySubject, deliveries } from '@nudge/database';
+
+/** Columns a subject may record on its Delivery as it becomes delivered. */
+export type DeliveredAs = Partial<Pick<typeof deliveries.$inferInsert, 'incidentMoment'>>;
 
 /**
  * What a Delivery's subject makes of it, before any outgoing call. A `reason` never names
@@ -19,6 +22,8 @@ export type PreparedDelivery =
        * an unreadable Capture; it is retried but does not count toward Suspension.
        */
       failedInternally(): boolean;
+      /** Recorded on the Delivery in the same update that makes it delivered. */
+      readonly deliveredAs?: DeliveredAs;
       /** After a delivery recorded as such: what the subject does next, if anything. */
       delivered?(): Promise<void>;
     };

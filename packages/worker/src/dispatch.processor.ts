@@ -96,7 +96,7 @@ export class DispatchProcessor {
     const { result, exception } = await this.send(destination, prepared.send);
 
     if (result.status === 'delivered') {
-      await this.suspension.afterDelivery(delivery, result.externalUrl);
+      await this.suspension.afterDelivery(delivery, result.externalUrl, prepared.deliveredAs);
       await prepared.delivered?.();
       return;
     }

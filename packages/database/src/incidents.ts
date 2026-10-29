@@ -5,7 +5,7 @@ import {
   type IncidentState,
   type Level,
 } from '@nudge/shared';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, isNotNull, ne, sql, type SQL } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
 import type { CreatedDelivery } from './dispatch.js';
 import { deliveries, incidents, projects } from './schema.js';
@@ -120,14 +120,43 @@ export async function closeIncident(
     .where(and(eq(incidents.id, incidentId), eq(incidents.state, 'open')))
     .returning({ id: incidents.id });
   if (!closed) return null;
-  const closings = await tx
-    .update(deliveries)
-    .set({ status: 'pending', incidentMoment: 'closed', lastError: null })
-    .where(and(eq(deliveries.incidentId, incidentId), eq(deliveries.status, 'delivered')))
-    .returning({ id: deliveries.id });
-  return closings.map(({ id }) => ({ id, status: 'pending' as const }));
+  return rearmForClosing(tx, eq(deliveries.incidentId, incidentId));
 }
 
+/**
+ * Sets back to pending, to carry the closing, the delivered Deliveries among `scope`
+ * whose Incident is Closed but that delivered only its opening (moment `opened` or
+ * `raised`). An Incident's whole life delivered at once ("opened then closed") is
+ * recorded with the moment `closed`, so it never matches. Called when the Incident
+ * closes, after an opening that was on its way during the closing, and by the Quiet
+ * period sweep, which so catches a closing lost to a race or a worker stop.
+ */
+export async function rearmForClosing(
+  db: Db | Transaction,
+  scope: SQL,
+): Promise<CreatedDelivery[]> {
+  const rearmed = await db
+    .update(deliveries)
+    .set({ status: 'pending', incidentMoment: 'closed', lastError: null })
+    .where(
+      and(
+        scope,
+        isNotNull(deliveries.incidentId),
+        eq(deliveries.status, 'delivered'),
+        ne(deliveries.incidentMoment, 'closed'),
+        exists(
+          db
+            .select({ id: incidents.id })
+            .from(incidents)
+            .where(and(eq(incidents.id, deliveries.incidentId), eq(incidents.state, 'closed'))),
+        ),
+      ),
+    )
+    .returning({ id: deliveries.id });
+  return rearmed.map(({ id }) => ({ id, status: 'pending' as const }));
+}
+
+/** What a Member's closing of an Incident did. */
 export type MemberCloseResult =
   | { readonly status: 'closed'; readonly deliveries: readonly CreatedDelivery[] }
   /** The Incident is already Closed: nothing changed. */

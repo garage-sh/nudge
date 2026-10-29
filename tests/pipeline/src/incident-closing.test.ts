@@ -211,6 +211,35 @@ describe('Closing an Incident', () => {
     expect(fake.closingAttempts).toHaveLength(0);
   });
 
+  it('an Incident that closes while its opening is on its way still gets its closing, once', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'In flight' });
+    const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    const release = fake.hold();
+    const occurrence = { title: 'Cache cluster down', level: 'error' };
+
+    const opened = await report(secretKey, occurrence);
+    await expect.poll(() => fake.incidentAttempts.length).toBe(1);
+    await report(secretKey, { ...occurrence, resolved: true });
+    release();
+
+    const incident = await waitForIncident(
+      opened.id,
+      (i) => closedAndDelivered(i) && fake.closings.length === 1,
+    );
+    expect(fake.incidents).toMatchObject([{ incident: { state: 'open' } }]);
+    expect(fake.closings).toMatchObject([
+      {
+        deliveryId: incident.deliveries[0]!.id,
+        opening: {
+          externalUrl: `https://destination.test/incidents/${incident.deliveries[0]!.id}`,
+        },
+      },
+    ]);
+    expect(incident.deliveries[0]!.externalUrl).toBe(
+      `https://destination.test/incidents/${incident.deliveries[0]!.id}`,
+    );
+  });
+
   it('refuses an invalid Quiet period or resolved flag', async () => {
     const { secretKey } = await pipeline.createProject({ name: 'Validation' });
     for (const body of [

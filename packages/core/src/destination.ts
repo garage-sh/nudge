@@ -142,7 +142,7 @@ export interface DestinationAdapter {
   deliverIncident(delivery: OutgoingIncidentDelivery): Promise<DeliveryResult>;
   /**
    * Closes, on the target, what this Destination's opening Delivery of the Incident
-   * created. `externalUrl` of the result: what was closed, or `null`.
+   * created. The Delivery keeps its opening's `externalUrl`, whatever the result's.
    */
   closeIncident(closing: OutgoingIncidentClosing): Promise<DeliveryResult>;
   /**

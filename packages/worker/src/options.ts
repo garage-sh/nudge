@@ -100,6 +100,7 @@ export const DEFAULT_CAPTURE_SWEEP: CaptureSweepOptions = {
   intervalMs: 60 * 60_000,
 };
 
+/** How Open Incidents close on their own: the Instance default Quiet period and its sweep. */
 export interface IncidentOptions {
   /**
    * The Instance default Quiet period: how long an Incident stays Open without a new

@@ -9,7 +9,14 @@ import {
   type DispatchJob,
   type TriageJob,
 } from '@nudge/core';
-import { captures, closeQuietIncidents, deliveries, feedbacks, type Db } from '@nudge/database';
+import {
+  captures,
+  closeQuietIncidents,
+  deliveries,
+  feedbacks,
+  rearmForClosing,
+  type Db,
+} from '@nudge/database';
 import type { JobType, Queue } from 'bullmq';
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
@@ -38,10 +45,11 @@ const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 
 /**
  * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26), of
- * the Capture storage, and of the Open Incidents past their Quiet period. Without an outbox, a Feedback or a Delivery can be stored
- * without its queueing succeeding; its job can also have exhausted its retries without
- * moving it forward (Judge away for long, Postgres unavailable). The sweep queues them
- * again, without doubling a job still waiting or running.
+ * the Capture storage, and of the Open Incidents past their Quiet period. Without an
+ * outbox, a Feedback or a Delivery can be stored without its queueing succeeding; its job
+ * can also have exhausted its retries without moving it forward (Judge away for long,
+ * Postgres unavailable). The sweep queues them again, without doubling a job still
+ * waiting or running.
  */
 @Injectable()
 export class SweepProcessor {
@@ -149,14 +157,20 @@ export class SweepProcessor {
 
   /**
    * Closes the Open Incidents silent past their Quiet period, the longest silent first,
-   * and queues the closing their delivered openings carry. If that queueing fails, the
-   * sweep of the Deliveries left pending sends them.
+   * and queues the closing their delivered openings carry. It also re-arms the closing
+   * of an opening delivered while its Incident closed and missed by the dispatch job
+   * (a race with the closing, a worker stop). If the queueing fails, the sweep of the
+   * Deliveries left pending sends them.
    */
   async sweepQuietIncidents(): Promise<void> {
     const { quietPeriodMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
     const closed = await closeQuietIncidents(this.db, quietPeriodMs, BATCH);
-    const closings = closed.flatMap((incident) => incident.deliveries);
     for (const { id } of closed) this.logger.log(`Incident ${id} closed: Quiet period over`);
+    const missed = await rearmForClosing(this.db, sql`true`);
+    for (const { id } of missed) {
+      this.logger.warn(`Delivery ${id} delivered its opening without its closing: re-armed`);
+    }
+    const closings = [...closed.flatMap((incident) => incident.deliveries), ...missed];
     if (closings.length === 0) return;
     try {
       await this.dispatchQueue.addBulk(

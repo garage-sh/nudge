@@ -8,9 +8,15 @@ import {
   type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
 } from '@nudge/core';
-import { deliveries, incidents, type Db, type DeliverySubject } from '@nudge/database';
+import {
+  deliveries,
+  incidents,
+  rearmForClosing,
+  type Db,
+  type DeliverySubject,
+} from '@nudge/database';
 import type { Queue } from 'bullmq';
-import { and, eq, exists, ne } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PreparedDelivery, SubjectDispatcher } from './subject-dispatcher.js';
 import type { WorkerOptions } from './options.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
@@ -72,46 +78,43 @@ export class IncidentDispatcher implements SubjectDispatcher {
       };
       return {
         status: 'ready',
-        send: (adapter) => adapter.closeIncident(closing),
+        // The Delivery keeps pointing at what its opening created.
+        send: async (adapter) => {
+          const result = await adapter.closeIncident(closing);
+          return result.status === 'delivered'
+            ? { ...result, externalUrl: delivery.externalUrl }
+            : result;
+        },
         failedInternally: () => false,
       };
     }
     const opening: OutgoingIncidentDelivery = { ...common, moment: delivery.moment };
+    if (toDispatch.closure) {
+      // Its whole life at once, "opened then closed": recorded as its closing.
+      return {
+        status: 'ready',
+        send: (adapter) => adapter.deliverIncident(opening),
+        failedInternally: () => false,
+        deliveredAs: { incidentMoment: 'closed' },
+      };
+    }
     return {
       status: 'ready',
       send: (adapter) => adapter.deliverIncident(opening),
       failedInternally: () => false,
-      // Closed while its opening was on its way: the opening went out Open, its closing
-      // must follow.
-      delivered: toDispatch.closure ? undefined : () => this.closeIfClosedMeanwhile(deliveryId),
+      delivered: () => this.closeIfClosedMeanwhile(deliveryId),
     };
   }
 
   /**
-   * The Incident closed while this Delivery's opening was being sent: the closing found
-   * it still pending and left it alone. Now delivered, it goes back to pending to carry
-   * the closing, like the Deliveries delivered at closing time. Queued here; if that
-   * fails, the sweep of the Deliveries left pending sends it.
+   * The Incident closed while this Delivery's opening was being sent, Open: the closing
+   * found it still pending and left it alone. Now delivered, it carries the closing. If
+   * this misses it (the closing not committed yet, a worker stop), the Quiet period
+   * sweep re-arms it.
    */
   private async closeIfClosedMeanwhile(deliveryId: string): Promise<void> {
-    const [reopened] = await this.db
-      .update(deliveries)
-      .set({ status: 'pending', incidentMoment: 'closed', lastError: null })
-      .where(
-        and(
-          eq(deliveries.id, deliveryId),
-          eq(deliveries.status, 'delivered'),
-          ne(deliveries.incidentMoment, 'closed'),
-          exists(
-            this.db
-              .select({ id: incidents.id })
-              .from(incidents)
-              .where(and(eq(incidents.id, deliveries.incidentId), eq(incidents.state, 'closed'))),
-          ),
-        ),
-      )
-      .returning({ id: deliveries.id });
-    if (!reopened) return;
+    const rearmed = await rearmForClosing(this.db, eq(deliveries.id, deliveryId));
+    if (rearmed.length === 0) return;
     await this.dispatchQueue.add(DISPATCH_JOB, { deliveryId }, { jobId: closingJobId(deliveryId) });
   }
 }
