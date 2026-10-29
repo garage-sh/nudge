@@ -459,6 +459,32 @@ code {
   margin-bottom: 0.75rem;
 }
 
+/* A panel's title, with the saved state of what it configures on the right */
+.panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  /* A link to the panel (#settings-smtp) leaves room above it */
+  scroll-margin-top: 1.5rem;
+}
+
+.panel > .panel-header:first-child {
+  margin-bottom: 0.25rem;
+}
+
+@media (max-width: 860px) {
+  /* Below the sticky mobile bar */
+  .panel-header h2 {
+    scroll-margin-top: 5rem;
+  }
+}
+
 /* List: one surface, separators */
 .list {
   list-style: none;
@@ -608,6 +634,8 @@ code {
 /* Forms */
 .form {
   display: grid;
+  /* One track that never grows past the form: a wide child (a code block) scrolls instead */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -1505,6 +1533,86 @@ fieldset.field legend {
 
 .settings {
   max-width: 760px;
+  min-width: 0;
+}
+
+/* Settings: the panels, with a nav to each one; beside them on a wide screen */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.settings-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.settings-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 0.7rem;
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--t-s);
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background var(--duration),
+    color var(--duration);
+}
+
+.settings-nav a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.settings-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (min-width: 1100px) {
+  .settings-layout {
+    grid-template-columns: 180px minmax(0, 760px);
+    gap: 2rem;
+    align-items: start;
+  }
+
+  .settings-nav {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  .settings-nav ul {
+    flex-direction: column;
+  }
+}
+
+/* Two fields side by side (username and password); `.short-end`: the second is short (a port). Stacked when narrow */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* Each field keeps its own height: a longer help never stretches its neighbour's input */
+  align-items: start;
+  gap: 1rem;
+  max-width: 640px;
+}
+
+.field-row.short-end {
+  grid-template-columns: minmax(0, 1fr) 7.5rem;
+}
+
+@media (max-width: 560px) {
+  .field-row,
+  .field-row.short-end {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* A Project's Destinations */
@@ -1672,6 +1780,7 @@ fieldset.segmented {
 
 /* A webhook's payload: request, headers, body, signature check */
 .payload {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--r-panel);
   background: var(--canvas);

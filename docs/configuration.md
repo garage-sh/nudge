@@ -16,7 +16,7 @@ All configuration goes through environment variables. [`.env.example`](../.env.e
 | `NUDGE_VERSION`, `NUDGE_ROLES`                                                                                       | Image version (compose, `latest`) and what the process runs (`api`, `worker`, default `api,worker`)         |
 | `NUDGE_BIND`, `NUDGE_PORT`, `NUDGE_DASHBOARD_URL`, `NUDGE_COOKIE_SECURE`, `NUDGE_TRUST_PROXY`, `NUDGE_SETUP_TOKEN`   | Access: published address and port, public URL, HTTPS-only cookie, trusted proxies, setup token             |
 | `NUDGE_WIDGET_RATE_LIMIT_IP`, `NUDGE_WIDGET_RATE_LIMIT_PROJECT`                                                      | Widget rate limit, in Feedbacks per minute (20 per IP, 600 per Project)                                     |
-| `NUDGE_OUTBOUND_ALLOWED_HOSTS`                                                                                       | Internal hosts a Member-configured URL may reach (webhooks, Judge base URL); none by default                |
+| `NUDGE_OUTBOUND_ALLOWED_HOSTS`                                                                                       | Internal hosts a Member-configured URL may reach (webhooks, Judge base URL, SMTP host); none by default     |
 | `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`, `NUDGE_JUDGE_BASE_URL`, `NUDGE_JUDGE_TIMEOUT_MS` | Default Judge, and timeout of a request to the Judge (30 s)                                                 |
 | `NUDGE_TRIAGE_JUNK_THRESHOLD`, `NUDGE_TRIAGE_MANIPULATION_THRESHOLD`, `NUDGE_TRIAGE_CONFIDENCE_THRESHOLD`            | Thresholds of the Verdict policy (0.8, 0.7, 0.6)                                                            |
 | `NUDGE_SUSPENSION_FAILURE_THRESHOLD`, `NUDGE_SUSPENSION_COOLDOWN_MS`, `NUDGE_SUSPENSION_PROBE_INTERVAL_MS`           | Destination suspension (5 failures, 5 min, probe every minute)                                              |
@@ -38,9 +38,15 @@ Only the Feedback text, its non-personal context and the Project description are
 
 ## Outbound calls
 
-Members type the URLs that nudge calls: a webhook Destination or Alert destination, a Judge base URL. So that they cannot reach the Instance's own network, the api and the worker only connect to public addresses. Loopback, private, link-local (cloud metadata), CGNAT, unique local and multicast addresses are refused, IPv4 and IPv6 alike, on the address actually connected to after DNS resolution. The test buttons answer with the refusal.
+Members type the URLs that nudge calls: a webhook Destination or Alert destination, a Judge base URL, the SMTP host. So that they cannot reach the Instance's own network, the api and the worker only connect to public addresses. Loopback, private, link-local (cloud metadata), CGNAT, unique local and multicast addresses are refused, IPv4 and IPv6 alike, on the address actually connected to after DNS resolution. The test buttons answer with the refusal.
 
-To send webhooks to a host on your network, or to choose a self-hosted Judge in the dashboard, list that host in `NUDGE_OUTBOUND_ALLOWED_HOSTS`: host names (exact match, such as `hooks.lan` or a compose service like `decider`), IP addresses or CIDR ranges (`192.168.1.0/24`), comma-separated. Every Member can then target it. `0.0.0.0/0,::/0` turns the check off. The `NUDGE_JUDGE_*` Judge, which only you configure, is not checked.
+To send webhooks to a host on your network, to choose a self-hosted Judge in the dashboard, or to send email through an SMTP relay on your network, list that host in `NUDGE_OUTBOUND_ALLOWED_HOSTS`: host names (exact match, such as `hooks.lan` or a compose service like `decider`), IP addresses or CIDR ranges (`192.168.1.0/24`), comma-separated. Every Member can then target it. `0.0.0.0/0,::/0` turns the check off. The `NUDGE_JUDGE_*` Judge, which only you configure, is not checked.
+
+## Email
+
+Email Destinations, and an email Alert destination, send through the Instance's SMTP server, set in the dashboard under **Settings › Email (SMTP)**: host, port, security (STARTTLS on 587, implicit TLS on 465, or none for a relay on a trusted network), optional username and password, and the sender address. The password is encrypted with the Instance key and never returned; it is dropped when the host or the username changes. **Send test email** sends a message to the signed-in Member.
+
+Without an SMTP server, an email Destination can be created but its Deliveries fail as refused credentials: the Destination is Suspended, and resumes once a server is saved. Refused credentials suspend the Destination too; a recipient the server refuses fails that Delivery only. Each Feedback is one email, with its Capture attached.
 
 ## Captures
 

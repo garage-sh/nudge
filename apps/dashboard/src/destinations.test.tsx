@@ -192,6 +192,50 @@ describe('A Project’s Destinations', () => {
     );
   });
 
+  it('adds an email Destination: the recipients go as a list, and a missing SMTP server is said', async () => {
+    const INBOX: DestinationView = {
+      ...RECEIVER,
+      name: 'Support inbox',
+      type: 'email',
+      config: { recipients: ['support@shop.test', 'qa@shop.test'] },
+      secrets: [],
+    };
+    const api = fakeApi({
+      ...baseRoutes([]),
+      'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
+      'POST /api/projects/project-1/destinations': {
+        status: 201,
+        body: { destination: INBOX, generatedSecrets: {} },
+      },
+    });
+    renderDashboard('/projects/project-1/destinations');
+
+    const form = within(
+      (await screen.findByRole('heading', { name: 'Add Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.click(form.getByRole('radio', { name: 'Email' }));
+    expect(await form.findByText(/no SMTP server yet/)).toBeTruthy();
+    expect(form.getByRole('link', { name: 'Configure SMTP' }).getAttribute('href')).toBe(
+      '/settings#settings-smtp',
+    );
+    await userEvent.type(form.getByLabelText('Name'), 'Support inbox');
+    await userEvent.type(form.getByLabelText('Recipients'), 'support@shop.test,\nqa@shop.test');
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.calls.find((c) => c.route === 'POST /api/projects/project-1/destinations')?.body,
+      ).toEqual({
+        type: 'email',
+        name: 'Support inbox',
+        config: { recipients: ['support@shop.test', 'qa@shop.test'] },
+        filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+      }),
+    );
+  });
+
   it('edits a Discord channel without typing the saved URL again', async () => {
     const CHANNEL: DestinationView = {
       ...RECEIVER,

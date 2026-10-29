@@ -9,6 +9,7 @@ import {
   SEVERITIES,
   SOURCES,
   type Author,
+  type SmtpSecurity,
   type CaptureType,
   type Context,
 } from '@nudge/shared';
@@ -261,11 +262,26 @@ export const instanceSettings = pgTable(
      * (and its Captures). `null`: unlimited retention.
      */
     retentionDays: integer('retention_days'),
+    /**
+     * The Instance's SMTP server (`null` host: none), used by the email Destinations;
+     * the password is encrypted with the Instance key (`SMTP_PASSWORD_CONTEXT`).
+     */
+    smtpHost: text('smtp_host'),
+    smtpPort: integer('smtp_port'),
+    smtpSecurity: text('smtp_security').$type<SmtpSecurity>(),
+    smtpUsername: text('smtp_username'),
+    smtpEncryptedPassword: text('smtp_encrypted_password'),
+    smtpFromAddress: text('smtp_from_address'),
+    smtpFromName: text('smtp_from_name'),
     ...timestamps,
   },
   (t) => [
     check('instance_settings_single_row', sql`${t.id} = 1`),
     check('instance_settings_retention_positive', sql`${t.retentionDays} > 0`),
+    check(
+      'instance_settings_smtp_complete',
+      sql`${t.smtpHost} is null or (${t.smtpPort} is not null and ${t.smtpSecurity} is not null and ${t.smtpFromAddress} is not null)`,
+    ),
   ],
 );
 

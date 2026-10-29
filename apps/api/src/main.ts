@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import type { INestApplicationContext } from '@nestjs/common';
-import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
+import { createSecretCipher } from '@nudge/core';
+import { connectDb, instanceSmtpReader } from '@nudge/database';
+import { destinationAdapterResolver, guardedFetch, smtpMailer } from '@nudge/destinations';
 import { createStorage } from '@nudge/storage';
 import { workerConfigFromEnv, createWorker } from '@nudge/worker';
 import { createApi } from './api.js';
@@ -19,15 +21,23 @@ async function main() {
   // The api and the worker of the same process share the Capture storage.
   const captureStorage = createStorage((api ?? worker)!.storage);
   // Every call to a URL a Member configured (Destinations, Alert destination, Judge).
-  const outboundFetch = guardedFetch((api ?? worker)!.outbound);
-  const resolveDestinationAdapter = destinationAdapterResolver({ fetch: outboundFetch });
+  const shared = (api ?? worker)!;
+  const outboundFetch = guardedFetch(shared.outbound);
+  // The SMTP server of the email Destinations, read again from the settings on every
+  // email: a small pool of its own, since the adapters are built outside the Nest modules.
+  const settings = connectDb(shared.databaseUrl, { max: 2 });
+  const mailer = smtpMailer({
+    settings: instanceSmtpReader(settings.db, createSecretCipher(shared.encryptionKey)),
+    policy: shared.outbound,
+  });
+  const resolveDestinationAdapter = destinationAdapterResolver({ fetch: outboundFetch, mailer });
 
   // In shutdown order: the api stops accepting Feedbacks before the worker finishes
   // its running jobs.
   const started: INestApplicationContext[] = [];
   if (api) {
     const { port, storage: _storage, outbound: _outbound, ...config } = api;
-    const app = await createApi({ ...config, resolveDestinationAdapter, captureStorage });
+    const app = await createApi({ ...config, resolveDestinationAdapter, mailer, captureStorage });
     await app.listen(port);
     started.push(app);
   }
@@ -46,6 +56,7 @@ async function main() {
     stopping = true;
     try {
       for (const app of started) await app.close();
+      await settings.close();
     } finally {
       // Re-raised for the usual exit code; as PID 1 of a container, where it would be
       // ignored, the process exits by itself.

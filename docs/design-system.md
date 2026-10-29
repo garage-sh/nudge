@@ -97,7 +97,8 @@ The mark is the Severity gauge at its full level: four rising bars, in the accen
 
 ### Classes
 
-- `.panel`: a panel, for a whole object (a Verdict, a Destination, a settings section).
+- `.panel`: a panel, for a whole object (a Verdict, a Destination, a settings section). `PanelHeader` gives it a title with, on the right, a `Pill` of the saved state of what it configures.
+- `.field-row`: two related fields side by side (username and password), stacked below 560 px; `.short-end` when the second is short (a port).
 - `.list`: a surface with separators, for a collection. No card per item.
 - `.linked-row` + `.row-link`: a row that opens its object. The link is stretched over the whole row, which takes the hover and the focus ring: a click anywhere on the row opens it (Inbox, Projects).
 - `.form`, `.field`, `fieldset.field` + `.check` (checkboxes as pills), `.actions` (row of buttons), `.help`, `.muted`.
@@ -144,7 +145,7 @@ Every signed-in screen starts with `PageHeader`. The patterns below are the shap
   - an object in trouble says why and what to do (`.problem`);
   - a Project's routing (`RoutingMap`) heads the list: Feedback types on the left, Destinations on the right, a line where a Filter accepts a type, highlighted on hover. A type no Destination accepts says it goes nowhere. The drawing is `aria-hidden`; the same routes are written as a list, which is also the narrow-screen view;
   - a webhook's form shows its payload (`.payload`): request, headers, body per event and the signature check, from `WEBHOOK_EXAMPLES` in `@nudge/shared`. On a wide screen it sits beside the fields.
-- **Settings** (Settings, a Project's settings): a `.settings` column of at most 760 px, one `.panel` per topic, and one solid button per panel.
+- **Settings** (Settings, a Project's settings): a `.settings` column of at most 760 px, one `.panel` per topic with its state in its `PanelHeader`, and one solid button per panel. Instance settings add a `.settings-nav` to each panel: a sticky column beside them from 1100 px, a row of links above them below. A link to `/settings#settings-<topic>` lands on the panel.
 
 ## Writing rules
 

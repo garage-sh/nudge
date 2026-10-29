@@ -1,4 +1,5 @@
-# Development infrastructure: Postgres (source of truth) and Redis (BullMQ queues).
+# Development infrastructure: Postgres (source of truth), Redis (BullMQ queues) and
+# Mailpit (an SMTP server that keeps every email, for the email Destinations).
 # The apps run on the host (`yarn dev`). The ports listen on 127.0.0.1 only: the
 # password is `nudge` and Redis has none.
 services:
@@ -26,6 +27,13 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+  # SMTP on 127.0.0.1:1025 (Settings › Email: host 127.0.0.1, port 1025, security
+  # None); the emails are read at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.5@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
+    ports:
+      - '127.0.0.1:${NUDGE_MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${NUDGE_MAILPIT_UI_PORT:-8025}:8025'
 
 volumes:
   nudge_postgres:

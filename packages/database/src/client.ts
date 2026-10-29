@@ -12,7 +12,8 @@ export interface DbConnection {
   close(): Promise<void>;
 }
 
-export function connectDb(databaseUrl: string): DbConnection {
-  const pool = new Pool({ connectionString: databaseUrl });
+/** `max`: the pool's connections (10 by default). */
+export function connectDb(databaseUrl: string, { max }: { max?: number } = {}): DbConnection {
+  const pool = new Pool({ connectionString: databaseUrl, ...(max ? { max } : {}) });
   return { db: drizzle(pool, { schema }), close: () => pool.end() };
 }

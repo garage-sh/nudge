@@ -18,7 +18,7 @@ nudge collects feedback from the users of several applications, triages it and s
 
 - **Collect** from every application: an embeddable Widget (with optional, consent-based screenshots), a server SDK, or a plain HTTP API.
 - **Triage** each Feedback with a Judge, a System One decision model (TypeSafe, OpenRouter or your own server): Type, Severity, Junk and Manipulation attempts.
-- **Dispatch** it to the Project's Destinations whose Filter accepts it: Linear, GitHub Issues, Slack, Discord, signed webhooks.
+- **Dispatch** it to the Project's Destinations whose Filter accepts it: Linear, GitHub Issues, Slack, Discord, email, signed webhooks.
 - **Follow** everything from a dashboard, in English or French.
 
 ## Quick start

@@ -10,7 +10,7 @@ import {
 } from '@nudge/shared';
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useT } from '../../i18n/index.js';
-import { ErrorMessage, Field } from '../../layout/ui.js';
+import { ErrorMessage, Field, PanelHeader } from '../../layout/ui.js';
 import { DESTINATION_FORMS, TypeIcon } from './types/index.js';
 
 export interface DestinationValues {
@@ -40,8 +40,14 @@ export function DestinationForm({
   withoutNameOrFilter = false,
   children,
   actions,
+  headingId,
+  status,
 }: {
   title: string;
+  /** The title's `id`, for a link to the panel (Settings). */
+  headingId?: string;
+  /** The saved state, beside the title (`PanelHeader`). */
+  status?: ReactNode;
   initial: Omit<DestinationValues, 'secrets' | 'filter'> & { readonly filter: FilterView };
   typeEditable: boolean;
   savedSecrets?: readonly string[];
@@ -93,7 +99,7 @@ export function DestinationForm({
 
   return (
     <form onSubmit={submit} className="form panel" aria-label={title}>
-      <h2>{title}</h2>
+      <PanelHeader id={headingId} title={title} status={status} />
       {children}
       {typeEditable ? (
         <fieldset className="field type-picker">

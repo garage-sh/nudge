@@ -119,6 +119,27 @@ export function PageHeader({
   );
 }
 
+/**
+ * A panel's title, with the saved state of what it configures on the right (a `Pill`):
+ * readable at a glance before reading the form.
+ */
+export function PanelHeader({
+  id,
+  title,
+  status,
+}: {
+  id?: string;
+  title: string;
+  status?: ReactNode;
+}) {
+  return (
+    <div className="panel-header">
+      <h2 id={id}>{title}</h2>
+      {status}
+    </div>
+  );
+}
+
 /** Nothing to show: say why and, when there is one, offer the action that fills the screen. */
 export function EmptyState({
   title,

@@ -1,5 +1,6 @@
 import { isDestinationType, type DestinationType } from '@nudge/shared';
 import { discordForm } from './discord.js';
+import { emailForm } from './email.js';
 import { gitHubForm } from './github.js';
 import { linearForm } from './linear.js';
 import { slackForm } from './slack.js';
@@ -18,6 +19,7 @@ export const DESTINATION_FORMS: {
   linear: linearForm,
   slack: slackForm,
   github: gitHubForm,
+  email: emailForm,
 };
 
 /** The form of any one of the types. */

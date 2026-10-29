@@ -14,7 +14,7 @@ NUDGE_COOKIE_SECURE=false
 NUDGE_DASHBOARD_URL=http://localhost:5173
 NUDGE_CAPTURES_DIR=$PWD/.data/captures
 EOF
-yarn dev:infra             # Postgres and Redis (docker-compose.dev.yml)
+yarn dev:infra             # Postgres, Redis and Mailpit (docker-compose.dev.yml)
 yarn db:migrate
 yarn dev                   # api and worker on :3000, dashboard on :5173 (relays /api to :3000)
 ```
@@ -22,6 +22,8 @@ yarn dev                   # api and worker on :3000, dashboard on :5173 (relays
 The api and the `db:*` scripts read the root `.env`; a variable already exported in the shell takes precedence. The other variables are described in [`.env.example`](../.env.example) and [Configuration](configuration.md).
 
 `yarn dev` runs `dev:infra` again, builds the packages the apps depend on, then starts the api (with the worker) and the dashboard in watch mode. A single app: `yarn workspace @nudge/api dev`. The worker is the `packages/worker` library, which the api starts according to `NUDGE_ROLES`.
+
+To try the email Destinations, Mailpit stands in for an SMTP server: in **Settings › Email (SMTP)**, enter host `127.0.0.1`, port `1025`, security None and any sender address, and start the api with `NUDGE_OUTBOUND_ALLOWED_HOSTS=127.0.0.1` (a loopback host is refused otherwise). The emails are read at http://localhost:8025.
 
 `yarn dev:reset` starts over from an empty local Instance: it drops the Postgres volume and the Redis queues, deletes the Captures in `.data/captures`, restarts the infrastructure and applies the migrations.
 

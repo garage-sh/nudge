@@ -26,6 +26,7 @@ describe('Alert badges', () => {
       'GET /api/instance/judge': { status: 200, body: NO_JUDGE },
       'GET /api/instance/retention': { status: 200, body: { days: null } },
       'GET /api/instance/alert-destination': { status: 200, body: { destination: null } },
+      'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
       'GET /api/alerts': {
         status: 200,
         body: {
@@ -53,6 +54,7 @@ describe('Alert badges', () => {
       'GET /api/instance/judge': { status: 200, body: NO_JUDGE },
       'GET /api/instance/retention': { status: 200, body: { days: null } },
       'GET /api/instance/alert-destination': { status: 200, body: { destination: null } },
+      'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
       'GET /api/alerts': { status: 200, body: NO_ALERT },
     });
     renderDashboard('/settings');
@@ -111,6 +113,7 @@ describe('Instance settings: Alert destination', () => {
       'GET /api/instance/judge': { status: 200, body: NO_JUDGE },
       'GET /api/instance/retention': { status: 200, body: { days: null } },
       'GET /api/instance/alert-destination': { status: 200, body: { destination: null } },
+      'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
       'PUT /api/instance/alert-destination': {
         status: 200,
         body: {
@@ -147,6 +150,7 @@ describe('Instance settings: Alert destination', () => {
       'GET /api/alerts': { status: 200, body: NO_ALERT },
       'GET /api/instance/judge': { status: 200, body: NO_JUDGE },
       'GET /api/instance/retention': { status: 200, body: { days: null } },
+      'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
       'GET /api/instance/alert-destination': {
         status: 200,
         body: { destination: { type: 'discord', config: {}, secrets: ['url'] } },

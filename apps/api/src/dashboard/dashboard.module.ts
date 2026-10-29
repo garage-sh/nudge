@@ -4,8 +4,8 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
-import type { DestinationAdapterResolver } from '@nudge/core';
-import { DESTINATION_ADAPTER_RESOLVER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
+import type { DestinationAdapterResolver, Mailer } from '@nudge/core';
+import { DESTINATION_ADAPTER_RESOLVER, MAILER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
 import { AlertsController } from './alerts/alerts.controller.js';
 import { AlertsService } from './alerts/alerts.service.js';
 import { AccountController } from './auth/account.controller.js';
@@ -30,6 +30,7 @@ import { AlertDestinationService } from './instance/alert-destination.service.js
 import { InstanceController } from './instance/instance.controller.js';
 import { InstanceJudgeService } from './instance/instance-judge.service.js';
 import { InstanceRetentionService } from './instance/instance-retention.service.js';
+import { InstanceSmtpService } from './instance/instance-smtp.service.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { ProjectsService } from './projects/projects.service.js';
 import { DeliveriesController } from './feedbacks/deliveries.controller.js';
@@ -46,6 +47,8 @@ export interface DashboardOptions {
   readonly setupToken: SetupTokenConfig;
   /** Destination adapters, for the test delivery of the "test" button. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
+  /** The Instance's SMTP server, for the "send a test email" button. */
+  readonly mailer: Mailer;
 }
 
 /** Controllers of the dashboard API: all go through `ClientHeaderMiddleware`. */
@@ -78,6 +81,7 @@ export class DashboardModule implements NestModule {
         { provide: SESSION_COOKIE_OPTIONS, useValue: options.sessionCookie },
         { provide: SETUP_TOKEN_CONFIG, useValue: options.setupToken },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
+        { provide: MAILER, useValue: options.mailer },
         MembersService,
         SessionsService,
         SetupTokenService,
@@ -89,6 +93,7 @@ export class DashboardModule implements NestModule {
         DeliveriesService,
         InstanceJudgeService,
         InstanceRetentionService,
+        InstanceSmtpService,
         AlertDestinationService,
         AlertsService,
         DestinationsService,

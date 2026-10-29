@@ -52,6 +52,7 @@ import { inject } from 'vitest';
 import { DashboardClient } from './dashboard-client.js';
 import { FakeDestination } from './fake-destination.js';
 import { FakeJudge } from './fake-judge.js';
+import { FakeMailer } from './fake-mailer.js';
 
 export interface PipelineOptions {
   /**
@@ -121,6 +122,8 @@ export interface Pipeline {
   readonly fakeAlert: FakeDestination;
   /** Every switch of a Destination to Suspended reported by the worker, in order. */
   readonly suspensions: readonly Suspension[];
+  /** The Instance's SMTP server: the emails sent, by the email Destinations and the api. */
+  readonly mailer: FakeMailer;
   /** The Project is created directly in the database (seed); its keys are returned in clear. */
   createProject(data: {
     name: string;
@@ -280,9 +283,10 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const outboundFetch = guardedFetch({
     allowedHosts: options.outboundAllowedHosts ?? ['127.0.0.1'],
   });
+  const mailer = new FakeMailer();
   const resolveDestinationAdapter: DestinationAdapterResolver =
     options.destinations === 'real'
-      ? destinationAdapterResolver({ fetch: outboundFetch })
+      ? destinationAdapterResolver({ fetch: outboundFetch, mailer })
       : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
@@ -319,6 +323,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...infra,
     sessionCookieSecure: false,
     resolveDestinationAdapter,
+    mailer,
     ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
     ...(options.setupToken ? { setupToken: options.setupToken } : {}),
@@ -356,6 +361,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     },
     fakeAlert: fakeFor(ALERT_DESTINATION_ID),
     suspensions,
+    mailer,
     createProject: (data) => createProject(db, data),
     async createDestination(projectId, data = {}) {
       const destination = await createDestination(db, cipher, {

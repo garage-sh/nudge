@@ -1,5 +1,5 @@
-import type { ConfiguredDestination, SecretCipher } from '@nudge/core';
-import type { JudgeProvider } from '@nudge/shared';
+import type { ConfiguredDestination, SecretCipher, SmtpSettings } from '@nudge/core';
+import type { JudgeProvider, SmtpSecurity } from '@nudge/shared';
 import { eq } from 'drizzle-orm';
 import type { Db } from './client.js';
 import type { DestinationSecrets } from './destinations.js';
@@ -151,4 +151,80 @@ export async function writeInstanceRetention(db: Db, days: number | null): Promi
     .insert(instanceSettings)
     .values({ id: SETTINGS_ROW_ID, ...values })
     .onConflictDoUpdate({ target: instanceSettings.id, set: values });
+}
+
+/** Encryption context of the SMTP password: it decrypts only for this use. */
+export const SMTP_PASSWORD_CONTEXT = 'instance_settings.smtp_password';
+
+/** The Instance's SMTP server as stored, password still encrypted. */
+export interface StoredSmtp {
+  readonly host: string;
+  readonly port: number;
+  readonly security: SmtpSecurity;
+  readonly username: string | null;
+  readonly encryptedPassword: string | null;
+  readonly fromAddress: string;
+  readonly fromName: string | null;
+}
+
+/** `null`: the Instance has no SMTP server. */
+export async function readInstanceSmtp(db: Db): Promise<StoredSmtp | null> {
+  const [row] = await db
+    .select({
+      host: instanceSettings.smtpHost,
+      port: instanceSettings.smtpPort,
+      security: instanceSettings.smtpSecurity,
+      username: instanceSettings.smtpUsername,
+      encryptedPassword: instanceSettings.smtpEncryptedPassword,
+      fromAddress: instanceSettings.smtpFromAddress,
+      fromName: instanceSettings.smtpFromName,
+    })
+    .from(instanceSettings)
+    .where(eq(instanceSettings.id, SETTINGS_ROW_ID));
+  if (!row?.host || row.port === null || !row.security || !row.fromAddress) return null;
+  return {
+    ...row,
+    host: row.host,
+    port: row.port,
+    security: row.security,
+    fromAddress: row.fromAddress,
+  };
+}
+
+/** Saves (or removes, `null`) the SMTP server; creates the row if needed. */
+export async function writeInstanceSmtp(db: Db, smtp: StoredSmtp | null): Promise<void> {
+  const values = {
+    smtpHost: smtp?.host ?? null,
+    smtpPort: smtp?.port ?? null,
+    smtpSecurity: smtp?.security ?? null,
+    smtpUsername: smtp?.username ?? null,
+    smtpEncryptedPassword: smtp?.encryptedPassword ?? null,
+    smtpFromAddress: smtp?.fromAddress ?? null,
+    smtpFromName: smtp?.fromName ?? null,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(instanceSettings)
+    .values({ id: SETTINGS_ROW_ID, ...values })
+    .onConflictDoUpdate({ target: instanceSettings.id, set: values });
+}
+
+/**
+ * The SMTP server as the mailer uses it, password decrypted, read again on every call:
+ * a change made in the dashboard applies to the next email. Throws
+ * `SecretDecryptionError` if the password no longer decrypts (Instance key changed).
+ */
+export function instanceSmtpReader(
+  db: Db,
+  cipher: SecretCipher,
+): () => Promise<SmtpSettings | null> {
+  return async () => {
+    const smtp = await readInstanceSmtp(db);
+    if (!smtp) return null;
+    const { encryptedPassword, ...settings } = smtp;
+    return {
+      ...settings,
+      password: encryptedPassword ? cipher.decrypt(encryptedPassword, SMTP_PASSWORD_CONTEXT) : null,
+    };
+  };
 }
