@@ -1,6 +1,16 @@
 import { z } from 'zod';
-import type { AuthorTrust, FailureClass, FeedbackType, Severity, Source } from '../domain.js';
+import type {
+  AuthorTrust,
+  FailureClass,
+  FeedbackType,
+  IncidentState,
+  Level,
+  LevelOrigin,
+  Severity,
+  Source,
+} from '../domain.js';
 import type { CaptureType, Context } from '../feedback-input.js';
+import type { IncidentContext } from '../incident-input.js';
 import { httpUrlSchema, type DestinationDefinition } from './definition.js';
 
 /**
@@ -25,7 +35,11 @@ export type WebhookSecrets = Readonly<
  * so the documented payload cannot drift from the one sent.
  */
 
-export type WebhookEventName = 'feedback' | 'alert' | 'ping';
+export type WebhookEventName =
+  'feedback' | 'incident.opened' | 'incident.raised' | 'alert' | 'ping';
+
+/** The events of an Incident's life, as `X-Nudge-Event` and the body's `event` name them. */
+export type WebhookIncidentEventName = Extract<WebhookEventName, `incident.${string}`>;
 
 /** A dispatched Feedback (`isTest: true` for the "test" button). */
 export interface WebhookFeedbackEvent {
@@ -51,6 +65,38 @@ export interface WebhookFeedbackEvent {
     /** Base64 image, `null` without a Capture. */
     readonly capture: { readonly contentType: CaptureType; readonly data: string } | null;
     readonly receivedAt: string;
+    readonly dashboardUrl: string | null;
+  };
+}
+
+/**
+ * An Incident that opened (`incident.opened`), or whose Level rose to reach this
+ * Destination (`incident.raised`). `incident.id` is stable for the Incident's whole life:
+ * the receiver tracks the Incident by it. Each Destination gets at most one of these per
+ * Incident.
+ */
+export interface WebhookIncidentEvent {
+  readonly event: WebhookIncidentEventName;
+  readonly delivery: { readonly id: string };
+  readonly project: { readonly id: string; readonly name: string };
+  /** The Incident in plain text, for a receiver that relays it as is. */
+  readonly title: string;
+  readonly summary: string;
+  readonly incident: {
+    readonly id: string;
+    readonly state: IncidentState;
+    /** Title, message, Environment and context of the Occurrence that opened the Incident: raw, as sent. */
+    readonly title: string;
+    readonly message: string | null;
+    readonly environment: string | null;
+    readonly context: IncidentContext;
+    /** The Incident's current Level, and where it came from. */
+    readonly level: Level;
+    readonly levelOrigin: LevelOrigin;
+    readonly fingerprint: string;
+    readonly occurrences: number;
+    readonly firstSeenAt: string;
+    readonly lastSeenAt: string;
     readonly dashboardUrl: string | null;
   };
 }
@@ -93,6 +139,8 @@ export interface WebhookPingEvent {
 /** A sample of each event's body, as a receiver gets it. */
 export const WEBHOOK_EXAMPLES: {
   readonly feedback: WebhookFeedbackEvent;
+  readonly 'incident.opened': WebhookIncidentEvent;
+  readonly 'incident.raised': WebhookIncidentEvent;
   readonly alert: WebhookAlertEvent;
   readonly ping: WebhookPingEvent;
 } = {
@@ -118,6 +166,52 @@ export const WEBHOOK_EXAMPLES: {
       capture: null,
       receivedAt: '2026-10-24T09:29:58.000Z',
       dashboardUrl: 'https://nudge.example.com/feedbacks/c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64',
+    },
+  },
+  'incident.opened': {
+    event: 'incident.opened',
+    delivery: { id: '3a7d1e94-6b2c-4f08-8d5e-1c9b7a2f4e60' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Error · Payment provider timed out',
+    summary: 'An Incident opened in Shop (production).',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'open',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'error',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 1,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:00:00.000Z',
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+    },
+  },
+  'incident.raised': {
+    event: 'incident.raised',
+    delivery: { id: '8c2f5a17-3e9d-4b60-a4c8-7d1e9f3b5a02' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Critical · Payment provider timed out',
+    summary: 'An Incident of Shop rose to Critical.',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'open',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'critical',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 14,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:12:41.000Z',
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
     },
   },
   alert: {

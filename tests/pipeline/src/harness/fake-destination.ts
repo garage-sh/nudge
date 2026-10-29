@@ -3,6 +3,7 @@ import type {
   FailureClass,
   DestinationAdapter,
   OutgoingDelivery,
+  OutgoingIncidentDelivery,
   DeliveryResult,
   DestinationHealth,
 } from '@nudge/core';
@@ -20,6 +21,10 @@ export class FakeDestination implements DestinationAdapter {
   readonly attemptTimes: number[] = [];
   /** Time (`performance.now()`) of each call to `healthCheck`, in order. */
   readonly healthCheckTimes: number[] = [];
+  /** The delivered Incident Deliveries, in order. */
+  readonly incidents: OutgoingIncidentDelivery[] = [];
+  /** Every call to `deliverIncident`, delivered or not. */
+  readonly incidentAttempts: OutgoingIncidentDelivery[] = [];
   /** The delivered alerts, in order (the Instance's Alert destination). */
   readonly alerts: Alert[] = [];
   /** Every call to `alert`, delivered or not. */
@@ -79,6 +84,19 @@ export class FakeDestination implements DestinationAdapter {
     };
     if (result instanceof Error) throw result;
     if (result.status === 'delivered') this.deliveries.push(delivery);
+    return result;
+  }
+
+  /** Answers from the same script as `send`: `scriptSends` also fails Incident Deliveries. */
+  async deliverIncident(delivery: OutgoingIncidentDelivery): Promise<DeliveryResult> {
+    this.incidentAttempts.push(delivery);
+    if (this.held) await this.held;
+    const result = this.scriptedSends.shift() ?? {
+      status: 'delivered',
+      externalUrl: `https://destination.test/incidents/${delivery.deliveryId}`,
+    };
+    if (result instanceof Error) throw result;
+    if (result.status === 'delivered') this.incidents.push(delivery);
     return result;
   }
 

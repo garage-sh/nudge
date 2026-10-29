@@ -24,6 +24,7 @@ import {
 } from './http.js';
 import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
 import { titleWithType, truncate } from './text.js';
+import { incidentsNotDelivered } from './incidents.js';
 
 export interface LinearOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -264,6 +265,7 @@ export function linearAdapter(
       });
     },
     /** An issue in the configured team, without labels: the labels are the Feedback's. */
+    deliverIncident: () => incidentsNotDelivered('Linear'),
     async alert(alert) {
       const target = await resolve([]);
       if (!target.ok) return failed(target);

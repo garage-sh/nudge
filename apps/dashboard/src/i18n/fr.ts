@@ -97,6 +97,8 @@ export const fr: Messages = {
       'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
     feedback_not_redispatchable:
       'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
+    incident_not_redispatchable:
+      'Cet Incident ne peut pas être redispatché : seul un Incident Ouvert se redispatche.',
     destination_not_found: 'Cette Destination n’existe plus.',
     unknown_destination_type: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
     session_required: 'Votre session a expiré : reconnectez-vous.',
@@ -487,11 +489,23 @@ export const fr: Messages = {
     context: 'Contexte',
     noContext: 'Aucun contexte.',
     noMessage: 'Aucun message.',
+    deliveries: 'Envois',
+    redispatch: {
+      help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
+      action: 'Redispatcher',
+      noneCreated: 'Aucune autre Destination ne retient cet Incident.',
+    },
   },
 
   destinations: {
     add: 'Ajouter une Destination',
-    intro: 'Chaque Retour Trié part vers toutes les Destinations dont le Filtre le retient.',
+    intro:
+      'Chaque Retour Trié part vers toutes les Destinations dont le Filtre de Retours le retient, et chaque Incident vers toutes celles dont le Filtre d’Incidents le retient.',
+    noFeedback: 'Aucun Retour',
+    noIncident: 'Aucun Incident',
+    incidentLevelOrMore: (level) => `Incidents : ${level} ou plus`,
+    incidentEnvironments: (environments) => `en ${environments}`,
+    incidentConditions: (count) => `${count} condition${s(count)} de contexte`,
     emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
     emptyHelp:
       'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
@@ -530,6 +544,24 @@ export const fr: Messages = {
       noMinimum: 'Aucune',
       minimumSeverityHelp:
         'Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.',
+      feedbackFilter: 'Filtre de Retours',
+      feedbackFilterOn: 'Recevoir les Retours',
+      incidentFilter: 'Filtre d’Incidents',
+      incidentFilterOn: 'Recevoir les Incidents',
+      incidentFilterOff: 'Désactivé : cette Destination ne reçoit aucun Incident.',
+      minimumLevel: 'Niveau minimal',
+      environments: 'Environnements',
+      environmentsHelp:
+        'Séparés par des virgules. Vide : tous les Environnements. Un Incident sans Environnement ne passe qu’une liste vide.',
+      conditions: 'Conditions sur le contexte',
+      conditionsHelp:
+        'Toutes les conditions doivent être remplies. Un Incident dont le contexte n’a pas la clé est refusé.',
+      noCondition: 'Aucune condition.',
+      conditionKey: 'Clé du contexte',
+      conditionValues: 'Vaut l’une de',
+      conditionValuesHelp: 'Séparées par des virgules.',
+      addCondition: 'Ajouter une condition',
+      removeCondition: 'Retirer',
     },
   },
 
@@ -549,10 +581,20 @@ export const fr: Messages = {
         title: 'Payload',
         show: 'Ce que reçoit votre récepteur',
         event: 'Évènement',
-        events: { feedback: 'Retour', alert: 'Alerte', ping: 'Ping' },
+        events: {
+          feedback: 'Retour',
+          'incident.opened': 'Incident ouvert',
+          'incident.raised': 'Incident aggravé',
+          alert: 'Alerte',
+          ping: 'Ping',
+        },
         eventHelp: {
           feedback:
             'Chaque Retour dispatché, et le bouton Tester avec isTest: true. Le texte est brut : encodez-le pour votre cible.',
+          'incident.opened':
+            'Un Incident qui s’ouvre, avec son identifiant stable : suivez l’Incident grâce à lui. Son titre, son message, son Environnement et son contexte sont bruts : encodez-les pour votre cible.',
+          'incident.raised':
+            'Un Incident dont le Niveau a assez monté pour atteindre cette Destination : elle ne l’avait pas reçu à son Niveau précédent. Chaque Destination reçoit un seul événement opened ou raised par Incident.',
           alert:
             'Une alerte pour les Membres : un Retour En revue ou une Destination Suspendue. Elle ne porte jamais le texte d’un Retour.',
           ping: 'La vérification de santé, tant que la Destination est Suspendue : répondez par un 2xx pour reprendre ses Envois.',
@@ -561,7 +603,7 @@ export const fr: Messages = {
         headers: 'En-têtes',
         body: 'Exemple de corps',
         headerHelp: {
-          event: 'feedback, alert ou ping.',
+          event: 'feedback, incident.opened, incident.raised, alert ou ping.',
           delivery:
             'L’identifiant stable de l’Envoi : ignorez une nouvelle tentative déjà traitée.',
           alert: 'L’identifiant stable de l’alerte : ignorez une nouvelle tentative déjà traitée.',

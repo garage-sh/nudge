@@ -571,4 +571,16 @@ export interface IncidentDetailView extends IncidentSummaryView {
   readonly fingerprint: string;
   readonly firstReport: IncidentReport;
   readonly lastReport: IncidentReport;
+  /** At most one per Destination, oldest first. */
+  readonly deliveries: readonly DeliveryView[];
+}
+
+/**
+ * Redispatch of an Open Incident by a Member (`POST /api/incidents/:id/redispatch`): the
+ * Deliveries created to the Destinations whose Incident Filter now accepts it, and the
+ * updated Incident. `deliveriesCreated` is 0 when no further Destination accepts it.
+ */
+export interface IncidentRedispatchView {
+  readonly deliveriesCreated: number;
+  readonly incident: IncidentDetailView;
 }

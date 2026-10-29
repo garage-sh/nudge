@@ -17,6 +17,7 @@ import {
 import { DEFAULT_HTTP_TIMEOUT_MS, classifyStatus, httpFailure, errorMessage } from './http.js';
 import { isSafeLink } from './markdown.js';
 import { truncate } from './text.js';
+import { incidentsNotDelivered } from './incidents.js';
 
 export interface DiscordOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -115,6 +116,7 @@ export function discordAdapter(
       return { status: 'delivered', externalUrl: await messageLink(execution.created) };
     },
     /** The message link is kept nowhere: the guild is not read for the alert. */
+    deliverIncident: () => incidentsNotDelivered('Discord'),
     async alert(alert) {
       const execution = await execute(alertBody(alert));
       return execution.ok ? { status: 'delivered', externalUrl: null } : execution.failure;

@@ -11,6 +11,7 @@ import {
   type ReviewAction,
   type DestinationAdapterResolver,
   type Filter,
+  type IncidentFilter,
   type ReviewResult,
   type TriageThresholds,
 } from '@nudge/core';
@@ -132,11 +133,17 @@ export interface Pipeline {
   }): Promise<{ project: Project; publicKey: string; secretKey: string }>;
   /**
    * A Destination of the Project created directly in the database (seed), served by
-   * its own `FakeDestination`. Without a Filter, it accepts every Triaged Feedback.
+   * its own `FakeDestination`. Without a Filter, it accepts every Triaged Feedback;
+   * without an Incident Filter, it receives no Incident (`null`: the Filter is off).
    */
   createDestination(
     projectId: string,
-    data?: { name?: string; config?: Record<string, unknown>; filter?: Filter },
+    data?: {
+      name?: string;
+      config?: Record<string, unknown>;
+      filter?: Filter | null;
+      incidentFilter?: IncidentFilter | null;
+    },
   ): Promise<{ destination: DestinationRow; fake: FakeDestination }>;
   /** The `FakeDestination` that serves this Destination (created by the dashboard, for example). */
   fakeDestination(destinationId: string): FakeDestination;
@@ -371,7 +378,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         name: data.name ?? 'Test destination',
         type: 'fake',
         config: data.config ?? {},
-        ...(data.filter ? { filter: data.filter } : {}),
+        ...(data.filter !== undefined ? { filter: data.filter } : {}),
+        incidentFilter: data.incidentFilter ?? null,
       });
       return { destination, fake: fakeFor(destination.id) };
     },

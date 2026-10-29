@@ -25,6 +25,7 @@ import {
 } from './http.js';
 import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
 import { titleWithType, truncate } from './text.js';
+import { incidentsNotDelivered } from './incidents.js';
 
 export interface GitHubOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -91,6 +92,7 @@ export function gitHubAdapter(
 
   return {
     send: (delivery) => createIssue({ title: title(delivery), body: body(delivery) }),
+    deliverIncident: () => incidentsNotDelivered('GitHub'),
     alert: (alert) => createIssue(alertIssue(alert)),
     /**
      * "Get a repository": the token sees the repository, its issues are enabled and it

@@ -18,6 +18,7 @@ import type { DeliverySubjectKind } from '@nudge/shared';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { SubjectDispatcher } from './subject-dispatcher.js';
 import { FeedbackDispatcher } from './feedback-dispatcher.js';
+import { IncidentDispatcher } from './incident-dispatcher.js';
 import { TransientFailure } from './transient-failure.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from './tokens.js';
@@ -40,8 +41,9 @@ export class DispatchProcessor {
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
     private readonly suspension: SuspensionService,
     feedbackDispatcher: FeedbackDispatcher,
+    incidentDispatcher: IncidentDispatcher,
   ) {
-    this.subjects = { feedback: feedbackDispatcher };
+    this.subjects = { feedback: feedbackDispatcher, incident: incidentDispatcher };
   }
 
   /** What each subject of a Delivery adds to Dispatch: one dispatcher per kind. */

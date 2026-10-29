@@ -1,5 +1,10 @@
-import type { IncidentDetailView, IncidentPage } from '@nudge/shared';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import type {
+  DeliveryView,
+  IncidentDetailView,
+  IncidentPage,
+  IncidentRedispatchView,
+} from '@nudge/shared';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
 
 /** A Project's Incident filters, in the order they are written in the URL. */
@@ -44,9 +49,47 @@ export const useIncidentEnvironments = (projectId: string) =>
       ),
   });
 
-export const useIncident = (id: string) =>
+/** After an action, while the worker sends the Deliveries: the detail is read this often. */
+const POLL_MS = 1000;
+
+const incidentKey = (id: string) => ['incidents', 'detail', id];
+const incidentPath = (id: string) => `/api/incidents/${encodeURIComponent(id)}`;
+
+/** An Incident's detail; read more often until `pollUntil` (an instant, in ms), after an action. */
+export const useIncident = (id: string, { pollUntil = 0 } = {}) =>
   useQuery({
-    queryKey: ['incidents', 'detail', id],
-    queryFn: () => api.get<IncidentDetailView>(`/api/incidents/${encodeURIComponent(id)}`),
-    refetchInterval: REFRESH_MS,
+    queryKey: incidentKey(id),
+    queryFn: () => api.get<IncidentDetailView>(incidentPath(id)),
+    refetchInterval: () => (Date.now() < pollUntil ? POLL_MS : REFRESH_MS),
   });
+
+/** After an action on an Incident: stores the updated Incident if returned, reads it again otherwise. */
+function useAfterAction(id: string) {
+  const client = useQueryClient();
+  return (incident?: IncidentDetailView) => {
+    if (incident) client.setQueryData(incidentKey(id), incident);
+    else void client.invalidateQueries({ queryKey: incidentKey(id) });
+  };
+}
+
+/** Replay one of the Incident's Deliveries; the Incident is read again to follow the new attempt. */
+export function useReplayIncidentDelivery(incidentId: string) {
+  const after = useAfterAction(incidentId);
+  return useMutation({
+    mutationFn: (deliveryId: string) =>
+      api.post<DeliveryView>(`/api/deliveries/${encodeURIComponent(deliveryId)}/replay`),
+    onSettled: () => after(),
+  });
+}
+
+/**
+ * Redispatch the Open Incident: the missing Deliveries to the Destinations whose Incident
+ * Filter accepts it at its current Level; the updated Incident is stored.
+ */
+export function useRedispatchIncident(id: string) {
+  const after = useAfterAction(id);
+  return useMutation({
+    mutationFn: () => api.post<IncidentRedispatchView>(`${incidentPath(id)}/redispatch`),
+    onSettled: (result) => after(result?.incident),
+  });
+}

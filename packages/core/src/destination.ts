@@ -9,6 +9,11 @@ import {
   type Source,
   type CaptureType,
   type FeedbackType,
+  type IncidentContext,
+  type IncidentDispatchMoment,
+  type IncidentState,
+  type Level,
+  type LevelOrigin,
 } from '@nudge/shared';
 import type { Alert } from './alert.js';
 
@@ -64,6 +69,39 @@ export interface OutgoingDelivery {
   readonly isTest: boolean;
 }
 
+/**
+ * What an adapter receives of an Incident. Every text (title, message, Environment,
+ * context) comes from the sender: each adapter encodes it for its target.
+ */
+export interface IncidentToDispatch {
+  /** Stable for the Incident's whole life: a receiver tracks the Incident by it. */
+  readonly id: string;
+  readonly state: IncidentState;
+  /** Title, message, Environment and context of the Occurrence that opened the Incident. */
+  readonly title: string;
+  readonly message: string | null;
+  readonly environment: string | null;
+  readonly context: IncidentContext;
+  /** The Incident's current Level, and where it came from. */
+  readonly level: Level;
+  readonly levelOrigin: LevelOrigin;
+  readonly fingerprint: string;
+  /** Occurrences absorbed so far, the first one included. */
+  readonly occurrences: number;
+  readonly firstSeenAt: Date;
+  readonly lastSeenAt: Date;
+  /** "View the Incident" in the dashboard; `null` without `NUDGE_DASHBOARD_URL` (D12). */
+  readonly dashboardUrl: string | null;
+}
+
+export interface OutgoingIncidentDelivery {
+  readonly deliveryId: string;
+  readonly project: { readonly id: string; readonly name: string };
+  /** The Dispatch moment that created the Delivery: the Incident opened, or rose in Level. */
+  readonly moment: IncidentDispatchMoment;
+  readonly incident: IncidentToDispatch;
+}
+
 export type DeliveryResult =
   | { readonly status: 'delivered'; readonly externalUrl: string | null }
   | { readonly status: 'failed'; readonly failureClass: FailureClass; readonly message: string };
@@ -74,6 +112,11 @@ export type DestinationHealth =
 
 export interface DestinationAdapter {
   send(delivery: OutgoingDelivery): Promise<DeliveryResult>;
+  /**
+   * Delivers an Incident that opened, or whose Level rose to reach this Destination: the
+   * Destination's single Delivery of that Incident.
+   */
+  deliverIncident(delivery: OutgoingIncidentDelivery): Promise<DeliveryResult>;
   /**
    * Warns the Members (the Instance's Alert destination): same target, same credentials
    * and same failure classification as a Delivery.

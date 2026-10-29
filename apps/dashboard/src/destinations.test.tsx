@@ -22,6 +22,7 @@ const RECEIVER: DestinationView = {
   type: 'webhook',
   config: { url: 'https://receiver.test/nudge' },
   filter: { types: ['bug', 'question'], minimumSeverity: 'major' },
+  incidentFilter: null,
   state: 'active',
   secrets: ['signingSecret'],
   createdAt: '2026-10-24T08:10:00.000Z',
@@ -147,6 +148,7 @@ describe('A Project’s Destinations', () => {
       name: 'Internal receiver',
       config: { url: 'https://receiver.test/nudge' },
       filter: { types: ['bug', 'question'], minimumSeverity: 'major' },
+      incidentFilter: null,
     });
   });
 
@@ -189,6 +191,7 @@ describe('A Project’s Destinations', () => {
         config: {},
         secrets: { url: URL_WEBHOOK },
         filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
       }),
     );
   });
@@ -233,6 +236,7 @@ describe('A Project’s Destinations', () => {
         name: 'Support inbox',
         config: { recipients: ['support@shop.test', 'qa@shop.test'] },
         filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
       }),
     );
   });
@@ -308,6 +312,7 @@ describe('A Project’s Destinations', () => {
         config: {},
         secrets: { url: URL_WEBHOOK },
         filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
       }),
     );
   });
@@ -351,6 +356,7 @@ describe('A Project’s Destinations', () => {
         config: { repository: 'shop-inc/shop-web' },
         secrets: { token: 'github_pat_secret' },
         filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
       }),
     );
   });
@@ -438,6 +444,7 @@ describe('A Project’s Destinations', () => {
         },
         secrets: { apiKey: 'lin_api_secret' },
         filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
       }),
     );
   });
@@ -524,7 +531,69 @@ describe('A Project’s Destinations', () => {
       name: 'Internal receiver',
       config: { url: 'https://receiver.test/nudge' },
       filter: { types: ['bug'], minimumSeverity: null },
+      incidentFilter: null,
     });
+  });
+
+  it('turns on a Destination’s Incident Filter, with an Environment and a context condition, and turns its Feedback Filter off', async () => {
+    const api = fakeApi({
+      ...baseRoutes(),
+      'PATCH /api/destinations/destination-1': (body) => ({
+        status: 200,
+        body: { ...RECEIVER, ...(body as object) },
+      }),
+    });
+    renderDashboard('/projects/project-1/destinations');
+
+    const receiver = await card('Internal receiver');
+    expect(receiver.getByText('No Incident')).toBeTruthy();
+    await userEvent.click(receiver.getByRole('button', { name: 'Edit' }));
+    const form = within(screen.getByRole('form', { name: 'Edit Internal receiver' }));
+    expect(form.getByText('Off: this Destination receives no Incident.')).toBeTruthy();
+    await userEvent.click(form.getByLabelText('Receive Feedback'));
+    expect(form.queryByLabelText('Minimum Severity')).toBeNull();
+    await userEvent.click(form.getByLabelText('Receive Incidents'));
+    await userEvent.selectOptions(form.getByLabelText('Minimum Level'), 'error');
+    await userEvent.type(form.getByLabelText('Environments'), 'production, , staging');
+    await userEvent.click(form.getByRole('button', { name: 'Add a condition' }));
+    await userEvent.type(form.getByLabelText('Context key'), 'service');
+    await userEvent.type(form.getByLabelText('Is one of'), 'checkout, billing');
+    await userEvent.click(form.getByRole('button', { name: 'Add a condition' }));
+    await userEvent.click(form.getAllByRole('button', { name: /^Remove/ })[1]!);
+    await userEvent.click(form.getByRole('button', { name: 'Save' }));
+
+    const edited = await card('Internal receiver');
+    expect(edited.getByText('No Feedback')).toBeTruthy();
+    expect(edited.getByText('Incidents: Error or higher')).toBeTruthy();
+    expect(edited.getByText('in production, staging')).toBeTruthy();
+    expect(edited.getByText('1 context condition')).toBeTruthy();
+    expect(
+      api.calls.find((c) => c.route === 'PATCH /api/destinations/destination-1')?.body,
+    ).toEqual({
+      name: 'Internal receiver',
+      config: { url: 'https://receiver.test/nudge' },
+      filter: null,
+      incidentFilter: {
+        minimumLevel: 'error',
+        environments: ['production', 'staging'],
+        conditions: [{ key: 'service', values: ['checkout', 'billing'] }],
+      },
+    });
+  });
+
+  it('shows the incident events a webhook receives', async () => {
+    fakeApi(baseRoutes([]));
+    renderDashboard('/projects/project-1/destinations');
+
+    const form = within(
+      (await screen.findByRole('heading', { name: 'Add Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.click(form.getByRole('radio', { name: 'Incident raised' }));
+    const body = JSON.parse(form.getByLabelText(/^Example body/).textContent ?? '') as unknown;
+    expect(body).toMatchObject({ event: 'incident.raised', incident: { level: 'critical' } });
+    expect(form.getByText('X-Nudge-Delivery')).toBeTruthy();
   });
 
   it('tests a Destination and shows the result', async () => {

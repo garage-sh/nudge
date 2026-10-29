@@ -53,13 +53,18 @@ function WebhookPayload({ url, purpose }: { url: string; purpose: TypeFieldsProp
   const t = useT();
   const p = t.destinationTypes.webhook.payload;
   const id = useId();
-  const events: readonly WebhookEventName[] = [purpose, 'ping'];
+  // A Project's Destination receives Feedback and Incidents; the Alert destination, alerts.
+  const events: readonly WebhookEventName[] =
+    purpose === 'feedback'
+      ? ['feedback', 'incident.opened', 'incident.raised', 'ping']
+      : [purpose, 'ping'];
   const [event, setEvent] = useState<WebhookEventName>(purpose);
+  const example = WEBHOOK_EXAMPLES[event];
   const idHeader =
-    event === 'feedback'
+    'delivery' in example
       ? {
           name: 'X-Nudge-Delivery',
-          value: WEBHOOK_EXAMPLES.feedback.delivery.id,
+          value: example.delivery.id,
           help: p.headerHelp.delivery,
         }
       : event === 'alert'
@@ -120,7 +125,7 @@ function WebhookPayload({ url, purpose }: { url: string; purpose: TypeFieldsProp
         <h4>{p.body}</h4>
         <CopyableValue
           label={`${p.body} (${p.events[event]})`}
-          value={JSON.stringify(WEBHOOK_EXAMPLES[event], null, 2)}
+          value={JSON.stringify(example, null, 2)}
           multiline
         />
 

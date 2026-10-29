@@ -1,15 +1,19 @@
 import type { IncidentReport } from '@nudge/shared';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router';
 import { ApiError } from '../api/client.js';
-import { useIncident } from '../api/incidents.js';
+import { useIncident, useRedispatchIncident, useReplayIncidentDelivery } from '../api/incidents.js';
 import { useI18n, useT } from '../i18n/index.js';
 import { DetailSection, ErrorMessage, Loading, PageHeader, Properties } from '../layout/ui.js';
+import { DeliveryList } from './DeliveryList.js';
 import { IncidentStatePill, LevelPill } from './feedback-badges.js';
 
+/** How long the detail is read often after an action, while the worker sends the Deliveries. */
+const POLL_AFTER_ACTION_MS = 15_000;
+
 /**
- * An Incident's detail, read-only. Everything its sender reported (title, message,
- * context) is rendered as text: never HTML, never a link.
+ * An Incident's detail: what it reported, and where it was sent. Everything its sender
+ * reported (title, message, context) is rendered as text: never HTML, never a link.
  */
 export function Incident() {
   const t = useT();
@@ -17,7 +21,10 @@ export function Incident() {
   const projectId = params.id ?? '';
   const id = params.incidentId ?? '';
   const { search } = useLocation();
-  const incident = useIncident(id);
+  const [pollUntil, setPollUntil] = useState(0);
+  const poll = () => setPollUntil(Date.now() + POLL_AFTER_ACTION_MS);
+  const incident = useIncident(id, { pollUntil });
+  const replay = useReplayIncidentDelivery(id);
   const back = {
     to: `/projects/${encodeURIComponent(projectId)}/incidents${search}`,
     label: t.incident.backToList,
@@ -64,6 +71,12 @@ export function Incident() {
           {single ? null : (
             <Report id="last" title={t.incident.lastReport} report={detail.lastReport} />
           )}
+          <Section id="deliveries" title={t.incident.deliveries}>
+            <DeliveryList deliveries={detail.deliveries} replay={replay} afterReplay={poll} />
+            {detail.state === 'open' ? (
+              <Redispatch incidentId={detail.id} afterRedispatch={poll} />
+            ) : null}
+          </Section>
         </div>
         <aside className="feedback-side">
           <Section id="properties" title={t.incident.properties}>
@@ -117,6 +130,45 @@ function Report({ id, title, report }: { id: string; title: string; report: Inci
         <Properties rows={context.map(([key, value]) => [key, String(value)])} />
       )}
     </Section>
+  );
+}
+
+/**
+ * Redispatch the Open Incident at its current Level, after a Filter change or the addition
+ * of a Destination: creates the missing Deliveries. Existing Deliveries are not touched.
+ */
+function Redispatch({
+  incidentId,
+  afterRedispatch,
+}: {
+  incidentId: string;
+  afterRedispatch: () => void;
+}) {
+  const t = useT();
+  const redispatch = useRedispatchIncident(incidentId);
+  const created = redispatch.data?.deliveriesCreated;
+  return (
+    <>
+      <p className="help">{t.incident.redispatch.help}</p>
+      <div className="actions">
+        <button
+          type="button"
+          className="secondary"
+          disabled={redispatch.isPending}
+          onClick={() => redispatch.mutate(undefined, { onSuccess: afterRedispatch })}
+        >
+          {t.incident.redispatch.action}
+        </button>
+      </div>
+      {created === undefined ? null : (
+        <p role="status">
+          {created === 0
+            ? t.incident.redispatch.noneCreated
+            : t.feedback.redispatch.created(created)}
+        </p>
+      )}
+      <ErrorMessage error={redispatch.error} />
+    </>
   );
 }
 

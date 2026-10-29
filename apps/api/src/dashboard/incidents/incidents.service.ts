@@ -13,6 +13,7 @@ import type { z } from 'zod';
 import { DB } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
 import { after, decodeCursor, encodeCursor, instantColumn } from '../cursor.js';
+import { DELIVERY_DESTINATION_COLUMNS, toDeliveryView } from '../feedbacks/delivery-view.js';
 
 type IncidentFilters = z.output<typeof incidentFiltersSchema>;
 
@@ -67,7 +68,13 @@ export class IncidentsService {
     if (!isUuid(id)) throw incidentNotFound();
     const incident = await this.db.query.incidents.findFirst({
       where: eq(incidents.id, id),
-      with: { project: { columns: { id: true, name: true } } },
+      with: {
+        project: { columns: { id: true, name: true } },
+        deliveries: {
+          with: { destination: { columns: DELIVERY_DESTINATION_COLUMNS } },
+          orderBy: (deliveries, { asc }) => [asc(deliveries.createdAt), asc(deliveries.id)],
+        },
+      },
     });
     if (!incident) throw incidentNotFound();
     return {
@@ -75,6 +82,7 @@ export class IncidentsService {
       fingerprint: incident.fingerprint,
       firstReport: incident.firstReport,
       lastReport: incident.lastReport,
+      deliveries: incident.deliveries.map(toDeliveryView),
     };
   }
 }

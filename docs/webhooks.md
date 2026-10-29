@@ -4,12 +4,12 @@ A webhook Destination receives a JSON `POST` per event. Its signing secret is ge
 
 ## Headers
 
-| Header                               | Content                                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `X-Nudge-Event`                      | `feedback`, `alert` (when the webhook is the Alert destination) or `ping` (health probe) |
-| `X-Nudge-Delivery` / `X-Nudge-Alert` | stable id of the Delivery or the alert: use it to ignore a retried delivery              |
-| `X-Nudge-Timestamp`                  | Unix time, in seconds                                                                    |
-| `X-Nudge-Signature`                  | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret          |
+| Header                               | Content                                                                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `X-Nudge-Event`                      | `feedback`, `incident.opened`, `incident.raised`, `alert` (when the webhook is the Alert destination) or `ping` (health probe) |
+| `X-Nudge-Delivery` / `X-Nudge-Alert` | stable id of the Delivery or the alert: use it to ignore a retried delivery                                                    |
+| `X-Nudge-Timestamp`                  | Unix time, in seconds                                                                                                          |
+| `X-Nudge-Signature`                  | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret                                                |
 
 ## Payload
 
@@ -38,6 +38,42 @@ A `feedback` event looks like this (`isTest` is `true` for the dashboard's test 
 ```
 
 `capture` is `{ contentType, data }` (base64) when the Feedback has one. An `alert` event carries `alert: { id, type, at, title, summary, project, dashboardUrl }`, plus `feedback: { id }` for `feedback_in_review` or `destination: { id, name, failureClass, message }` for `destination_suspended`. The text is sent raw, as the Author wrote it: encode it for wherever you display it.
+
+## Incident events
+
+A Destination whose Incident Filter is on receives the Incidents it accepts (see the Incident Filter in [CONTEXT.md](../CONTEXT.md)). Each Destination gets **a single Delivery per Incident**, sent as one of two events:
+
+- `incident.opened`: the Incident opened and this Destination's Incident Filter accepts it, or a Member redispatched it to this Destination;
+- `incident.raised`: an Occurrence raised the Incident's Level, and the higher Level is what makes this Destination accept it. A Destination already reached at the previous Level receives nothing new.
+
+`incident.id` is stable for the Incident's whole life: track the Incident by it. `X-Nudge-Delivery` is the id of this Destination's Delivery, as for `feedback`.
+
+```json
+{
+  "event": "incident.raised",
+  "delivery": { "id": "…" },
+  "project": { "id": "…", "name": "Shop" },
+  "title": "Critical · Payment provider timed out",
+  "summary": "An Incident of Shop rose to Critical.",
+  "incident": {
+    "id": "…",
+    "state": "open",
+    "title": "Payment provider timed out",
+    "message": "POST /charges took 30 s",
+    "environment": "production",
+    "context": { "service": "checkout", "version": "3.1.0" },
+    "level": "critical",
+    "levelOrigin": "declared",
+    "fingerprint": "payments-timeout",
+    "occurrences": 14,
+    "firstSeenAt": "2026-10-29T08:00:00.000Z",
+    "lastSeenAt": "2026-10-29T08:12:41.000Z",
+    "dashboardUrl": "https://nudge.example.com/projects/…/incidents/…"
+  }
+}
+```
+
+`title`, `message`, `environment` and `context` are those of the Occurrence that opened the Incident; `level`, `occurrences` and `lastSeenAt` are the Incident's when the event is sent. `title` and `summary` at the top level are the Incident in plain text, for a receiver that relays it as is. Every text comes from the application that reported the Incident: encode it for wherever you display it.
 
 ## Verifying the signature
 

@@ -120,6 +120,7 @@ export const en = {
       'This Delivery is in progress or held by its Suspended Destination: it cannot be replayed now.',
     feedback_not_redispatchable:
       'This Feedback cannot be redispatched: only a Triaged or Dispatched Feedback can.',
+    incident_not_redispatchable: 'This Incident cannot be redispatched: only an Open Incident can.',
     destination_not_found: 'This Destination no longer exists.',
     unknown_destination_type: 'This Instance does not support this Destination type.',
     session_required: 'Your session has expired: sign in again.',
@@ -512,11 +513,24 @@ export const en = {
     context: 'Context',
     noContext: 'No context.',
     noMessage: 'No message.',
+    deliveries: 'Deliveries',
+    redispatch: {
+      help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
+      action: 'Redispatch',
+      noneCreated: 'No other Destination accepts this Incident.',
+    },
   },
 
   destinations: {
     add: 'Add Destination',
-    intro: 'Each Triaged Feedback goes to every Destination whose Filter accepts it.',
+    intro:
+      'Each Triaged Feedback goes to every Destination whose Feedback Filter accepts it, and each Incident to every Destination whose Incident Filter accepts it.',
+    noFeedback: 'No Feedback',
+    noIncident: 'No Incident',
+    incidentLevelOrMore: (level: string) => `Incidents: ${level} or higher`,
+    incidentEnvironments: (environments: string) => `in ${environments}`,
+    incidentConditions: (count: number) =>
+      `${count} context ${count === 1 ? 'condition' : 'conditions'}`,
     emptyTitle: 'No Destination: Triaged Feedback goes nowhere.',
     emptyHelp:
       'Add one below: a GitHub repository, a Linear team, a Slack or Discord channel, or your own webhook.',
@@ -551,6 +565,24 @@ export const en = {
       noMinimum: 'None',
       minimumSeverityHelp:
         'A Feedback without Severity (nudge without a Judge) reaches no minimum Severity.',
+      feedbackFilter: 'Feedback Filter',
+      feedbackFilterOn: 'Receive Feedback',
+      incidentFilter: 'Incident Filter',
+      incidentFilterOn: 'Receive Incidents',
+      incidentFilterOff: 'Off: this Destination receives no Incident.',
+      minimumLevel: 'Minimum Level',
+      environments: 'Environments',
+      environmentsHelp:
+        'Separated by commas. Empty: every Environment. An Incident without an Environment passes only an empty list.',
+      conditions: 'Context conditions',
+      conditionsHelp:
+        'Every condition must hold. An Incident whose context lacks the key is refused.',
+      noCondition: 'No condition.',
+      conditionKey: 'Context key',
+      conditionValues: 'Is one of',
+      conditionValuesHelp: 'Separated by commas.',
+      addCondition: 'Add a condition',
+      removeCondition: 'Remove',
     },
   },
 
@@ -569,10 +601,20 @@ export const en = {
         title: 'Payload',
         show: 'What your receiver gets',
         event: 'Event',
-        events: { feedback: 'Feedback', alert: 'Alert', ping: 'Ping' },
+        events: {
+          feedback: 'Feedback',
+          'incident.opened': 'Incident opened',
+          'incident.raised': 'Incident raised',
+          alert: 'Alert',
+          ping: 'Ping',
+        },
         eventHelp: {
           feedback:
             'Each dispatched Feedback, and the Test button with isTest: true. The text is raw: encode it for your target.',
+          'incident.opened':
+            'An Incident that opened, with its stable id: track the Incident by it. Its title, message, Environment and context are raw: encode them for your target.',
+          'incident.raised':
+            'An Incident whose Level rose enough to reach this Destination: it had not received it at its previous Level. Each Destination gets a single opened or raised event per Incident.',
           alert:
             'An alert for the Members: a Feedback In review or a Suspended Destination. It never carries a Feedback’s text.',
           ping: 'The health check, while the Destination is Suspended: answer with a 2xx to resume its Deliveries.',
@@ -581,7 +623,7 @@ export const en = {
         headers: 'Headers',
         body: 'Example body',
         headerHelp: {
-          event: 'feedback, alert or ping.',
+          event: 'feedback, incident.opened, incident.raised, alert or ping.',
           delivery: 'The Delivery’s stable id: ignore a retry you already processed.',
           alert: 'The alert’s stable id: ignore a retry you already processed.',
           timestamp: 'Unix seconds at signing: reject a call older than a few minutes.',

@@ -1,5 +1,9 @@
 import { createHmac } from 'node:crypto';
-import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
+import type {
+  ConfiguredDestination,
+  OutgoingDelivery,
+  OutgoingIncidentDelivery,
+} from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { OutboundRefusedError } from './outbound.js';
@@ -35,6 +39,27 @@ const DELIVERY: OutgoingDelivery = {
     capture: null,
     receivedAt: new Date('2026-10-24T09:29:58.000Z'),
     dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000004',
+  },
+};
+
+const INCIDENT_DELIVERY: OutgoingIncidentDelivery = {
+  deliveryId: '6f1c2a40-0000-4000-8000-000000000005',
+  project: { id: DESTINATION.projectId!, name: 'Shop' },
+  moment: 'opened',
+  incident: {
+    id: '6f1c2a40-0000-4000-8000-000000000006',
+    state: 'open',
+    title: '@everyone <b>Payment</b> timed out',
+    message: 'POST /charges took 30 s',
+    environment: 'production',
+    context: { service: 'checkout', retried: true },
+    level: 'error',
+    levelOrigin: 'declared',
+    fingerprint: 'payments-timeout',
+    occurrences: 3,
+    firstSeenAt: new Date('2026-10-24T09:00:00.000Z'),
+    lastSeenAt: new Date('2026-10-24T09:29:00.000Z'),
+    dashboardUrl: null,
   },
 };
 
@@ -107,6 +132,79 @@ describe('Webhook adapter', () => {
         receivedAt: '2026-10-24T09:29:58.000Z',
         dashboardUrl: 'https://nudge.example/feedbacks/6f1c2a40-0000-4000-8000-000000000004',
       },
+    });
+  });
+
+  describe('Incident', () => {
+    it('POSTs a signed incident.opened event, with the stable Incident id and the raw texts', async () => {
+      const { fetch, requests } = receiver({ status: 202 });
+
+      expect(await webhook(fetch).deliverIncident(INCIDENT_DELIVERY)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      const [request] = requests;
+      expect(request?.url).toBe('https://receiver.test/nudge?channel=bugs');
+      expect(request?.headers.get('x-nudge-event')).toBe('incident.opened');
+      expect(request?.headers.get('x-nudge-delivery')).toBe(INCIDENT_DELIVERY.deliveryId);
+      expect(request?.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, request!.body),
+      );
+      expect(JSON.parse(request!.body)).toEqual({
+        event: 'incident.opened',
+        delivery: { id: INCIDENT_DELIVERY.deliveryId },
+        project: { id: DESTINATION.projectId!, name: 'Shop' },
+        title: 'Error · @everyone <b>Payment</b> timed out',
+        summary: 'An Incident opened in Shop (production).',
+        incident: {
+          id: INCIDENT_DELIVERY.incident.id,
+          state: 'open',
+          title: '@everyone <b>Payment</b> timed out',
+          message: 'POST /charges took 30 s',
+          environment: 'production',
+          context: { service: 'checkout', retried: true },
+          level: 'error',
+          levelOrigin: 'declared',
+          fingerprint: 'payments-timeout',
+          occurrences: 3,
+          firstSeenAt: '2026-10-24T09:00:00.000Z',
+          lastSeenAt: '2026-10-24T09:29:00.000Z',
+          dashboardUrl: null,
+        },
+      });
+    });
+
+    it('a Delivery created by a Level rise goes as incident.raised', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
+
+      await webhook(fetch).deliverIncident({
+        ...INCIDENT_DELIVERY,
+        moment: 'raised',
+        incident: { ...INCIDENT_DELIVERY.incident, level: 'critical' },
+      });
+
+      expect(requests[0]?.headers.get('x-nudge-event')).toBe('incident.raised');
+      expect(JSON.parse(requests[0]!.body)).toMatchObject({
+        event: 'incident.raised',
+        summary: 'An Incident of Shop rose to Critical.',
+        incident: { id: INCIDENT_DELIVERY.incident.id, level: 'critical' },
+      });
+    });
+
+    it("classifies the receiver's refusal like a Feedback Delivery", async () => {
+      const { fetch } = receiver({ status: 503 }, { status: 401 }, { status: 422 });
+      const adapter = webhook(fetch);
+
+      expect(await adapter.deliverIncident(INCIDENT_DELIVERY)).toMatchObject({
+        failureClass: 'transient',
+      });
+      expect(await adapter.deliverIncident(INCIDENT_DELIVERY)).toMatchObject({
+        failureClass: 'auth',
+      });
+      expect(await adapter.deliverIncident(INCIDENT_DELIVERY)).toMatchObject({
+        failureClass: 'permanent',
+      });
     });
   });
 

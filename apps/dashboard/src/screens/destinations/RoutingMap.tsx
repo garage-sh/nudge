@@ -11,7 +11,7 @@ const PITCH = 60;
 type Focus = { readonly type: FeedbackType } | { readonly destination: string } | null;
 
 const accepts = (destination: DestinationView, type: FeedbackType) =>
-  destination.filter.types.includes(type);
+  destination.filter?.types.includes(type) ?? false;
 
 /** The vertical center of node `index` in a column of `count`, centered in `height`. */
 const center = (index: number, count: number, height: number) =>
@@ -102,7 +102,7 @@ export function RoutingMap({ destinations }: { destinations: readonly Destinatio
         <ol className="routing-column" style={{ height }}>
           {destinations.map((destination) => {
             const form = formOf(destination.type);
-            const { minimumSeverity } = destination.filter;
+            const minimumSeverity = destination.filter?.minimumSeverity ?? null;
             return (
               <li
                 key={destination.id}
@@ -119,7 +119,9 @@ export function RoutingMap({ destinations }: { destinations: readonly Destinatio
                   {destination.state === 'suspended' ? (
                     <span className="routing-suspended">{t.labels.destinationState.suspended}</span>
                   ) : null}
-                  {minimumSeverity ? (
+                  {!destination.filter ? (
+                    t.destinations.noFeedback
+                  ) : minimumSeverity ? (
                     <SeverityGauge
                       severity={minimumSeverity}
                       label={t.destinations.severityOrMore(t.labels.severity[minimumSeverity])}

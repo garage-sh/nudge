@@ -1,17 +1,20 @@
-import { filterAccepts } from '@nudge/core';
+import { filterAccepts, incidentFilterAccepts } from '@nudge/core';
 import {
   isFeedbackRedispatchable,
   type DeliveryStatus,
   type DestinationState,
   type FeedbackState,
+  type IncidentDispatchMoment,
+  type IncidentState,
 } from '@nudge/shared';
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
-import { filterOf } from './destinations.js';
-import { destinations, deliveries, feedbacks, verdicts } from './schema.js';
+import { filterOf, incidentFilterOf } from './destinations.js';
+import { destinations, deliveries, feedbacks, incidents, verdicts } from './schema.js';
 import {
   deliveriesOf,
   feedbackSubject,
+  incidentSubject,
   subjectColumns,
   subjectConflictTarget,
   type DeliverySubject,
@@ -45,6 +48,7 @@ export async function createMissingDeliveries(
     .select({
       id: destinations.id,
       state: destinations.state,
+      filterEnabled: destinations.filterEnabled,
       filterTypes: destinations.filterTypes,
       filterMinimumSeverity: destinations.filterMinimumSeverity,
     })
@@ -61,21 +65,68 @@ export async function createMissingDeliveries(
 }
 
 /**
+ * Creates the missing Deliveries of an Incident to the Project's Destinations whose
+ * Incident Filter accepts it at its current Level, with its opening Environment and
+ * context: a single one per (Incident, Destination), existing Deliveries are never
+ * touched. At `opened`, that is every accepting Destination; at `raised`, only those the
+ * higher Level newly reaches, the others already have their Delivery. A Delivery to a
+ * Suspended Destination is held right away. Returns only the Deliveries created by this
+ * call; the caller queues the pending ones, after the commit.
+ */
+export async function createMissingIncidentDeliveries(
+  tx: Transaction,
+  incidentId: string,
+  moment: IncidentDispatchMoment,
+): Promise<CreatedDelivery[]> {
+  const [incident] = await tx
+    .select({
+      projectId: incidents.projectId,
+      level: incidents.level,
+      environment: incidents.environment,
+      firstReport: incidents.firstReport,
+    })
+    .from(incidents)
+    .where(eq(incidents.id, incidentId));
+  if (!incident) throw new Error(`Incident ${incidentId} to dispatch not found`);
+  const projectDestinations = await tx
+    .select({
+      id: destinations.id,
+      state: destinations.state,
+      incidentFilterEnabled: destinations.incidentFilterEnabled,
+      incidentFilterMinimumLevel: destinations.incidentFilterMinimumLevel,
+      incidentFilterEnvironments: destinations.incidentFilterEnvironments,
+      incidentFilterConditions: destinations.incidentFilterConditions,
+    })
+    .from(destinations)
+    .where(eq(destinations.projectId, incident.projectId));
+  const targets = projectDestinations.filter((d) =>
+    incidentFilterAccepts(incidentFilterOf(d), {
+      level: incident.level,
+      environment: incident.environment,
+      context: incident.firstReport.context,
+    }),
+  );
+  return insertDeliveries(tx, incidentSubject(incidentId), targets, moment);
+}
+
+/**
  * Creates one Delivery of the subject per target Destination that has none yet, and
  * returns only those created: the unique (subject, Destination) constraint makes a
  * repeated call create nothing. A Delivery to a Suspended Destination is held right away.
+ * `moment`: for an Incident, the Dispatch moment that creates the Deliveries.
  */
 export async function insertDeliveries(
   tx: Transaction,
   subject: DeliverySubject,
   targets: readonly { readonly id: string; readonly state: DestinationState }[],
+  moment?: IncidentDispatchMoment,
 ): Promise<CreatedDelivery[]> {
   if (targets.length === 0) return [];
   const created = await tx
     .insert(deliveries)
     .values(
       targets.map((d) => ({
-        ...subjectColumns(subject),
+        ...subjectColumns(subject, moment),
         destinationId: d.id,
         ...(d.state === 'suspended' ? { status: 'held' as const, heldAt: sql`now()` } : {}),
       })),
@@ -129,6 +180,53 @@ export async function redispatchFeedback(db: Db, feedbackId: string): Promise<Re
       deliveries: await createMissingDeliveries(tx, feedbackId, feedback.projectId),
     };
   });
+}
+
+export type IncidentRedispatchResult =
+  | { readonly status: 'applied'; readonly deliveries: readonly CreatedDelivery[] }
+  /** The Incident is Closed: nothing changed. */
+  | { readonly status: 'refused'; readonly state: IncidentState }
+  | { readonly status: 'not_found' };
+
+/**
+ * Manual Redispatch of an Open Incident: the missing Deliveries to the Destinations whose
+ * Incident Filter now accepts it at its current Level, to serve a Filter changed or a
+ * Destination added since. Existing Deliveries are not touched. The Incident's row is
+ * locked meanwhile: no Occurrence changes its Level and it does not close in between.
+ * The caller queues the returned pending Deliveries.
+ */
+export async function redispatchIncident(
+  db: Db,
+  incidentId: string,
+): Promise<IncidentRedispatchResult> {
+  return db.transaction(async (tx) => {
+    const [incident] = await tx
+      .select({ state: incidents.state })
+      .from(incidents)
+      .where(eq(incidents.id, incidentId))
+      .for('update');
+    if (!incident) return { status: 'not_found' };
+    if (incident.state !== 'open') return { status: 'refused', state: incident.state };
+    return {
+      status: 'applied',
+      deliveries: await createMissingIncidentDeliveries(tx, incidentId, 'opened'),
+    };
+  });
+}
+
+/**
+ * Removes Deliveries just created and still pending, whose queueing failed: without a
+ * job, nothing would send them. Used to undo an Incident's Redispatch, so the Member can
+ * retry.
+ */
+export async function deletePendingDeliveries(
+  db: Db,
+  deliveryIds: readonly string[],
+): Promise<void> {
+  if (deliveryIds.length === 0) return;
+  await db
+    .delete(deliveries)
+    .where(and(inArray(deliveries.id, [...deliveryIds]), eq(deliveries.status, 'pending')));
 }
 
 /**

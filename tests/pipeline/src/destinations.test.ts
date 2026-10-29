@@ -43,6 +43,8 @@ describe('A Project’s Destinations from the dashboard', () => {
       type: 'webhook',
       config: { url: 'https://receiver.test/nudge' },
       filter: { types: ['bug'], minimumSeverity: 'major' },
+      // Created without one, a Destination receives no Incident.
+      incidentFilter: null,
       state: 'active',
       secrets: ['signingSecret'],
       createdAt: expect.any(String),

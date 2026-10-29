@@ -29,6 +29,13 @@ export const SEVERITY_LABELS: Readonly<Record<Severity, string>> = {
 export const LEVELS = ['info', 'warning', 'error', 'critical'] as const;
 export type Level = (typeof LEVELS)[number];
 
+export const LEVEL_LABELS: Readonly<Record<Level, string>> = {
+  info: 'Info',
+  warning: 'Warning',
+  error: 'Error',
+  critical: 'Critical',
+};
+
 /** Where an Incident's Level came from: its sender, the Judge, or the Project's default Level. */
 export const LEVEL_ORIGINS = ['declared', 'judge', 'default'] as const;
 export type LevelOrigin = (typeof LEVEL_ORIGINS)[number];
@@ -71,12 +78,20 @@ export const DELIVERY_STATUSES = ['pending', 'delivered', 'failed', 'held'] as c
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
- * What a Delivery delivers: its subject. Feedback is the only subject for now; each
- * new subject is one more case here, in the database's subject columns and in the
- * worker's subject dispatchers.
+ * What a Delivery delivers: its subject, a Feedback or an Incident. Each new subject is
+ * one more case here, in the database's subject columns and in the worker's subject
+ * dispatchers.
  */
-export const DELIVERY_SUBJECTS = ['feedback'] as const;
+export const DELIVERY_SUBJECTS = ['feedback', 'incident'] as const;
 export type DeliverySubjectKind = (typeof DELIVERY_SUBJECTS)[number];
+
+/**
+ * The Dispatch moment that created an Incident's Delivery: `opened` when the Incident
+ * opened (or a Member redispatched it), `raised` when its Level rose and the Destination
+ * newly accepted it. An Incident has at most one Delivery per Destination.
+ */
+export const INCIDENT_DISPATCH_MOMENTS = ['opened', 'raised'] as const;
+export type IncidentDispatchMoment = (typeof INCIDENT_DISPATCH_MOMENTS)[number];
 
 /**
  * Statuses from which a Member can replay a Delivery: finished, delivered or failed. A

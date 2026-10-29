@@ -1,7 +1,9 @@
 import { createHmac } from 'node:crypto';
 import {
   presentAlert,
+  presentIncident,
   type Alert,
+  type OutgoingIncidentDelivery,
   type DestinationAdapter,
   type ConfiguredDestination,
   type OutgoingDelivery,
@@ -12,6 +14,7 @@ import {
   type WebhookAlertEvent,
   type WebhookEventName,
   type WebhookFeedbackEvent,
+  type WebhookIncidentEvent,
   type WebhookPingEvent,
   type WebhookSecrets,
 } from '@nudge/shared';
@@ -30,6 +33,8 @@ export interface WebhookOptions {
  * Generic webhook (D10): a JSON POST to the configured URL, per event (bodies typed in
  * `@nudge/shared`, whose examples the dashboard shows):
  * - `feedback`: a dispatched piece of Feedback (`isTest: true` for the "test" button);
+ * - `incident.opened`, `incident.raised`: an Incident that opened, or whose Level rose to
+ *   reach this Destination, with its stable id;
  * - `alert`: an alert for the Members, when the webhook is the Alert destination;
  * - `ping`: the `healthCheck()` probe, which the receiver answers with a 2xx.
  *
@@ -56,7 +61,7 @@ export function webhookAdapter(
 
   async function post(
     event: WebhookEventName,
-    body: WebhookFeedbackEvent | WebhookAlertEvent | WebhookPingEvent,
+    body: WebhookFeedbackEvent | WebhookIncidentEvent | WebhookAlertEvent | WebhookPingEvent,
     idHeaders: Readonly<Record<string, string>> = {},
   ): Promise<DeliveryResult> {
     const raw = JSON.stringify(body);
@@ -98,6 +103,10 @@ export function webhookAdapter(
       return post('feedback', feedbackBody(delivery, capture.image), {
         'x-nudge-delivery': delivery.deliveryId,
       });
+    },
+    deliverIncident(delivery) {
+      const body = incidentBody(delivery);
+      return post(body.event, body, { 'x-nudge-delivery': delivery.deliveryId });
     },
     alert(alert) {
       return post('alert', alertBody(alert), { 'x-nudge-alert': alert.id });
@@ -144,6 +153,34 @@ function feedbackBody(
         : null,
       receivedAt: feedback.receivedAt.toISOString(),
       dashboardUrl: feedback.dashboardUrl,
+    },
+  };
+}
+
+/** The structured Incident, and its text (`title`, `summary`) for whoever relays it as is. */
+function incidentBody(delivery: OutgoingIncidentDelivery): WebhookIncidentEvent {
+  const { deliveryId, project, moment, incident } = delivery;
+  const { title, summary } = presentIncident(delivery);
+  return {
+    event: moment === 'raised' ? 'incident.raised' : 'incident.opened',
+    delivery: { id: deliveryId },
+    project: { id: project.id, name: project.name },
+    title,
+    summary,
+    incident: {
+      id: incident.id,
+      state: incident.state,
+      title: incident.title,
+      message: incident.message,
+      environment: incident.environment,
+      context: incident.context,
+      level: incident.level,
+      levelOrigin: incident.levelOrigin,
+      fingerprint: incident.fingerprint,
+      occurrences: incident.occurrences,
+      firstSeenAt: incident.firstSeenAt.toISOString(),
+      lastSeenAt: incident.lastSeenAt.toISOString(),
+      dashboardUrl: incident.dashboardUrl,
     },
   };
 }

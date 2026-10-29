@@ -1,4 +1,4 @@
-import type { TriageAnswers } from '@nudge/core';
+import type { IncidentCondition, TriageAnswers } from '@nudge/core';
 import {
   AUTHOR_TRUST_LEVELS,
   DELIVERY_STATUSES,
@@ -7,6 +7,7 @@ import {
   FEEDBACK_STATES,
   FEEDBACK_TYPES,
   DEFAULT_LEVEL,
+  INCIDENT_DISPATCH_MOMENTS,
   INCIDENT_STATES,
   JUDGE_PROVIDERS,
   LEVEL_ORIGINS,
@@ -49,6 +50,10 @@ export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
 export const levelEnum = pgEnum('level', LEVELS);
 export const levelOriginEnum = pgEnum('level_origin', LEVEL_ORIGINS);
 export const incidentStateEnum = pgEnum('incident_state', INCIDENT_STATES);
+export const incidentDispatchMomentEnum = pgEnum(
+  'incident_dispatch_moment',
+  INCIDENT_DISPATCH_MOMENTS,
+);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -229,13 +234,28 @@ export const destinations = pgTable('destinations', {
    * the Instance key (`destinationSecretsContext`); `null`: no secret.
    */
   encryptedSecrets: text('encrypted_secrets'),
-  /** Filter: accepted Types… */
+  /** Feedback Filter: on (`true`) or off, whatever the Types and Severity below… */
+  filterEnabled: boolean('filter_enabled').notNull().default(true),
+  /** … accepted Types… */
   filterTypes: feedbackTypeEnum('filter_types')
     .array()
     .notNull()
     .default([...FEEDBACK_TYPES]),
   /** … and optional minimum Severity (`null`: no requirement). */
   filterMinimumSeverity: severityEnum('filter_minimum_severity'),
+  /**
+   * Incident Filter: off by default, so a Destination receives no Incident until a
+   * Member turns it on. Its minimum Level…
+   */
+  incidentFilterEnabled: boolean('incident_filter_enabled').notNull().default(false),
+  incidentFilterMinimumLevel: levelEnum('incident_filter_minimum_level').notNull().default('info'),
+  /** … accepted Environments (empty: every Environment, and none)… */
+  incidentFilterEnvironments: text('incident_filter_environments').array().notNull().default([]),
+  /** … and context conditions, all required. */
+  incidentFilterConditions: jsonb('incident_filter_conditions')
+    .$type<IncidentCondition[]>()
+    .notNull()
+    .default([]),
   state: destinationStateEnum('state').notNull().default('active'),
   /** Consecutive transient failures: reset by a delivery or a permanent failure. */
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
@@ -260,6 +280,10 @@ export const deliveries = pgTable(
     subject: deliverySubjectEnum('subject').notNull(),
     /** The Feedback delivered, when `subject = 'feedback'`. */
     feedbackId: uuid('feedback_id').references(() => feedbacks.id, { onDelete: 'cascade' }),
+    /** The Incident delivered, when `subject = 'incident'`… */
+    incidentId: uuid('incident_id').references(() => incidents.id, { onDelete: 'cascade' }),
+    /** … and the Dispatch moment that created the Delivery. */
+    incidentMoment: incidentDispatchMomentEnum('incident_moment'),
     destinationId: uuid('destination_id')
       .notNull()
       .references(() => destinations.id, { onDelete: 'cascade' }),
@@ -282,13 +306,15 @@ export const deliveries = pgTable(
     ...timestamps,
   },
   (t) => [
-    // A Delivery references its subject, and only its subject.
+    // A Delivery references its subject, and only its subject. Written with the `feedback`
+    // value only: a migration cannot use an enum value it adds in the same transaction.
     check(
       'deliveries_subject_reference',
-      sql`(${t.subject} = 'feedback') = (${t.feedbackId} is not null)`,
+      sql`(${t.subject} = 'feedback') = (${t.feedbackId} is not null) and (${t.subject} = 'feedback') = (${t.incidentId} is null) and (${t.incidentId} is null) = (${t.incidentMoment} is null)`,
     ),
     // Idempotence: one Delivery per (subject, Destination) pair, one constraint per subject.
     unique('deliveries_feedback_destination_uniq').on(t.feedbackId, t.destinationId),
+    unique('deliveries_incident_destination_uniq').on(t.incidentId, t.destinationId),
     // Release of the held Deliveries of a Destination that is active again.
     index('deliveries_held_idx')
       .on(t.destinationId)
@@ -354,8 +380,9 @@ export const projectsRelations = relations(projects, ({ many }) => ({
   destinations: many(destinations),
 }));
 
-export const incidentsRelations = relations(incidents, ({ one }) => ({
+export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   project: one(projects, { fields: [incidents.projectId], references: [projects.id] }),
+  deliveries: many(deliveries),
 }));
 
 export const feedbacksRelations = relations(feedbacks, ({ one, many }) => ({
@@ -380,6 +407,7 @@ export const destinationsRelations = relations(destinations, ({ one, many }) => 
 
 export const deliveriesRelations = relations(deliveries, ({ one }) => ({
   feedback: one(feedbacks, { fields: [deliveries.feedbackId], references: [feedbacks.id] }),
+  incident: one(incidents, { fields: [deliveries.incidentId], references: [incidents.id] }),
   destination: one(destinations, {
     fields: [deliveries.destinationId],
     references: [destinations.id],

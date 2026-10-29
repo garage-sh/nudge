@@ -1,4 +1,5 @@
 import type {
+  DeliveryView,
   IncidentDetailView,
   IncidentPage,
   IncidentSummaryView,
@@ -63,6 +64,18 @@ const TIMEOUT_DETAIL: IncidentDetailView = {
     context: { host: 'web-3' },
     receivedAt: '2026-10-29T09:30:00.000Z',
   },
+  deliveries: [],
+};
+
+const FAILED_DELIVERY: DeliveryView = {
+  id: 'delivery-1',
+  destination: { id: 'destination-1', name: 'On-call webhook', type: 'webhook', state: 'active' },
+  status: 'failed',
+  externalUrl: null,
+  attempts: 1,
+  lastError: 'permanent: HTTP 422',
+  createdAt: '2026-10-29T08:00:01.000Z',
+  updatedAt: '2026-10-29T08:00:02.000Z',
 };
 
 const page = (
@@ -178,6 +191,64 @@ describe('An Incident’s detail', () => {
     expect(last.getByText('Payment provider timed out again')).toBeTruthy();
     expect(last.getByText('web-3')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to Incidents' })).toBeTruthy();
+  });
+
+  it('shows its Deliveries, replays a failed one, and redispatches the Open Incident', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': {
+        status: 200,
+        body: { ...TIMEOUT_DETAIL, deliveries: [FAILED_DELIVERY] },
+      },
+      'POST /api/deliveries/delivery-1/replay': {
+        status: 202,
+        body: { ...FAILED_DELIVERY, status: 'pending' },
+      },
+    });
+    api.set('POST /api/incidents/incident-1/redispatch', () => {
+      const after: IncidentDetailView = {
+        ...TIMEOUT_DETAIL,
+        deliveries: [
+          FAILED_DELIVERY,
+          {
+            ...FAILED_DELIVERY,
+            id: 'delivery-2',
+            destination: { ...FAILED_DELIVERY.destination, id: 'destination-2', name: 'Team' },
+            status: 'pending',
+            attempts: 0,
+            lastError: null,
+          },
+        ],
+      };
+      api.set('GET /api/incidents/incident-1', { status: 200, body: after });
+      return { status: 200, body: { deliveriesCreated: 1, incident: after } };
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
+    expect(within(deliveries).getByText('On-call webhook')).toBeTruthy();
+    expect(within(deliveries).getByText('Last error: permanent: HTTP 422')).toBeTruthy();
+    await userEvent.click(within(deliveries).getByRole('button', { name: 'Replay' }));
+    expect(api.calls.map((c) => c.route)).toContain('POST /api/deliveries/delivery-1/replay');
+
+    await userEvent.click(within(deliveries).getByRole('button', { name: 'Redispatch' }));
+    expect(await within(deliveries).findByText('1 Delivery created.')).toBeTruthy();
+    expect(within(deliveries).getByText('Team')).toBeTruthy();
+  });
+
+  it('offers no Redispatch for a Closed Incident, and says when it has no Delivery', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': {
+        status: 200,
+        body: { ...TIMEOUT_DETAIL, state: 'closed' },
+      },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
+    expect(within(deliveries).getByText('No Delivery.')).toBeTruthy();
+    expect(within(deliveries).queryByRole('button', { name: 'Redispatch' })).toBeNull();
   });
 
   it('says when the Incident does not exist', async () => {

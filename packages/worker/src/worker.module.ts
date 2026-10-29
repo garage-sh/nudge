@@ -30,6 +30,7 @@ import { Redis } from 'ioredis';
 import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import { FeedbackDispatcher } from './feedback-dispatcher.js';
+import { IncidentDispatcher } from './incident-dispatcher.js';
 import { PurgeProcessor } from './purge.processor.js';
 import { SweepProcessor } from './sweep.processor.js';
 import {
@@ -144,6 +145,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         TriageProcessor,
         DispatchProcessor,
         FeedbackDispatcher,
+        IncidentDispatcher,
         SweepProcessor,
         PurgeProcessor,
         SuspensionService,
