@@ -1,4 +1,4 @@
-import type { InstanceJudgeView } from '@nudge/shared';
+import type { InstanceJudgeView, InstanceSmtpView } from '@nudge/shared';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,7 @@ const instanceRoutes = (judge: InstanceJudgeView = NO_JUDGE) => ({
   'GET /api/session': SIGNED_IN,
   'GET /api/instance/retention': { status: 200, body: { days: null } },
   'GET /api/instance/alert-destination': NO_ALERT_DESTINATION,
+  'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
   'GET /api/instance/judge': { status: 200, body: judge },
 });
 
@@ -144,6 +145,7 @@ describe('Instance settings: retention', () => {
     'GET /api/session': SIGNED_IN,
     'GET /api/instance/judge': { status: 200, body: NO_JUDGE },
     'GET /api/instance/alert-destination': NO_ALERT_DESTINATION,
+    'GET /api/instance/smtp': { status: 200, body: { smtp: null } },
     'GET /api/instance/retention': { status: 200, body: { days } },
     'PUT /api/instance/retention': (body: unknown) => ({ status: 200, body }),
   });
@@ -217,5 +219,113 @@ describe('Instance settings: retention', () => {
     expect(api.calls.find((c) => c.route === 'PUT /api/instance/retention')?.body).toEqual({
       days: 90,
     });
+  });
+});
+
+describe('Instance settings: SMTP server', () => {
+  const SMTP: InstanceSmtpView = {
+    host: 'smtp.example.com',
+    port: 587,
+    security: 'starttls',
+    username: 'nudge',
+    passwordConfigured: true,
+    fromAddress: 'nudge@example.com',
+    fromName: null,
+  };
+  const routes = (smtp: InstanceSmtpView | null) => ({
+    ...instanceRoutes(),
+    'GET /api/instance/smtp': { status: 200, body: { smtp } },
+    'PUT /api/instance/smtp': (body: unknown) => {
+      const { password, ...rest } = body as Record<string, unknown>;
+      return {
+        status: 200,
+        body: { ...rest, passwordConfigured: password !== undefined || smtp !== null },
+      };
+    },
+  });
+
+  it('without a server, says so and saves one with its password', async () => {
+    const api = fakeApi(routes(null));
+    renderDashboard('/settings');
+
+    const panel = await screen.findByRole('form', { name: 'Email (SMTP)' });
+    expect(within(panel).getByText('Not configured')).toBeTruthy();
+    expect(within(panel).queryByRole('button', { name: 'Send test email' })).toBeNull();
+    await userEvent.type(within(panel).getByLabelText('SMTP host'), 'smtp.example.com');
+    await userEvent.type(within(panel).getByLabelText('Username (optional)'), 'nudge');
+    await userEvent.type(within(panel).getByLabelText('Password'), 'smtp-secret');
+    await userEvent.type(within(panel).getByLabelText('From address'), 'nudge@example.com');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save SMTP server' }));
+
+    expect(await within(panel).findByText('Configured')).toBeTruthy();
+    expect(api.calls.find((c) => c.route === 'PUT /api/instance/smtp')?.body).toEqual({
+      host: 'smtp.example.com',
+      port: 587,
+      security: 'starttls',
+      username: 'nudge',
+      password: 'smtp-secret',
+      fromAddress: 'nudge@example.com',
+      fromName: null,
+    });
+    expect((within(panel).getByLabelText('Password') as HTMLInputElement).value).toBe('');
+    expect(within(panel).getByRole('button', { name: 'Send test email' })).toBeTruthy();
+  });
+
+  it('the port follows the security mode while it is the usual one', async () => {
+    fakeApi(routes(null));
+    renderDashboard('/settings');
+
+    const panel = await screen.findByRole('form', { name: 'Email (SMTP)' });
+    const port = within(panel).getByLabelText('Port') as HTMLInputElement;
+    await userEvent.selectOptions(within(panel).getByLabelText('Security'), 'tls');
+    expect(port.value).toBe('465');
+    await userEvent.clear(port);
+    await userEvent.type(port, '2465');
+    await userEvent.selectOptions(within(panel).getByLabelText('Security'), 'starttls');
+    expect(port.value).toBe('2465');
+  });
+
+  it('keeps the saved password only while host and username stay the same', async () => {
+    fakeApi(routes(SMTP));
+    renderDashboard('/settings');
+
+    const panel = await screen.findByRole('form', { name: 'Email (SMTP)' });
+    expect(within(panel).getByText(/A password is saved/)).toBeTruthy();
+    await userEvent.type(within(panel).getByLabelText('SMTP host'), '.eu');
+    expect(within(panel).queryByText(/A password is saved/)).toBeNull();
+  });
+
+  it('sends a test email to the signed-in Member, and shows a refusal', async () => {
+    const api = fakeApi({
+      ...routes(SMTP),
+      'POST /api/instance/smtp/test': {
+        status: 200,
+        body: { status: 'delivered', externalUrl: null },
+      },
+    });
+    renderDashboard('/settings');
+
+    const panel = await screen.findByRole('form', { name: 'Email (SMTP)' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Send test email' }));
+    expect(await within(panel).findByText(/Test email sent to ada@nudge.test/)).toBeTruthy();
+
+    api.set('POST /api/instance/smtp/test', {
+      status: 200,
+      body: { status: 'failed', failureClass: 'auth', message: '535 Authentication failed' },
+    });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Send test email' }));
+    expect(await within(panel).findByText(/535 Authentication failed/)).toBeTruthy();
+  });
+
+  it('removes the server after confirmation', async () => {
+    const api = fakeApi({ ...routes(SMTP), 'DELETE /api/instance/smtp': { status: 204 } });
+    renderDashboard('/settings');
+
+    const panel = await screen.findByRole('form', { name: 'Email (SMTP)' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Remove' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Confirm' }));
+
+    expect(await within(panel).findByText('Not configured')).toBeTruthy();
+    expect(api.calls.some((c) => c.route === 'DELETE /api/instance/smtp')).toBe(true);
   });
 });

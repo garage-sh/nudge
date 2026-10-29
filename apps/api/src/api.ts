@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { LogLevel } from '@nestjs/common';
-import type { DestinationAdapterResolver } from '@nudge/core';
+import type { DestinationAdapterResolver, Mailer } from '@nudge/core';
 import { CAPTURE_MAX_BASE64_LENGTH } from '@nudge/shared';
 import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
@@ -37,6 +37,8 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
   readonly trustProxy?: TrustProxy;
   /** Destination adapters ("test" button): those of `@nudge/destinations` in production. */
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
+  /** The Instance's SMTP server (`smtpMailer` in production): the "send a test email" button. */
+  readonly mailer: Mailer;
 }
 
 /** A Feedback and its base64-encoded Capture, plus the rest of the body. */

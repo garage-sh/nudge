@@ -9,6 +9,7 @@ import {
 } from '../domain.js';
 import type { DestinationDefinition } from './definition.js';
 import { discordDefinition } from './discord.js';
+import { emailDefinition } from './email.js';
 import { gitHubDefinition } from './github.js';
 import { linearDefinition } from './linear.js';
 import { slackDefinition } from './slack.js';
@@ -16,6 +17,7 @@ import { webhookDefinition } from './webhook.js';
 
 export { httpUrlSchema, type DestinationDefinition } from './definition.js';
 export * from './discord.js';
+export * from './email.js';
 export * from './github.js';
 export * from './linear.js';
 export * from './slack.js';
@@ -32,6 +34,7 @@ export const DESTINATION_DEFINITIONS = {
   linear: linearDefinition,
   slack: slackDefinition,
   github: gitHubDefinition,
+  email: emailDefinition,
 } as const satisfies Record<string, DestinationDefinition>;
 
 export type DestinationType = keyof typeof DESTINATION_DEFINITIONS;

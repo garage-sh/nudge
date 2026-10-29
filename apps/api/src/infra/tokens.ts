@@ -11,3 +11,5 @@ export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
 export const DESTINATION_ADAPTER_RESOLVER = Symbol('DESTINATION_ADAPTER_RESOLVER');
 /** `CaptureStorage`: the Capture images, shared with the worker. */
 export const CAPTURE_STORAGE = Symbol('CAPTURE_STORAGE');
+/** `Mailer`: the Instance's SMTP server, for the "send a test email" button. */
+export const MAILER = Symbol('MAILER');

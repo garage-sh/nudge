@@ -10,6 +10,10 @@ export interface TypeIconShape {
 }
 
 export const TYPE_ICONS = {
+  email: {
+    style: 'stroke',
+    d: 'M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM3.5 6l8.5 6.5L20.5 6',
+  },
   webhook: {
     style: 'stroke',
     d: 'M4.876 13.61a4 4 0 1 0 6.124 3.39h6M15.066 20.502a4 4 0 1 0 1.934-7.502c-.706 0-1.424.179-2 .5l-3-5.5M16 8a4 4 0 1 0-8 0c0 1.506.77 2.818 2 3.5l-3 5.5',

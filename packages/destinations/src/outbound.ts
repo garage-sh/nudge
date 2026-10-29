@@ -83,6 +83,31 @@ export function guardedFetch(policy: OutboundPolicy): typeof globalThis.fetch {
   }) as typeof globalThis.fetch;
 }
 
+/**
+ * The address to connect to for a host a Member configured outside HTTP (the SMTP
+ * server), checked like `guardedFetch` checks a connection: an IP literal must be
+ * allowed; a name must resolve only to allowed addresses, unless the name itself is.
+ * Connecting to the returned address, rather than to the name, pins the check: the
+ * name cannot resolve elsewhere in between. Rejects with `OutboundRefusedError`.
+ */
+export async function resolveAllowedAddress(policy: OutboundPolicy, host: string): Promise<string> {
+  const allowed = compile(policy);
+  const hostname = host.replace(/^\[|\]$/g, '');
+  if (isIP(hostname)) {
+    if (!allowed.address(hostname)) throw new OutboundRefusedError(hostname);
+    return hostname;
+  }
+  const addresses = await new Promise<LookupAddress[]>((resolve, reject) =>
+    dnsLookup(hostname, { all: true }, (error, found) => (error ? reject(error) : resolve(found))),
+  );
+  const [first] = addresses;
+  if (!first) throw new Error(`No address for ${hostname}`);
+  if (!allowed.host(hostname) && addresses.some(({ address }) => !allowed.address(address))) {
+    throw new OutboundRefusedError(hostname);
+  }
+  return first.address;
+}
+
 /** Whether an IP address is public: not in any special-purpose range (IANA registries). */
 export const isPublicAddress = (address: string): boolean =>
   !NON_PUBLIC.check(address, isIP(address) === 6 ? 'ipv6' : 'ipv4');

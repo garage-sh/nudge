@@ -3,19 +3,23 @@ import {
   judgeChoiceSchema,
   alertDestinationSchema,
   retentionSchema,
+  smtpSettingsSchema,
+  type InstanceSmtpView,
+  type MemberView,
   type RetentionView,
   type AlertDestinationWithGeneratedSecrets,
   type AlertDestinationView,
   type InstanceJudgeView,
   type DestinationTestResult,
 } from '@nudge/shared';
-import { SessionGuard } from '../auth/session.guard.js';
+import { CurrentMember, SessionGuard } from '../auth/session.guard.js';
 import { parseBody } from '../../validation.js';
 import { AlertDestinationService } from './alert-destination.service.js';
 import { InstanceJudgeService } from './instance-judge.service.js';
 import { InstanceRetentionService } from './instance-retention.service.js';
+import { InstanceSmtpService } from './instance-smtp.service.js';
 
-/** Instance settings (D6): Judge, Alert destination, retention period. */
+/** Instance settings (D6): Judge, SMTP server, Alert destination, retention period. */
 @Controller('api/instance')
 @UseGuards(SessionGuard)
 export class InstanceController {
@@ -23,7 +27,33 @@ export class InstanceController {
     private readonly judge: InstanceJudgeService,
     private readonly alertDestination: AlertDestinationService,
     private readonly retention: InstanceRetentionService,
+    private readonly smtp: InstanceSmtpService,
   ) {}
+
+  /** `smtp: null`: no SMTP server, the email Destinations cannot send. */
+  @Get('smtp')
+  async readSmtp(): Promise<{ smtp: InstanceSmtpView | null }> {
+    return { smtp: await this.smtp.read() };
+  }
+
+  /** Replaces the SMTP server; the password is never returned. */
+  @Put('smtp')
+  configureSmtp(@Body() body: unknown): Promise<InstanceSmtpView> {
+    return this.smtp.configure(parseBody(smtpSettingsSchema, body));
+  }
+
+  @Delete('smtp')
+  @HttpCode(204)
+  removeSmtp(): Promise<void> {
+    return this.smtp.remove();
+  }
+
+  /** Sends a test email to the signed-in Member; 200 with the result, delivered or failed. */
+  @Post('smtp/test')
+  @HttpCode(200)
+  testSmtp(@CurrentMember() member: MemberView): Promise<DestinationTestResult> {
+    return this.smtp.test(member.email);
+  }
 
   @Get('judge')
   readJudge(): Promise<InstanceJudgeView> {

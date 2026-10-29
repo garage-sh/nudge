@@ -7,6 +7,7 @@ import type {
   FeedbackType,
   JudgeProvider,
   Severity,
+  SmtpSecurity,
   Source,
 } from '@nudge/shared';
 
@@ -109,6 +110,7 @@ export const en = {
     member_not_found: 'This Member no longer exists.',
     cannot_remove_self: 'You cannot remove yourself: ask another Member to do it.',
     too_many_attempts: 'Too many attempts: wait a minute, then try again.',
+    smtp_missing: 'No SMTP server is saved: save one first.',
   },
   unreachable: 'The Instance cannot be reached. Try again.',
   unexpectedError: (code: string) => `Unexpected error (${code}).`,
@@ -515,6 +517,13 @@ export const en = {
         'Channel settings › Integrations › Webhooks › Copy Webhook URL. Stored encrypted, never shown again.',
       summary: 'Channel webhook',
     },
+    email: {
+      recipients: 'Recipients',
+      recipientsHelp: (max: number) =>
+        `Up to ${max} addresses, separated by commas or line breaks. Each Feedback is one email, with its Capture attached.`,
+      noSmtp: 'This Instance has no SMTP server yet: emails will wait until one is configured.',
+      configureSmtp: 'Configure SMTP',
+    },
     slack: {
       urlHelp:
         'Your Slack app › Incoming Webhooks › Add New Webhook, then pick the channel. Stored encrypted, never shown again.',
@@ -549,8 +558,19 @@ export const en = {
   settings: {
     title: 'Instance settings',
     description: 'These settings apply to every Project and every Member.',
+    sections: 'Settings sections',
+    section: {
+      judge: 'Judge',
+      smtp: 'Email (SMTP)',
+      alert: 'Alert destination',
+      retention: 'Retention',
+    },
     retention: {
       title: 'Feedback retention',
+      status: {
+        unlimited: 'Unlimited',
+        days: (days: number) => (days === 1 ? '1 day' : `${days} days`),
+      },
       unlimited: 'Unlimited retention: no Feedback is erased automatically.',
       limited: (days: number) =>
         `Feedback older than ${days} days is erased automatically, with its Captures.`,
@@ -566,14 +586,49 @@ export const en = {
       remove: 'Remove',
       removeQuestion: 'No alert will go out anymore. Remove the Alert destination?',
       help: 'Notifies Members when a Feedback goes In review or a Destination is Suspended, through one of the Destination types. The dashboard shows them anyway.',
-      saved: (type: string) => `Saved: ${type}.`,
       none: 'No Alert destination: alerts go nowhere.',
+      status: { none: 'None' },
       secretName: 'the Alert destination',
       testDelivered: 'Sample alert delivered.',
+    },
+    smtp: {
+      title: 'Email (SMTP)',
+      status: { configured: 'Configured', none: 'Not configured' },
+      help: 'The SMTP server through which nudge sends email: the email Destinations, and an email Alert destination. Any provider works (your own server, Postmark, Resend, SES…).',
+      host: 'SMTP host',
+      port: 'Port',
+      security: 'Security',
+      securities: {
+        starttls: 'STARTTLS (port 587)',
+        tls: 'TLS (port 465)',
+        none: 'None (port 25)',
+      } satisfies Record<SmtpSecurity, string>,
+      securityHelp: {
+        starttls:
+          'The connection starts in clear and must switch to TLS: nudge refuses a server that does not offer it.',
+        tls: 'The connection is encrypted from the start.',
+        none: 'Nothing is encrypted, password included: only for a relay on a network you trust.',
+      } satisfies Record<SmtpSecurity, string>,
+      username: 'Username (optional)',
+      usernameHelp: 'Empty: the server accepts nudge without authentication.',
+      password: 'Password',
+      passwordHelp: 'Stored encrypted, never shown again.',
+      passwordSaved:
+        'A password is saved (encrypted): leave empty to keep it. It is dropped if the host or the username changes.',
+      fromAddress: 'From address',
+      fromAddressHelp: 'The sender of every email: an address your SMTP server may send from.',
+      fromName: 'From name (optional)',
+      save: 'Save SMTP server',
+      test: 'Send test email',
+      testing: 'Sending…',
+      testDelivered: (email: string) => `Test email sent to ${email}: check your inbox.`,
+      remove: 'Remove',
+      removeQuestion: 'Email Destinations will stop sending. Remove the SMTP server?',
     },
     judge: {
       title: 'Judge',
       save: 'Save Judge',
+      status: { degraded: 'Degraded mode' },
       help: 'The decision model that triages Feedback: it answers Triage’s questions with probabilities, where a chat model would write text. Choose where it runs, then which one. Without a Judge, nudge runs in degraded mode: the declared type is kept, with no Severity and no Junk detection.',
       provider: 'Provider',
       none: 'None (degraded mode)',

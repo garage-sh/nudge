@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Destination adapters (webhook, Discord, Linear, Slack, GitHub Issues).",
+  "description": "Destination adapters (webhook, Discord, Linear, Slack, GitHub Issues, email).",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -24,6 +24,7 @@
   "dependencies": {
     "@nudge/core": "workspace:*",
     "@nudge/shared": "workspace:*",
+    "nodemailer": "^10.0.16",
     "undici": "^8.12.1"
   },
   "devDependencies": {
@@ -31,6 +32,7 @@
     "@nudge/typescript-config": "workspace:*",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.10.0",
+    "@types/nodemailer": "^8.0.2",
     "eslint": "^10.13.0",
     "markdown-it": "^14.1.0",
     "tsup": "^8.5.1",

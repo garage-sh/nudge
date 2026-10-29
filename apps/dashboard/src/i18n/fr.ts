@@ -92,6 +92,7 @@ export const fr: Messages = {
     cannot_remove_self:
       'Vous ne pouvez pas vous retirer vous-même : demandez-le à un autre Membre.',
     too_many_attempts: 'Trop de tentatives : patientez une minute, puis réessayez.',
+    smtp_missing: 'Aucun serveur SMTP n’est enregistré : enregistrez-en un d’abord.',
   },
   unreachable: 'L’Instance est injoignable. Réessayez.',
   unexpectedError: (code) => `Erreur inattendue (${code}).`,
@@ -502,6 +503,14 @@ export const fr: Messages = {
         'Paramètres du salon › Intégrations › Webhooks › Copier l’URL. Stockée chiffrée, jamais réaffichée.',
       summary: 'Webhook de salon',
     },
+    email: {
+      recipients: 'Destinataires',
+      recipientsHelp: (max) =>
+        `Jusqu’à ${max} adresses, séparées par des virgules ou des retours à la ligne. Chaque Retour est un e-mail, avec sa Capture en pièce jointe.`,
+      noSmtp:
+        'Cette Instance n’a pas encore de serveur SMTP : les e-mails attendront qu’il soit configuré.',
+      configureSmtp: 'Configurer le SMTP',
+    },
     slack: {
       urlHelp:
         'Votre app Slack › Incoming Webhooks › Add New Webhook, puis choisir le canal. Stockée chiffrée, jamais réaffichée.',
@@ -536,8 +545,19 @@ export const fr: Messages = {
   settings: {
     title: 'Paramètres de l’Instance',
     description: 'Ces réglages valent pour tous les Projets et tous les Membres.',
+    sections: 'Sections des paramètres',
+    section: {
+      judge: 'Juge',
+      smtp: 'E-mail (SMTP)',
+      alert: 'Destination d’alerte',
+      retention: 'Rétention',
+    },
     retention: {
       title: 'Rétention des Retours',
+      status: {
+        unlimited: 'Illimitée',
+        days: (days) => (days === 1 ? '1 jour' : `${days} jours`),
+      },
       unlimited: 'Rétention illimitée : aucun Retour n’est effacé automatiquement.',
       limited: (days) =>
         `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures.`,
@@ -553,14 +573,51 @@ export const fr: Messages = {
       remove: 'Retirer',
       removeQuestion: 'Plus aucune alerte ne partira. Retirer la Destination d’alerte ?',
       help: 'Prévient les Membres quand un Retour passe En revue ou qu’une Destination est Suspendue, par l’un des types de Destination. Le dashboard les signale de toute façon.',
-      saved: (type) => `Enregistrée : ${type}.`,
       none: 'Aucune Destination d’alerte : les alertes ne partent nulle part.',
+      status: { none: 'Aucune' },
       secretName: 'la Destination d’alerte',
       testDelivered: 'Alerte d’exemple livrée.',
+    },
+    smtp: {
+      title: 'E-mail (SMTP)',
+      status: { configured: 'Configuré', none: 'Non configuré' },
+      help: 'Le serveur SMTP par lequel nudge envoie ses e-mails : les Destinations e-mail, et une Destination d’alerte e-mail. N’importe quel fournisseur convient (votre serveur, Postmark, Resend, SES…).',
+      host: 'Hôte SMTP',
+      port: 'Port',
+      security: 'Sécurité',
+      securities: {
+        starttls: 'STARTTLS (port 587)',
+        tls: 'TLS (port 465)',
+        none: 'Aucune (port 25)',
+      },
+      securityHelp: {
+        starttls:
+          'La connexion démarre en clair et doit passer en TLS : nudge refuse un serveur qui ne le propose pas.',
+        tls: 'La connexion est chiffrée dès le départ.',
+        none: 'Rien n’est chiffré, mot de passe compris : seulement pour un relais sur un réseau de confiance.',
+      },
+      username: 'Identifiant (facultatif)',
+      usernameHelp: 'Vide : le serveur accepte nudge sans authentification.',
+      password: 'Mot de passe',
+      passwordHelp: 'Stocké chiffré, jamais réaffiché.',
+      passwordSaved:
+        'Un mot de passe est enregistré (chiffré) : laissez vide pour le garder. Il est abandonné si l’hôte ou l’identifiant change.',
+      fromAddress: 'Adresse d’expédition',
+      fromAddressHelp:
+        'L’expéditeur de chaque e-mail : une adresse depuis laquelle votre serveur SMTP peut envoyer.',
+      fromName: 'Nom d’expéditeur (facultatif)',
+      save: 'Enregistrer le serveur SMTP',
+      test: 'Envoyer un e-mail de test',
+      testing: 'Envoi…',
+      testDelivered: (email) =>
+        `E-mail de test envoyé à ${email} : vérifiez votre boîte de réception.`,
+      remove: 'Retirer',
+      removeQuestion: 'Les Destinations e-mail n’enverront plus rien. Retirer le serveur SMTP ?',
     },
     judge: {
       title: 'Juge',
       save: 'Enregistrer le Juge',
+      status: { degraded: 'Mode dégradé' },
       help: 'Le modèle de décision qui trie les Retours : il répond aux questions du Triage par des probabilités, là où un modèle de chat rédigerait du texte. Choisissez où il tourne, puis lequel. Sans Juge, nudge tourne en mode dégradé : le Type déclaré est retenu, sans Gravité ni détection d’Indésirable.',
       provider: 'Fournisseur',
       none: 'Aucun (mode dégradé)',

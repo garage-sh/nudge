@@ -5,7 +5,9 @@ import type {
   AlertDestinationView,
   InstanceJudgeView,
   DestinationTestResult,
+  InstanceSmtpView,
   RetentionView,
+  SmtpSettingsInput,
 } from '@nudge/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client.js';
@@ -68,3 +70,33 @@ export function useChangeRetention() {
     onSuccess: (retention) => client.setQueryData(RETENTION_KEY, retention),
   });
 }
+
+const SMTP_KEY = ['instance', 'smtp'] as const;
+const SMTP_PATH = '/api/instance/smtp';
+
+/** `smtp: null`: no SMTP server, the email Destinations cannot send. */
+export const useInstanceSmtp = () =>
+  useQuery({
+    queryKey: SMTP_KEY,
+    queryFn: () => api.get<{ smtp: InstanceSmtpView | null }>(SMTP_PATH),
+  });
+
+export function useSaveSmtp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: SmtpSettingsInput) => api.put<InstanceSmtpView>(SMTP_PATH, settings),
+    onSuccess: (smtp) => client.setQueryData(SMTP_KEY, { smtp }),
+  });
+}
+
+export function useRemoveSmtp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<void>(SMTP_PATH),
+    onSuccess: () => client.setQueryData(SMTP_KEY, { smtp: null }),
+  });
+}
+
+/** Sends a test email to the signed-in Member, through the saved server. */
+export const useTestSmtp = () =>
+  useMutation({ mutationFn: () => api.post<DestinationTestResult>(`${SMTP_PATH}/test`) });

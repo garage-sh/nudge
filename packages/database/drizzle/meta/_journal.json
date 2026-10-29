@@ -15,6 +15,13 @@
       "when": 1792973315381,
       "tag": "0001_received_sweep_backoff_and_delivery_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793306581125,
+      "tag": "0002_instance_smtp",
+      "breakpoints": true
     }
   ]
 }

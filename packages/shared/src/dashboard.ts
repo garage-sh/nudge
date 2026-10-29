@@ -43,6 +43,11 @@ export const DASHBOARD_LIMITS = {
   judgeKey: 1000,
   /** Longest retention period short of unlimited: 100 years. */
   retentionDaysMax: 36_500,
+  /** A host name: 253 characters (RFC 1035). */
+  smtpHost: 253,
+  smtpUsername: 320,
+  smtpPassword: 1000,
+  smtpFromName: 100,
 } as const;
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(DASHBOARD_LIMITS.email));
@@ -214,6 +219,61 @@ export const retentionSchema = z.strictObject({
   days: z.number().int().min(1).max(DASHBOARD_LIMITS.retentionDaysMax).nullable(),
 });
 export type RetentionView = z.output<typeof retentionSchema>;
+
+/**
+ * How nudge secures its connection to the SMTP server: STARTTLS upgrade (port 587),
+ * implicit TLS (port 465), or none — for a relay on a trusted network only.
+ */
+export const SMTP_SECURITIES = ['starttls', 'tls', 'none'] as const;
+export type SmtpSecurity = (typeof SMTP_SECURITIES)[number];
+
+/** The usual port of each security mode, offered by the dashboard. */
+export const SMTP_DEFAULT_PORTS: Readonly<Record<SmtpSecurity, number>> = {
+  starttls: 587,
+  tls: 465,
+  none: 25,
+};
+
+/** A host name or an IP address, without scheme or port. */
+const smtpHost = z
+  .string()
+  .trim()
+  .min(1)
+  .max(DASHBOARD_LIMITS.smtpHost)
+  .regex(/^[A-Za-z0-9.:_-]+$/, { message: 'Expected a host name or an IP address' });
+
+/** A display name ends up in a header: no line break or other control character. */
+const headerText = (max: number) =>
+  optionalText(max).refine((value) => value === null || !/\p{Cc}/u.test(value), {
+    message: 'No line breaks or control characters',
+  });
+
+/**
+ * The Instance's SMTP server, through which the email Destinations send. The password
+ * follows the Judge key's rule: absent, the stored one is kept (for the same host and
+ * username only); `null` clears it.
+ */
+export const smtpSettingsSchema = z.strictObject({
+  host: smtpHost,
+  port: z.number().int().min(1).max(65_535),
+  security: z.enum(SMTP_SECURITIES),
+  username: optionalText(DASHBOARD_LIMITS.smtpUsername).optional(),
+  password: optionalText(DASHBOARD_LIMITS.smtpPassword).optional(),
+  fromAddress: email,
+  fromName: headerText(DASHBOARD_LIMITS.smtpFromName).optional(),
+});
+export type SmtpSettingsInput = z.input<typeof smtpSettingsSchema>;
+
+/** The Instance's SMTP server as the dashboard reads it: the password is never returned. */
+export interface InstanceSmtpView {
+  readonly host: string;
+  readonly port: number;
+  readonly security: SmtpSecurity;
+  readonly username: string | null;
+  readonly passwordConfigured: boolean;
+  readonly fromAddress: string;
+  readonly fromName: string | null;
+}
 
 /** What awaits a Member, for the dashboard's badges. */
 export interface AlertsView {
