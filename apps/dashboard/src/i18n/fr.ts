@@ -494,6 +494,7 @@ export const fr: Messages = {
       help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
       action: 'Redispatcher',
       noneCreated: 'Aucune autre Destination ne retient cet Incident.',
+      created: (count) => `${count} Envoi${s(count)} créé${s(count)}.`,
     },
   },
 
@@ -562,6 +563,10 @@ export const fr: Messages = {
       conditionValuesHelp: 'Séparées par des virgules.',
       addCondition: 'Ajouter une condition',
       removeCondition: 'Retirer',
+      removeConditionLabel: (key) => `Retirer la condition sur ${key}`,
+      environmentsPlaceholder: 'production, staging',
+      conditionKeyPlaceholder: 'service',
+      conditionValuesPlaceholder: 'checkout, billing',
     },
   },
 

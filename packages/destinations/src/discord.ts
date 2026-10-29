@@ -115,8 +115,8 @@ export function discordAdapter(
       if (!execution.ok) return execution.failure;
       return { status: 'delivered', externalUrl: await messageLink(execution.created) };
     },
-    /** The message link is kept nowhere: the guild is not read for the alert. */
     deliverIncident: () => incidentsNotDelivered('Discord'),
+    /** The message link is kept nowhere: the guild is not read for the alert. */
     async alert(alert) {
       const execution = await execute(alertBody(alert));
       return execution.ok ? { status: 'delivered', externalUrl: null } : execution.failure;

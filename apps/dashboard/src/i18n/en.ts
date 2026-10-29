@@ -518,6 +518,7 @@ export const en = {
       help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
       action: 'Redispatch',
       noneCreated: 'No other Destination accepts this Incident.',
+      created: (count: number) => `${count} ${count === 1 ? 'Delivery' : 'Deliveries'} created.`,
     },
   },
 
@@ -583,6 +584,10 @@ export const en = {
       conditionValuesHelp: 'Separated by commas.',
       addCondition: 'Add a condition',
       removeCondition: 'Remove',
+      removeConditionLabel: (key: string) => `Remove the condition on ${key}`,
+      environmentsPlaceholder: 'production, staging',
+      conditionKeyPlaceholder: 'service',
+      conditionValuesPlaceholder: 'checkout, billing',
     },
   },
 

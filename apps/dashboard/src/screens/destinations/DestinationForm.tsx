@@ -314,7 +314,7 @@ function IncidentFilterFields({
             <input
               id={`${idPrefix}-environments`}
               value={draft.environments}
-              placeholder="production, staging"
+              placeholder={f.environmentsPlaceholder}
               aria-describedby={`${idPrefix}-environments-help`}
               onChange={(e) => set({ environments: e.target.value })}
             />
@@ -334,7 +334,7 @@ function IncidentFilterFields({
                     <input
                       id={`${idPrefix}-key-${index}`}
                       value={condition.key}
-                      placeholder="service"
+                      placeholder={f.conditionKeyPlaceholder}
                       onChange={(e) => setCondition(index, { key: e.target.value })}
                     />
                   </div>
@@ -343,7 +343,7 @@ function IncidentFilterFields({
                     <input
                       id={`${idPrefix}-values-${index}`}
                       value={condition.values}
-                      placeholder="checkout, billing"
+                      placeholder={f.conditionValuesPlaceholder}
                       aria-describedby={`${idPrefix}-values-help`}
                       onChange={(e) => setCondition(index, { values: e.target.value })}
                     />
@@ -351,7 +351,7 @@ function IncidentFilterFields({
                   <button
                     type="button"
                     className="ghost"
-                    aria-label={`${f.removeCondition} ${condition.key || f.conditionKey}`}
+                    aria-label={f.removeConditionLabel(condition.key || f.conditionKey)}
                     onClick={() =>
                       set({ conditions: draft.conditions.filter((_, other) => other !== index) })
                     }

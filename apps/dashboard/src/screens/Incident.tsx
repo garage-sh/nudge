@@ -164,7 +164,7 @@ function Redispatch({
         <p role="status">
           {created === 0
             ? t.incident.redispatch.noneCreated
-            : t.feedback.redispatch.created(created)}
+            : t.incident.redispatch.created(created)}
         </p>
       )}
       <ErrorMessage error={redispatch.error} />

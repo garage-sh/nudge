@@ -44,7 +44,7 @@ A `feedback` event looks like this (`isTest` is `true` for the dashboard's test 
 A Destination whose Incident Filter is on receives the Incidents it accepts (see the Incident Filter in [CONTEXT.md](../CONTEXT.md)). Each Destination gets **a single Delivery per Incident**, sent as one of two events:
 
 - `incident.opened`: the Incident opened and this Destination's Incident Filter accepts it, or a Member redispatched it to this Destination;
-- `incident.raised`: an Occurrence raised the Incident's Level, and the higher Level is what makes this Destination accept it. A Destination already reached at the previous Level receives nothing new.
+- `incident.raised`: an Occurrence raised the Incident's Level, and this Destination, not reached yet, accepts the Incident at its new Level (usually because of the higher Level; also when its Incident Filter was turned on since the opening). A Destination already reached receives nothing new.
 
 `incident.id` is stable for the Incident's whole life: track the Incident by it. `X-Nudge-Delivery` is the id of this Destination's Delivery, as for `feedback`.
 
