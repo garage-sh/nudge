@@ -50,7 +50,8 @@ export interface RecordedOccurrence {
  * own (`null` when it sets none).
  *
  * An Incident opened without a declared Level opens awaiting its Level: the worker
- * settles it (`settleIncidentLevel`), then runs its Dispatch `opened`.
+ * settles it (`settleIncidentLevel`), then runs its Dispatch `opened`. Meanwhile, the
+ * first declared Level sets the Incident's, even below the default one it opened with.
  */
 export async function recordOccurrence(
   tx: Transaction,
@@ -61,7 +62,12 @@ export async function recordOccurrence(
   const declared = report.level !== null;
   for (;;) {
     const [open] = await tx
-      .select({ id: incidents.id, level: incidents.level, awaitingLevel: incidents.awaitingLevel })
+      .select({
+        id: incidents.id,
+        level: incidents.level,
+        levelOrigin: incidents.levelOrigin,
+        awaitingLevel: incidents.awaitingLevel,
+      })
       .from(incidents)
       .where(
         and(
@@ -72,7 +78,11 @@ export async function recordOccurrence(
       )
       .for('update');
     if (open) {
-      const raised = declared && LEVELS.indexOf(occurrence.level) > LEVELS.indexOf(open.level);
+      const higher = LEVELS.indexOf(occurrence.level) > LEVELS.indexOf(open.level);
+      // While the Incident awaits its Level, the default one it holds is a placeholder:
+      // the first declared Level replaces it, whatever its rank, and wins over the Judge's.
+      const placeholder = open.awaitingLevel && open.levelOrigin !== 'declared';
+      const raised = declared && (higher || placeholder);
       await tx
         .update(incidents)
         .set({
@@ -283,12 +293,12 @@ export async function settleIncidentLevel(
       .where(and(eq(incidents.id, incidentId), eq(incidents.awaitingLevel, true)))
       .for('update');
     if (!incident) return null;
-    const judge = judged !== null && incident.levelOrigin !== 'declared';
+    const applyJudged = judged !== null && incident.levelOrigin !== 'declared';
     await tx
       .update(incidents)
       .set({
         awaitingLevel: false,
-        ...(judge ? { level: judged, levelOrigin: 'judge' as const } : {}),
+        ...(applyJudged ? { level: judged, levelOrigin: 'judge' as const } : {}),
         updatedAt: sql`now()`,
       })
       .where(eq(incidents.id, incidentId));

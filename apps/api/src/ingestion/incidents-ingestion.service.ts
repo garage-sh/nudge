@@ -14,12 +14,24 @@ import {
   createMissingIncidentDeliveries,
   recordOccurrence,
   type CreatedDelivery,
+  type RecordedOccurrence,
   type Db,
   type Project,
 } from '@nudge/database';
 import type { IncidentReport, ReceivedIncident, ValidatedIncident } from '@nudge/shared';
 import type { Queue } from 'bullmq';
 import { DB, DISPATCH_QUEUE_TOKEN, INCIDENT_LEVEL_QUEUE_TOKEN } from '../infra/tokens.js';
+
+/**
+ * The Dispatch moment an Occurrence that is not `resolved` starts: `opened` for one that
+ * opened its Incident, `raised` for one that raised it, none while the Incident awaits
+ * its Level (the worker runs its opening).
+ */
+function dispatchMomentOf(recorded: RecordedOccurrence): 'opened' | 'raised' | null {
+  if (recorded.awaitingLevel) return null;
+  if (recorded.opened) return 'opened';
+  return recorded.raised ? 'raised' : null;
+}
 
 /** A `resolved` Occurrence that matched no Open Incident: nothing was recorded. */
 const NOTHING_TO_RESOLVE: ReceivedIncident = { id: null, state: null, opened: false };
@@ -64,7 +76,7 @@ export class IncidentsIngestionService {
       resolved: occurrence.resolved ?? false,
       receivedAt: new Date().toISOString(),
     };
-    const { received, created, jobId, assess } = await this.db.transaction(async (tx) => {
+    const { received, created, jobId, awaitsAssessment } = await this.db.transaction(async (tx) => {
       const recorded = await recordOccurrence(tx, {
         projectId: project.id,
         fingerprint:
@@ -73,32 +85,31 @@ export class IncidentsIngestionService {
         report,
       });
       if (!recorded) {
-        return { received: NOTHING_TO_RESOLVE, created: [], jobId: dispatchJobId, assess: false };
+        return {
+          received: NOTHING_TO_RESOLVE,
+          created: [],
+          jobId: dispatchJobId,
+          awaitsAssessment: false,
+        };
       }
-      const assess = recorded.opened && recorded.awaitingLevel;
+      const awaitsAssessment = recorded.opened && recorded.awaitingLevel;
       if (report.resolved) {
         return {
           received: { id: recorded.id, state: 'closed' as const, opened: recorded.opened },
           created: (await closeIncident(tx, recorded.id, 'resolved')) ?? [],
           jobId: closingJobId,
-          assess,
+          awaitsAssessment,
         };
       }
-      const moment = recorded.awaitingLevel
-        ? null
-        : recorded.opened
-          ? 'opened'
-          : recorded.raised
-            ? 'raised'
-            : null;
+      const moment = dispatchMomentOf(recorded);
       return {
         received: { id: recorded.id, state: 'open' as const, opened: recorded.opened },
         created: moment ? await createMissingIncidentDeliveries(tx, recorded.id, moment) : [],
         jobId: dispatchJobId,
-        assess,
+        awaitsAssessment,
       };
     });
-    if (assess && received.id) await this.assessLevel(received.id);
+    if (awaitsAssessment && received.id) await this.assessLevel(received.id);
     await this.queue(received.id, created, jobId);
     return received;
   }

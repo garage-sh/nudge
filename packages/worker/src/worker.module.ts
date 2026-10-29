@@ -78,6 +78,12 @@ const queueProvider = (
   inject: [REDIS],
 });
 
+/** Fails like the first of `results` that failed, once all of them have settled. */
+const rethrowFirstRejection = (results: readonly PromiseSettledResult<unknown>[]): void => {
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) throw failed.reason;
+};
+
 /** BullMQ will not run this job again if it fails. */
 const isLastAttempt = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
@@ -246,8 +252,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
           if (job.name === SWEEP_CAPTURES_JOB) await this.sweep.sweepCaptures();
           if (job.name === SWEEP_QUIET_INCIDENTS_JOB) {
-            await this.sweep.sweepQuietIncidents();
-            await this.sweep.sweepIncidentLevels();
+            // Independent: a failure of the one does not hold the other's Incidents.
+            await Promise.allSettled([
+              this.sweep.sweepQuietIncidents(),
+              this.sweep.sweepIncidentLevels(),
+            ]).then(rethrowFirstRejection);
           }
         },
         { connection: this.redis, prefix },

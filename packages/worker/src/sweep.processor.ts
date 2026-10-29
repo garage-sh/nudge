@@ -168,8 +168,8 @@ export class SweepProcessor {
   }
 
   /**
-   * Queues again the Level assessment of the Incidents still awaiting their Level one
-   * Judge wait after its end: their job was lost (queueing failed, retries exhausted).
+   * Queues again the Level assessment of the Incidents still awaiting their Level past
+   * the Judge wait: their job was lost (queueing failed, retries exhausted).
    * Past the wait, the assessment no longer asks the Judge: the default Level applies and
    * the Incident is dispatched. A job still on its way does no harm: the first one to
    * settle the Level wins, the other does nothing.
@@ -178,7 +178,7 @@ export class SweepProcessor {
     const { judgeWaitMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
     const due = await incidentsLeftAwaitingLevel(
       this.db,
-      new Date(Date.now() - 2 * judgeWaitMs),
+      new Date(Date.now() - judgeWaitMs),
       BATCH,
     );
     if (due.length === 0) return;

@@ -184,6 +184,29 @@ describe('The Level of an Incident assessed by the Judge', () => {
     ]);
   });
 
+  it('a Level declared while the Judge assesses wins even below the default, and a Redispatch meanwhile sends nothing early', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Declared lower' });
+    const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    pipeline.judge.script({ level: 'critical' });
+    const release = pipeline.judge.hold();
+    let opened: ReceivedIncident & { readonly id: string };
+    try {
+      opened = await report(secretKey, { title: 'Thumbnail worker slow' });
+      await report(secretKey, { title: 'Thumbnail worker slow', level: 'info' });
+      const redispatch = await member.post(`/api/incidents/${opened.id}/redispatch`, {});
+      expect(redispatch.status).toBe(200);
+      expect(await read(opened.id)).toMatchObject({ deliveries: [] });
+    } finally {
+      release();
+    }
+
+    const incident = await waitForIncident(opened.id, delivered);
+    expect(incident).toMatchObject({ level: 'info', levelOrigin: 'declared' });
+    expect(fake.incidentAttempts).toMatchObject([
+      { moment: 'opened', incident: { id: opened.id, level: 'info' } },
+    ]);
+  });
+
   it('an Incident resolved while the Judge assesses goes out once, opened then closed', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Resolved meanwhile' });
     const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });

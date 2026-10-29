@@ -193,6 +193,8 @@ export type IncidentRedispatchResult =
  * Incident Filter now accepts it at its current Level, to serve a Filter changed or a
  * Destination added since. Existing Deliveries are not touched. The Incident's row is
  * locked meanwhile: no Occurrence changes its Level and it does not close in between.
+ * An Incident still awaiting its Level gets none: its Dispatch `opened`, which the worker
+ * runs once the Level is settled, will reach every Destination accepting it then.
  * The caller queues the returned pending Deliveries.
  */
 export async function redispatchIncident(
@@ -201,12 +203,13 @@ export async function redispatchIncident(
 ): Promise<IncidentRedispatchResult> {
   return db.transaction(async (tx) => {
     const [incident] = await tx
-      .select({ state: incidents.state })
+      .select({ state: incidents.state, awaitingLevel: incidents.awaitingLevel })
       .from(incidents)
       .where(eq(incidents.id, incidentId))
       .for('update');
     if (!incident) return { status: 'not_found' };
     if (incident.state !== 'open') return { status: 'refused', state: incident.state };
+    if (incident.awaitingLevel) return { status: 'applied', deliveries: [] };
     return {
       status: 'applied',
       deliveries: await createMissingIncidentDeliveries(tx, incidentId, 'opened'),
