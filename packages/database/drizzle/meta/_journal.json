@@ -22,6 +22,13 @@
       "when": 1793306581125,
       "tag": "0002_instance_smtp",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793310904943,
+      "tag": "0003_delivery_subject",
+      "breakpoints": true
     }
   ]
 }

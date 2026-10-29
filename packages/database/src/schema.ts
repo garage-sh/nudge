@@ -2,6 +2,7 @@ import type { TriageAnswers } from '@nudge/core';
 import {
   AUTHOR_TRUST_LEVELS,
   DELIVERY_STATUSES,
+  DELIVERY_SUBJECTS,
   DESTINATION_STATES,
   FEEDBACK_STATES,
   FEEDBACK_TYPES,
@@ -36,6 +37,7 @@ export const feedbackStateEnum = pgEnum('feedback_state', FEEDBACK_STATES);
 export const authorTrustEnum = pgEnum('author_trust', AUTHOR_TRUST_LEVELS);
 export const destinationStateEnum = pgEnum('destination_state', DESTINATION_STATES);
 export const deliveryStatusEnum = pgEnum('delivery_status', DELIVERY_STATUSES);
+export const deliverySubjectEnum = pgEnum('delivery_subject', DELIVERY_SUBJECTS);
 export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
 
 const timestamps = {
@@ -199,9 +201,14 @@ export const deliveries = pgTable(
   'deliveries',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    feedbackId: uuid('feedback_id')
-      .notNull()
-      .references(() => feedbacks.id, { onDelete: 'cascade' }),
+    /**
+     * What the Delivery delivers. Each subject has its own reference column, set exactly
+     * when the Delivery is of that subject (`deliveries_subject_reference`); see
+     * `subject.ts` for how a subject is written and matched.
+     */
+    subject: deliverySubjectEnum('subject').notNull(),
+    /** The Feedback delivered, when `subject = 'feedback'`. */
+    feedbackId: uuid('feedback_id').references(() => feedbacks.id, { onDelete: 'cascade' }),
     destinationId: uuid('destination_id')
       .notNull()
       .references(() => destinations.id, { onDelete: 'cascade' }),
@@ -224,7 +231,12 @@ export const deliveries = pgTable(
     ...timestamps,
   },
   (t) => [
-    // Idempotence: one Delivery per (Feedback, Destination) pair.
+    // A Delivery references its subject, and only its subject.
+    check(
+      'deliveries_subject_reference',
+      sql`(${t.subject} = 'feedback') = (${t.feedbackId} is not null)`,
+    ),
+    // Idempotence: one Delivery per (subject, Destination) pair, one constraint per subject.
     unique('deliveries_feedback_destination_uniq').on(t.feedbackId, t.destinationId),
     // Release of the held Deliveries of a Destination that is active again.
     index('deliveries_held_idx')

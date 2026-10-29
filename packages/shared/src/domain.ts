@@ -53,6 +53,14 @@ export const DELIVERY_STATUSES = ['pending', 'delivered', 'failed', 'held'] as c
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
+ * What a Delivery delivers: its subject. Feedback is the only subject for now; each
+ * new subject is one more case here, in the database's subject columns and in the
+ * worker's subject dispatchers.
+ */
+export const DELIVERY_SUBJECTS = ['feedback'] as const;
+export type DeliverySubjectKind = (typeof DELIVERY_SUBJECTS)[number];
+
+/**
  * Statuses from which a Member can replay a Delivery: finished, delivered or failed. A
  * pending Delivery already has a job running; a held Delivery waits for its Destination
  * to be active again, and the probe releases it.

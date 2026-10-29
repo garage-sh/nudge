@@ -1,9 +1,20 @@
 import { filterAccepts } from '@nudge/core';
-import { isFeedbackRedispatchable, type FeedbackState, type DeliveryStatus } from '@nudge/shared';
+import {
+  isFeedbackRedispatchable,
+  type DeliveryStatus,
+  type DestinationState,
+  type FeedbackState,
+} from '@nudge/shared';
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
 import { filterOf } from './destinations.js';
 import { destinations, deliveries, feedbacks, verdicts } from './schema.js';
+import {
+  deliveriesOf,
+  subjectColumns,
+  subjectConflictTarget,
+  type DeliverySubject,
+} from './subject.js';
 
 /** A Delivery Dispatch has just created: `pending` awaits its job, `held` the probe. */
 export interface CreatedDelivery {
@@ -40,27 +51,53 @@ export async function createMissingDeliveries(
     .where(eq(destinations.projectId, projectId));
   const targets = projectDestinations.filter((d) => filterAccepts(filterOf(d), verdict));
   if (targets.length === 0) return [];
-  const created = await tx
-    .insert(deliveries)
-    .values(
-      targets.map((d) => ({
-        feedbackId,
-        destinationId: d.id,
-        ...(d.state === 'suspended' ? { status: 'held' as const, heldAt: sql`now()` } : {}),
-      })),
-    )
-    .onConflictDoNothing({ target: [deliveries.feedbackId, deliveries.destinationId] })
-    .returning({ id: deliveries.id, status: deliveries.status });
+  const created = await insertDeliveries(tx, { kind: 'feedback', id: feedbackId }, targets);
   await tx
     .update(feedbacks)
     .set({ state: 'dispatched' })
     .where(and(eq(feedbacks.id, feedbackId), eq(feedbacks.state, 'triaged')));
+  return created;
+}
+
+/**
+ * Creates one Delivery of the subject per target Destination that has none yet, and
+ * returns only those created: the unique (subject, Destination) constraint makes a
+ * repeated call create nothing. A Delivery to a Suspended Destination is held right away.
+ */
+export async function insertDeliveries(
+  tx: Transaction,
+  subject: DeliverySubject,
+  targets: readonly { readonly id: string; readonly state: DestinationState }[],
+): Promise<CreatedDelivery[]> {
+  if (targets.length === 0) return [];
+  const created = await tx
+    .insert(deliveries)
+    .values(
+      targets.map((d) => ({
+        ...subjectColumns(subject),
+        destinationId: d.id,
+        ...(d.state === 'suspended' ? { status: 'held' as const, heldAt: sql`now()` } : {}),
+      })),
+    )
+    .onConflictDoNothing({ target: subjectConflictTarget(subject) })
+    .returning({ id: deliveries.id, status: deliveries.status });
   return created.map(({ id, status }) => {
     if (status !== 'pending' && status !== 'held') {
       throw new Error(`Delivery ${id} created with unexpected status ${status}`);
     }
     return { id, status };
   });
+}
+
+/** The pending Deliveries of the subject: those a job must (still) send. */
+export async function pendingDeliveriesOf(
+  tx: Transaction | Db,
+  subject: DeliverySubject,
+): Promise<{ readonly id: string }[]> {
+  return tx
+    .select({ id: deliveries.id })
+    .from(deliveries)
+    .where(and(deliveriesOf(subject), eq(deliveries.status, 'pending')));
 }
 
 export type RedispatchResult =
@@ -119,7 +156,7 @@ export async function undoRedispatch(
             tx
               .select({ id: deliveries.id })
               .from(deliveries)
-              .where(eq(deliveries.feedbackId, feedbackId)),
+              .where(deliveriesOf({ kind: 'feedback', id: feedbackId })),
           ),
         ),
       );

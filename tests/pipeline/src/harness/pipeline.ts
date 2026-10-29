@@ -426,7 +426,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     async insertDeliveryWithoutDispatch(feedbackId, destinationId) {
       const [delivery] = await db
         .insert(deliveries)
-        .values({ feedbackId, destinationId })
+        .values({ subject: 'feedback', feedbackId, destinationId })
         .returning({ id: deliveries.id });
       if (!delivery) throw new Error('Delivery not recorded');
       return delivery.id;

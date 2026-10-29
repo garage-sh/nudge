@@ -29,6 +29,7 @@ import { Queue, Worker, type DefaultJobOptions, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
+import { FeedbackSubject } from './feedback-subject.js';
 import { PurgeProcessor } from './purge.processor.js';
 import { SweepProcessor } from './sweep.processor.js';
 import {
@@ -142,6 +143,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         JudgeResolver,
         TriageProcessor,
         DispatchProcessor,
+        FeedbackSubject,
         SweepProcessor,
         PurgeProcessor,
         SuspensionService,
