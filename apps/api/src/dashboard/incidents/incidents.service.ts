@@ -1,8 +1,16 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { incidents, projects, type Db, type IncidentRow } from '@nudge/database';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { closingJobId, DISPATCH_JOB, type DispatchJob } from '@nudge/core';
+import {
+  closeIncidentByMember,
+  incidents,
+  projects,
+  type Db,
+  type IncidentRow,
+} from '@nudge/database';
 import type {
   ApiErrorBody,
   IncidentDetailView,
+  IncidentState,
   IncidentPage,
   IncidentSummaryView,
   ProjectRefView,
@@ -10,17 +18,56 @@ import type {
 } from '@nudge/shared';
 import { and, asc, desc, eq, isNotNull, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
-import { DB } from '../../infra/tokens.js';
+import type { Queue } from 'bullmq';
+import { DB, DISPATCH_QUEUE_TOKEN } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
 import { after, decodeCursor, encodeCursor, instantColumn } from '../cursor.js';
 import { DELIVERY_DESTINATION_COLUMNS, toDeliveryView } from '../feedbacks/delivery-view.js';
 
 type IncidentFilters = z.output<typeof incidentFiltersSchema>;
 
-/** A Project's Incidents, as a Member reads them (no roles in v1). */
+/** A Project's Incidents, as a Member reads and closes them (no roles in v1). */
 @Injectable()
 export class IncidentsService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  private readonly logger = new Logger(IncidentsService.name);
+
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
+  ) {}
+
+  /**
+   * A Member closes an Open Incident: its Destinations receive the closing, as when its
+   * sender resolves it. Once committed, the closing stands: if its queueing fails, the
+   * sweep of the Deliveries left pending sends it.
+   */
+  async close(id: string): Promise<IncidentDetailView> {
+    if (!isUuid(id)) throw incidentNotFound();
+    const result = await closeIncidentByMember(this.db, id);
+    if (result.status === 'not_found') throw incidentNotFound();
+    if (result.status === 'refused') {
+      throw new ConflictException({
+        error: 'incident_not_open',
+        state: result.state,
+      } satisfies ApiErrorBody & { state: IncidentState });
+    }
+    if (result.deliveries.length > 0) {
+      try {
+        await this.dispatchQueue.addBulk(
+          result.deliveries.map(({ id: deliveryId }) => ({
+            name: DISPATCH_JOB,
+            data: { deliveryId },
+            opts: { jobId: closingJobId(deliveryId) },
+          })),
+        );
+      } catch (error) {
+        this.logger.error(
+          `Incident ${id} closed but its closings not queued, the sweep will send them: ${String(error)}`,
+        );
+      }
+    }
+    return this.read(id);
+  }
 
   /** A page of the Project's Incidents, newest opened first. */
   async list(filters: IncidentFilters): Promise<IncidentPage> {
@@ -98,6 +145,8 @@ const toSummary = (incident: IncidentRow, project: ProjectRefView): IncidentSumm
   occurrences: incident.occurrences,
   firstSeenAt: incident.firstSeenAt.toISOString(),
   lastSeenAt: incident.lastSeenAt.toISOString(),
+  closeCause: incident.closeCause,
+  closedAt: incident.closedAt?.toISOString() ?? null,
 });
 
 export const incidentNotFound = () =>

@@ -12,6 +12,7 @@ import { judgeConfigFromEnv } from '@nudge/judge';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import {
   DEFAULT_CONCURRENCY,
+  DEFAULT_INCIDENTS,
   DEFAULT_JUDGE_TIMEOUT_MS,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
@@ -31,6 +32,7 @@ export type WorkerConfig = Required<
     | 'judgeTimeoutMs'
     | 'suspension'
     | 'purge'
+    | 'incidents'
     | 'concurrency'
   >
 > & { readonly storage: StorageConfig; readonly outbound: OutboundPolicy };
@@ -102,6 +104,20 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
         env,
         'NUDGE_PURGE_INTERVAL_MS',
         DEFAULT_PURGE.intervalMs,
+        durationBounds,
+      ),
+    },
+    incidents: {
+      quietPeriodMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_QUIET_PERIOD_MS',
+        DEFAULT_INCIDENTS.quietPeriodMs,
+        durationBounds,
+      ),
+      sweepIntervalMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_SWEEP_INTERVAL_MS',
+        DEFAULT_INCIDENTS.sweepIntervalMs,
         durationBounds,
       ),
     },

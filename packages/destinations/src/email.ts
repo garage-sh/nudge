@@ -34,6 +34,7 @@ export function emailAdapter(
       return mailer.send(capture ? { ...message, attachments: [capture] } : message);
     },
     deliverIncident: () => incidentsNotDelivered('Email'),
+    closeIncident: () => incidentsNotDelivered('Email'),
     alert: (alert) => mailer.send(alertEmail(alert, recipients)),
     /** Connects and authenticates to the SMTP server, without sending anything. */
     healthCheck: () => mailer.verify(),

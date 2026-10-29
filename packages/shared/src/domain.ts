@@ -47,6 +47,22 @@ export const DEFAULT_LEVEL: Level = 'error';
 export const INCIDENT_STATES = ['open', 'closed'] as const;
 export type IncidentState = (typeof INCIDENT_STATES)[number];
 
+/**
+ * Why an Incident closed: its sender reported it `resolved`, a `member` closed it, or its
+ * `quiet_period` went by without a new Occurrence.
+ */
+export const INCIDENT_CLOSE_CAUSES = ['resolved', 'member', 'quiet_period'] as const;
+export type IncidentCloseCause = (typeof INCIDENT_CLOSE_CAUSES)[number];
+
+/**
+ * The Quiet period of an Incident, in seconds: how long it stays Open without a new
+ * Occurrence. Set per Project (`null`: the Instance default) and per Occurrence.
+ */
+export const QUIET_PERIOD_BOUNDS = { min: 1, max: 30 * 24 * 60 * 60 } as const;
+
+/** The Instance default Quiet period, unless the Self-hoster sets another one. */
+export const DEFAULT_QUIET_PERIOD_MS = 60 * 60_000;
+
 /** `extension` is reserved for the future QA module. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];
@@ -86,11 +102,13 @@ export const DELIVERY_SUBJECTS = ['feedback', 'incident'] as const;
 export type DeliverySubjectKind = (typeof DELIVERY_SUBJECTS)[number];
 
 /**
- * The Dispatch moment that created an Incident's Delivery: `opened` when the Incident
- * opened (or a Member redispatched it), `raised` when its Level rose and the Destination
- * newly accepted it. An Incident has at most one Delivery per Destination.
+ * The Dispatch moment an Incident's Delivery carries: `opened` when the Incident opened
+ * (or a Member redispatched it), `raised` when its Level rose and the Destination newly
+ * accepted it, `closed` once the Incident closed after that Delivery went out — the same
+ * Delivery then carries the closing of what it created. An Incident has at most one
+ * Delivery per Destination.
  */
-export const INCIDENT_DISPATCH_MOMENTS = ['opened', 'raised'] as const;
+export const INCIDENT_DISPATCH_MOMENTS = ['opened', 'raised', 'closed'] as const;
 export type IncidentDispatchMoment = (typeof INCIDENT_DISPATCH_MOMENTS)[number];
 
 /**

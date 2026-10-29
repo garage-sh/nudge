@@ -61,7 +61,8 @@ export interface NudgeClient {
   sendFeedback(feedback: FeedbackInput, options?: CallOptions): Promise<ReceivedFeedback>;
   /**
    * Reports one Occurrence of an Incident; resolves with the Incident it landed in, and
-   * whether it opened it. Meant to be fire-and-forget: pass a `signal` with a short
+   * whether it opened it (`id: null` when a `resolved` Occurrence matched no Open
+   * Incident). Meant to be fire-and-forget: pass a `signal` with a short
    * timeout so reporting never slows the application down.
    */
   sendIncident(occurrence: IncidentInput, options?: CallOptions): Promise<ReceivedIncident>;

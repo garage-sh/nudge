@@ -265,6 +265,7 @@ export function linearAdapter(
       });
     },
     deliverIncident: () => incidentsNotDelivered('Linear'),
+    closeIncident: () => incidentsNotDelivered('Linear'),
     /** An issue in the configured team, without labels: the labels are the Feedback's. */
     async alert(alert) {
       const target = await resolve([]);

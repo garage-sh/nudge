@@ -3,6 +3,7 @@ import type {
   AuthorTrust,
   FailureClass,
   FeedbackType,
+  IncidentCloseCause,
   IncidentState,
   Level,
   LevelOrigin,
@@ -36,7 +37,7 @@ export type WebhookSecrets = Readonly<
  */
 
 export type WebhookEventName =
-  'feedback' | 'incident.opened' | 'incident.raised' | 'alert' | 'ping';
+  'feedback' | 'incident.opened' | 'incident.raised' | 'incident.closed' | 'alert' | 'ping';
 
 /** The events of an Incident's life, as `X-Nudge-Event` and the body's `event` name them. */
 export type WebhookIncidentEventName = Extract<WebhookEventName, `incident.${string}`>;
@@ -70,10 +71,13 @@ export interface WebhookFeedbackEvent {
 }
 
 /**
- * An Incident that opened (`incident.opened`), or whose Level rose to reach this
- * Destination (`incident.raised`). `incident.id` is stable for the Incident's whole life:
- * the receiver tracks the Incident by it. Each Destination gets at most one of these per
- * Incident.
+ * An Incident that opened (`incident.opened`), whose Level rose to reach this Destination
+ * (`incident.raised`), or that closed (`incident.closed`, with `incident.closure`).
+ * `incident.id` is stable for the Incident's whole life: the receiver tracks the Incident
+ * by it. Each Destination gets one `incident.opened` or `incident.raised` per Incident,
+ * then one `incident.closed`. An `incident.closed` for an id the receiver never saw is an
+ * Incident that opened and closed while the Destination could not be reached: it is
+ * delivered once, in its final state.
  */
 export interface WebhookIncidentEvent {
   readonly event: WebhookIncidentEventName;
@@ -97,6 +101,8 @@ export interface WebhookIncidentEvent {
     readonly occurrences: number;
     readonly firstSeenAt: string;
     readonly lastSeenAt: string;
+    /** Why and when it closed; `null` while it is Open. */
+    readonly closure: { readonly cause: IncidentCloseCause; readonly closedAt: string } | null;
     readonly dashboardUrl: string | null;
   };
 }
@@ -141,6 +147,7 @@ export const WEBHOOK_EXAMPLES: {
   readonly feedback: WebhookFeedbackEvent;
   readonly 'incident.opened': WebhookIncidentEvent;
   readonly 'incident.raised': WebhookIncidentEvent;
+  readonly 'incident.closed': WebhookIncidentEvent;
   readonly alert: WebhookAlertEvent;
   readonly ping: WebhookPingEvent;
 } = {
@@ -187,6 +194,7 @@ export const WEBHOOK_EXAMPLES: {
       occurrences: 1,
       firstSeenAt: '2026-10-29T08:00:00.000Z',
       lastSeenAt: '2026-10-29T08:00:00.000Z',
+      closure: null,
       dashboardUrl:
         'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
     },
@@ -210,6 +218,31 @@ export const WEBHOOK_EXAMPLES: {
       occurrences: 14,
       firstSeenAt: '2026-10-29T08:00:00.000Z',
       lastSeenAt: '2026-10-29T08:12:41.000Z',
+      closure: null,
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+    },
+  },
+  'incident.closed': {
+    event: 'incident.closed',
+    delivery: { id: '8c2f5a17-3e9d-4b60-a4c8-7d1e9f3b5a02' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Critical · Payment provider timed out',
+    summary: 'An Incident of Shop closed: its Quiet period went by without a new Occurrence.',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'closed',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'critical',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 14,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:12:41.000Z',
+      closure: { cause: 'quiet_period', closedAt: '2026-10-29T09:12:41.000Z' },
       dashboardUrl:
         'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
     },

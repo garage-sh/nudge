@@ -24,6 +24,8 @@ export const PURGE_RETENTION_JOB = 'purge-retention';
  * between the image and its database row) and the leftovers of interrupted writes.
  */
 export const SWEEP_CAPTURES_JOB = 'sweep-captures';
+/** Sweep of the Open Incidents silent past their Quiet period: they close. */
+export const SWEEP_QUIET_INCIDENTS_JOB = 'sweep-quiet-incidents';
 
 /** Default BullMQ key prefix; the api and the worker must share the same one. */
 export const DEFAULT_QUEUE_PREFIX = 'nudge';
@@ -37,7 +39,10 @@ export interface TriageJob {
   readonly feedbackId: string;
 }
 
-/** Job id: `dispatchJobId`, then `replayJobId`, `releaseJobId`, `sweepJobId`. */
+/**
+ * Job id: `dispatchJobId`, then `closingJobId`, `replayJobId`, `releaseJobId`,
+ * `sweepJobId`.
+ */
 export interface DispatchJob {
   readonly deliveryId: string;
 }
@@ -59,6 +64,12 @@ export const reviewJobId = (feedbackId: string): string => `${feedbackId}-review
  * one stays taken by the finished job of the first attempt.
  */
 export const dispatchJobId = (deliveryId: string): string => deliveryId;
+
+/**
+ * The closing of an Incident carried by the Delivery of its opening: an Incident closes
+ * only once, and so its Deliveries carry their closing only once.
+ */
+export const closingJobId = (deliveryId: string): string => `${deliveryId}-closing`;
 
 /** Manual replay of a Delivery (D9): a fresh job per Member request. */
 export const replayJobId = (deliveryId: string): string => `${deliveryId}-replay-${randomUUID()}`;

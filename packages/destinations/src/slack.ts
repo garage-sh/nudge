@@ -67,6 +67,7 @@ export function slackAdapter(
   return {
     send: (delivery) => publish(slackBody(delivery)),
     deliverIncident: () => incidentsNotDelivered('Slack'),
+    closeIncident: () => incidentsNotDelivered('Slack'),
     alert: (alert) => publish(alertBody(alert)),
     /**
      * An incoming webhook cannot be read: the probe posts it an empty message, which it

@@ -93,6 +93,7 @@ export function gitHubAdapter(
   return {
     send: (delivery) => createIssue({ title: title(delivery), body: body(delivery) }),
     deliverIncident: () => incidentsNotDelivered('GitHub'),
+    closeIncident: () => incidentsNotDelivered('GitHub'),
     alert: (alert) => createIssue(alertIssue(alert)),
     /**
      * "Get a repository": the token sees the repository, its issues are enabled and it

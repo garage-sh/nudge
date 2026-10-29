@@ -9,6 +9,7 @@ import {
   type Source,
   type CaptureType,
   type FeedbackType,
+  type IncidentCloseCause,
   type IncidentContext,
   type IncidentDispatchMoment,
   type IncidentState,
@@ -90,16 +91,38 @@ export interface IncidentToDispatch {
   readonly occurrences: number;
   readonly firstSeenAt: Date;
   readonly lastSeenAt: Date;
+  /** Why and when the Incident closed; `null` while it is Open. */
+  readonly closure: { readonly cause: IncidentCloseCause; readonly closedAt: Date } | null;
   /** "View the Incident" in the dashboard; `null` without `NUDGE_DASHBOARD_URL` (D12). */
   readonly dashboardUrl: string | null;
 }
 
+/**
+ * The opening of an Incident to a Destination: it opened, or its Level rose to reach the
+ * Destination. When the Incident is already Closed (`incident.state`), the Destination
+ * could not be reached while it was Open: this single Delivery is its whole life,
+ * "opened then closed" (a tracker issue is created already closed).
+ */
 export interface OutgoingIncidentDelivery {
   readonly deliveryId: string;
   readonly project: { readonly id: string; readonly name: string };
   /** The Dispatch moment that created the Delivery: the Incident opened, or rose in Level. */
-  readonly moment: IncidentDispatchMoment;
+  readonly moment: Exclude<IncidentDispatchMoment, 'closed'>;
   readonly incident: IncidentToDispatch;
+}
+
+/**
+ * The closing of an Incident whose opening this Destination received: the same Delivery,
+ * which now acts on what the opening created (closes the issue, replies in the thread).
+ */
+export interface OutgoingIncidentClosing {
+  readonly deliveryId: string;
+  readonly project: { readonly id: string; readonly name: string };
+  readonly moment: 'closed';
+  /** Closed: `closure` is set. */
+  readonly incident: IncidentToDispatch;
+  /** What the opening created: its `externalUrl`, as the adapter returned it. */
+  readonly opening: { readonly externalUrl: string | null };
 }
 
 export type DeliveryResult =
@@ -117,6 +140,11 @@ export interface DestinationAdapter {
    * Destination's single Delivery of that Incident.
    */
   deliverIncident(delivery: OutgoingIncidentDelivery): Promise<DeliveryResult>;
+  /**
+   * Closes, on the target, what this Destination's opening Delivery of the Incident
+   * created. `externalUrl` of the result: what was closed, or `null`.
+   */
+  closeIncident(closing: OutgoingIncidentClosing): Promise<DeliveryResult>;
   /**
    * Warns the Members (the Instance's Alert destination): same target, same credentials
    * and same failure classification as a Delivery.

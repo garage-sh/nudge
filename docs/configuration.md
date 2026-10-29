@@ -9,20 +9,21 @@ All configuration goes through environment variables. [`.env.example`](../.env.e
 
 ## Variables
 
-| Variable                                                                                                             | Role                                                                                                        |
-| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `NUDGE_ENCRYPTION_KEY`                                                                                               | **Required.** Instance key (32 bytes, base64): encrypts the secrets stored in the database with AES-256-GCM |
-| `NUDGE_POSTGRES_PASSWORD`                                                                                            | **Required** (compose). Postgres password                                                                   |
-| `NUDGE_VERSION`, `NUDGE_ROLES`                                                                                       | Image version (compose, `latest`) and what the process runs (`api`, `worker`, default `api,worker`)         |
-| `NUDGE_BIND`, `NUDGE_PORT`, `NUDGE_DASHBOARD_URL`, `NUDGE_COOKIE_SECURE`, `NUDGE_TRUST_PROXY`, `NUDGE_SETUP_TOKEN`   | Access: published address and port, public URL, HTTPS-only cookie, trusted proxies, setup token             |
-| `NUDGE_WIDGET_RATE_LIMIT_IP`, `NUDGE_WIDGET_RATE_LIMIT_PROJECT`                                                      | Widget rate limit, in Feedbacks per minute (20 per IP, 600 per Project)                                     |
-| `NUDGE_OUTBOUND_ALLOWED_HOSTS`                                                                                       | Internal hosts a Member-configured URL may reach (webhooks, Judge base URL, SMTP host); none by default     |
-| `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`, `NUDGE_JUDGE_BASE_URL`, `NUDGE_JUDGE_TIMEOUT_MS` | Default Judge, and timeout of a request to the Judge (30 s)                                                 |
-| `NUDGE_TRIAGE_JUNK_THRESHOLD`, `NUDGE_TRIAGE_MANIPULATION_THRESHOLD`, `NUDGE_TRIAGE_CONFIDENCE_THRESHOLD`            | Thresholds of the Verdict policy (0.8, 0.7, 0.6)                                                            |
-| `NUDGE_SUSPENSION_FAILURE_THRESHOLD`, `NUDGE_SUSPENSION_COOLDOWN_MS`, `NUDGE_SUSPENSION_PROBE_INTERVAL_MS`           | Destination suspension (5 failures, 5 min, probe every minute)                                              |
-| `NUDGE_PURGE_INTERVAL_MS`                                                                                            | Period of the Retention purge (1 h)                                                                         |
-| `NUDGE_TRIAGE_CONCURRENCY`, `NUDGE_DISPATCH_CONCURRENCY`                                                             | Jobs a worker runs at the same time: Triages (2) and Deliveries (10)                                        |
-| `NUDGE_CAPTURES_STORAGE`, `NUDGE_CAPTURES_DIR`, `NUDGE_S3_*`                                                         | Capture storage: `disk` or S3-compatible (`s3`)                                                             |
+| Variable                                                                                                             | Role                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `NUDGE_ENCRYPTION_KEY`                                                                                               | **Required.** Instance key (32 bytes, base64): encrypts the secrets stored in the database with AES-256-GCM    |
+| `NUDGE_POSTGRES_PASSWORD`                                                                                            | **Required** (compose). Postgres password                                                                      |
+| `NUDGE_VERSION`, `NUDGE_ROLES`                                                                                       | Image version (compose, `latest`) and what the process runs (`api`, `worker`, default `api,worker`)            |
+| `NUDGE_BIND`, `NUDGE_PORT`, `NUDGE_DASHBOARD_URL`, `NUDGE_COOKIE_SECURE`, `NUDGE_TRUST_PROXY`, `NUDGE_SETUP_TOKEN`   | Access: published address and port, public URL, HTTPS-only cookie, trusted proxies, setup token                |
+| `NUDGE_WIDGET_RATE_LIMIT_IP`, `NUDGE_WIDGET_RATE_LIMIT_PROJECT`                                                      | Widget rate limit, in Feedbacks per minute (20 per IP, 600 per Project)                                        |
+| `NUDGE_OUTBOUND_ALLOWED_HOSTS`                                                                                       | Internal hosts a Member-configured URL may reach (webhooks, Judge base URL, SMTP host); none by default        |
+| `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL`, `NUDGE_JUDGE_BASE_URL`, `NUDGE_JUDGE_TIMEOUT_MS` | Default Judge, and timeout of a request to the Judge (30 s)                                                    |
+| `NUDGE_TRIAGE_JUNK_THRESHOLD`, `NUDGE_TRIAGE_MANIPULATION_THRESHOLD`, `NUDGE_TRIAGE_CONFIDENCE_THRESHOLD`            | Thresholds of the Verdict policy (0.8, 0.7, 0.6)                                                               |
+| `NUDGE_SUSPENSION_FAILURE_THRESHOLD`, `NUDGE_SUSPENSION_COOLDOWN_MS`, `NUDGE_SUSPENSION_PROBE_INTERVAL_MS`           | Destination suspension (5 failures, 5 min, probe every minute)                                                 |
+| `NUDGE_PURGE_INTERVAL_MS`                                                                                            | Period of the Retention purge (1 h)                                                                            |
+| `NUDGE_INCIDENT_QUIET_PERIOD_MS`, `NUDGE_INCIDENT_SWEEP_INTERVAL_MS`                                                 | Instance default Quiet period of an Incident (1 h) and period of the sweep that closes the silent ones (1 min) |
+| `NUDGE_TRIAGE_CONCURRENCY`, `NUDGE_DISPATCH_CONCURRENCY`                                                             | Jobs a worker runs at the same time: Triages (2) and Deliveries (10)                                           |
+| `NUDGE_CAPTURES_STORAGE`, `NUDGE_CAPTURES_DIR`, `NUDGE_S3_*`                                                         | Capture storage: `disk` or S3-compatible (`s3`)                                                                |
 
 ## Judge
 

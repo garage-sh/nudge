@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LEVELS, type IncidentState, type Level } from './domain.js';
+import { LEVELS, QUIET_PERIOD_BOUNDS, type IncidentState, type Level } from './domain.js';
 import { FEEDBACK_LIMITS } from './feedback-input.js';
 import { boundedString, nonBlank, scalarRecord, stripControlCharacters } from './input.js';
 
@@ -66,6 +66,24 @@ export const incidentInputSchema = z
         'when absent.',
     ).optional(),
     context: incidentContextSchema.optional(),
+    quietPeriod: z
+      .number()
+      .int()
+      .min(QUIET_PERIOD_BOUNDS.min)
+      .max(QUIET_PERIOD_BOUNDS.max)
+      .describe(
+        'Seconds the Incident stays Open without a new Occurrence before it closes on its ' +
+          'own. Without it, the Project’s Quiet period applies. The last Occurrence’s ' +
+          'value counts: send it on every Occurrence of a job that reports at its own rhythm.',
+      )
+      .optional(),
+    resolved: z
+      .boolean()
+      .describe(
+        'The problem is over: the Occurrence closes the Open Incident it matches, and its ' +
+          'Destinations are told. When no Open Incident matches, nothing is recorded.',
+      )
+      .optional(),
   })
   .describe('One request is one Occurrence. Strict: an unknown field refuses the Occurrence.');
 
@@ -88,13 +106,21 @@ export interface IncidentReport {
   /** The declared Fingerprint, `null` when nudge derived it. */
   readonly fingerprint: string | null;
   readonly context: IncidentContext;
+  /** The Quiet period the Occurrence set, in seconds; `null` when it set none. */
+  readonly quietPeriod: number | null;
+  /** `true` when the Occurrence reported the problem over. */
+  readonly resolved: boolean;
   readonly receivedAt: string;
 }
 
-/** Response of the public API (202): the Incident the Occurrence landed in. */
+/**
+ * Response of the public API (202): the Incident the Occurrence landed in. `id` and
+ * `state` are `null` when a `resolved` Occurrence matched no Open Incident: nothing was
+ * recorded.
+ */
 export interface ReceivedIncident {
-  readonly id: string;
-  readonly state: IncidentState;
+  readonly id: string | null;
+  readonly state: IncidentState | null;
   /** `true` when this Occurrence opened the Incident, `false` when it was absorbed. */
   readonly opened: boolean;
 }

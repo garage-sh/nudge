@@ -1169,7 +1169,7 @@ button.danger {
 /* A Project's Incidents: the Level first, then what is going wrong */
 .incident-row {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) 140px 120px 72px 116px;
+  grid-template-columns: 88px minmax(0, 1fr) 120px 110px 132px 100px;
   gap: 0.9rem;
   align-items: center;
   min-height: 42px;
@@ -1215,7 +1215,19 @@ button.danger {
 
 .incident-row .states {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* Why a Closed Incident closed, under its state */
+.incident-row .close-cause {
+  max-width: 100%;
+  font-size: var(--t-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .incident-row time {
@@ -2531,4 +2543,10 @@ kbd {
   margin-right: 0.4rem;
   font-size: 1.1em;
   line-height: 1;
+}
+
+/* Why and when an Incident closed, one under the other */
+.closure {
+  display: flex;
+  flex-direction: column;
 }

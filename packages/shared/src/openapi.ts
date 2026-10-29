@@ -101,7 +101,8 @@ export function publicApiDocument() {
             'From a server only, with the Project’s secret key (`nk_sec_…`): the public key ' +
             'is refused. One request is one Occurrence. It opens an Incident, or is absorbed ' +
             'by the Open Incident of the Project with the same Fingerprint (declared, or ' +
-            'derived from the title and the Environment).',
+            'derived from the title and the Environment). With `resolved: true`, it closes ' +
+            'that Open Incident, and opens none.',
           security: [{ projectKey: [] }],
           requestBody: {
             required: true,
@@ -111,18 +112,20 @@ export function publicApiDocument() {
           },
           responses: {
             '202': {
-              description: 'The Occurrence is recorded in the Incident returned.',
+              description:
+                'The Occurrence is recorded in the Incident returned; `id` and `state` are ' +
+                '`null` when a `resolved` Occurrence matched no Open Incident (nothing recorded).',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
                       id: {
-                        type: 'string',
+                        type: ['string', 'null'],
                         format: 'uuid',
                         description: 'The Incident the Occurrence landed in.',
                       },
-                      state: { type: 'string', enum: [...INCIDENT_STATES] },
+                      state: { type: ['string', 'null'], enum: [...INCIDENT_STATES, null] },
                       opened: {
                         type: 'boolean',
                         description: '`true` when this Occurrence opened the Incident.',

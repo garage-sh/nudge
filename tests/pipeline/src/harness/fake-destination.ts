@@ -3,6 +3,7 @@ import type {
   FailureClass,
   DestinationAdapter,
   OutgoingDelivery,
+  OutgoingIncidentClosing,
   OutgoingIncidentDelivery,
   DeliveryResult,
   DestinationHealth,
@@ -25,6 +26,10 @@ export class FakeDestination implements DestinationAdapter {
   readonly incidents: OutgoingIncidentDelivery[] = [];
   /** Every call to `deliverIncident`, delivered or not. */
   readonly incidentAttempts: OutgoingIncidentDelivery[] = [];
+  /** The delivered closings of Incidents, in order. */
+  readonly closings: OutgoingIncidentClosing[] = [];
+  /** Every call to `closeIncident`, delivered or not. */
+  readonly closingAttempts: OutgoingIncidentClosing[] = [];
   /** The delivered alerts, in order (the Instance's Alert destination). */
   readonly alerts: Alert[] = [];
   /** Every call to `alert`, delivered or not. */
@@ -97,6 +102,19 @@ export class FakeDestination implements DestinationAdapter {
     };
     if (result instanceof Error) throw result;
     if (result.status === 'delivered') this.incidents.push(delivery);
+    return result;
+  }
+
+  /** Answers from the same script as `send`; delivered, it returns the opening's URL. */
+  async closeIncident(closing: OutgoingIncidentClosing): Promise<DeliveryResult> {
+    this.closingAttempts.push(closing);
+    if (this.held) await this.held;
+    const result = this.scriptedSends.shift() ?? {
+      status: 'delivered',
+      externalUrl: closing.opening.externalUrl,
+    };
+    if (result instanceof Error) throw result;
+    if (result.status === 'delivered') this.closings.push(closing);
     return result;
   }
 

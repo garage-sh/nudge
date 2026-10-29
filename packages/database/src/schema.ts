@@ -7,6 +7,7 @@ import {
   FEEDBACK_STATES,
   FEEDBACK_TYPES,
   DEFAULT_LEVEL,
+  INCIDENT_CLOSE_CAUSES,
   INCIDENT_DISPATCH_MOMENTS,
   INCIDENT_STATES,
   JUDGE_PROVIDERS,
@@ -50,6 +51,7 @@ export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
 export const levelEnum = pgEnum('level', LEVELS);
 export const levelOriginEnum = pgEnum('level_origin', LEVEL_ORIGINS);
 export const incidentStateEnum = pgEnum('incident_state', INCIDENT_STATES);
+export const incidentCloseCauseEnum = pgEnum('incident_close_cause', INCIDENT_CLOSE_CAUSES);
 export const incidentDispatchMomentEnum = pgEnum(
   'incident_dispatch_moment',
   INCIDENT_DISPATCH_MOMENTS,
@@ -74,6 +76,11 @@ export const projects = pgTable('projects', {
   allowedOrigins: text('allowed_origins').array().notNull().default([]),
   /** The Level of an Incident whose sender declared none. */
   defaultLevel: levelEnum('default_level').notNull().default(DEFAULT_LEVEL),
+  /**
+   * Seconds an Incident stays Open without a new Occurrence, unless the Occurrence sets
+   * its own; `null`: the Instance default (`NUDGE_INCIDENT_QUIET_PERIOD_MS`).
+   */
+  quietPeriod: integer('quiet_period'),
   ...timestamps,
 });
 
@@ -176,9 +183,25 @@ export const incidents = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     firstReport: jsonb('first_report').$type<IncidentReport>().notNull(),
     lastReport: jsonb('last_report').$type<IncidentReport>().notNull(),
+    /**
+     * The Quiet period the last Occurrence set, in seconds; `null`: the Project's
+     * applies (failing that, the Instance default).
+     */
+    quietPeriod: integer('quiet_period'),
+    /** Why and when it closed: set exactly when the Incident is Closed. */
+    closeCause: incidentCloseCauseEnum('close_cause'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
+    check(
+      'incidents_closure',
+      sql`(${t.state} = 'closed') = (${t.closedAt} is not null) and (${t.closedAt} is null) = (${t.closeCause} is null)`,
+    ),
+    // The sweep of the Open Incidents silent past their Quiet period.
+    index('incidents_open_last_seen_at_idx')
+      .on(t.lastSeenAt)
+      .where(sql`${t.state} = 'open'`),
     // At most one Open Incident per (Project, Fingerprint): the Occurrence that matches it
     // is absorbed; one that matches only Closed Incidents opens a new one.
     uniqueIndex('incidents_open_fingerprint_uniq')

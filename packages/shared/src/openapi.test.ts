@@ -33,6 +33,8 @@ describe('Public API document', () => {
       'environment',
       'fingerprint',
       'context',
+      'quietPeriod',
+      'resolved',
     ]);
     expect(Object.keys(operation?.responses ?? {})).toEqual(['202', '400', '401', '403', '429']);
     expect(JSON.stringify(operation?.responses['403'])).toContain('secret_key_required');

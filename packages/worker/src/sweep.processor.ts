@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   CAPTURE_KEY_PREFIX,
+  closingJobId,
   DISPATCH_JOB,
   sweepJobId,
   triageJobId,
@@ -8,11 +9,12 @@ import {
   type DispatchJob,
   type TriageJob,
 } from '@nudge/core';
-import { captures, deliveries, feedbacks, type Db } from '@nudge/database';
+import { captures, closeQuietIncidents, deliveries, feedbacks, type Db } from '@nudge/database';
 import type { JobType, Queue } from 'bullmq';
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
   DEFAULT_CAPTURE_SWEEP,
+  DEFAULT_INCIDENTS,
   DEFAULT_SWEEP,
   MAX_TRIAGE_SWEEP_BACKOFF_MS,
   type WorkerOptions,
@@ -35,8 +37,8 @@ const LIVE_JOBS: JobType[] = [
 const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 
 /**
- * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26) and
- * of the Capture storage. Without an outbox, a Feedback or a Delivery can be stored
+ * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26), of
+ * the Capture storage, and of the Open Incidents past their Quiet period. Without an outbox, a Feedback or a Delivery can be stored
  * without its queueing succeeding; its job can also have exhausted its retries without
  * moving it forward (Judge away for long, Postgres unavailable). The sweep queues them
  * again, without doubling a job still waiting or running.
@@ -142,6 +144,32 @@ export class SweepProcessor {
     );
     for (const id of batch) {
       this.logger.warn(`Delivery ${id} left pending without a job: sent back to dispatch`);
+    }
+  }
+
+  /**
+   * Closes the Open Incidents silent past their Quiet period, the longest silent first,
+   * and queues the closing their delivered openings carry. If that queueing fails, the
+   * sweep of the Deliveries left pending sends them.
+   */
+  async sweepQuietIncidents(): Promise<void> {
+    const { quietPeriodMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const closed = await closeQuietIncidents(this.db, quietPeriodMs, BATCH);
+    const closings = closed.flatMap((incident) => incident.deliveries);
+    for (const { id } of closed) this.logger.log(`Incident ${id} closed: Quiet period over`);
+    if (closings.length === 0) return;
+    try {
+      await this.dispatchQueue.addBulk(
+        closings.map(({ id }) => ({
+          name: DISPATCH_JOB,
+          data: { deliveryId: id },
+          opts: { jobId: closingJobId(id) },
+        })),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Closings of quiet Incidents not queued, the sweep of pending Deliveries will send them: ${String(error)}`,
+      );
     }
   }
 

@@ -5,6 +5,7 @@ import type {
   FailureClass,
   FeedbackState,
   FeedbackType,
+  IncidentCloseCause,
   IncidentState,
   JudgeProvider,
   Level,
@@ -78,6 +79,12 @@ export const en = {
       open: 'Open',
       closed: 'Closed',
     } satisfies Record<IncidentState, string>,
+    /** Why an Incident closed. */
+    closeCause: {
+      resolved: 'Resolved by its sender',
+      member: 'Closed by a Member',
+      quiet_period: 'Quiet period over',
+    } satisfies Record<IncidentCloseCause, string>,
     /** A Delivery's failure class, as a Member reads it. */
     failureClass: {
       transient: 'temporarily unavailable',
@@ -459,7 +466,10 @@ export const en = {
       help: 'Your application reports an Incident when something goes wrong on its side, from its server only, with the secret key.',
       defaultLevel: 'Default Level',
       defaultLevelHelp: 'The Level of an Incident whose sender declares none.',
-      saveDefaultLevel: 'Save default Level',
+      quietPeriod: 'Quiet period (minutes)',
+      quietPeriodHelp:
+        'An Incident with no new Occurrence for this long closes on its own. Empty: the Instance default (one hour, unless NUDGE_INCIDENT_QUIET_PERIOD_MS sets another). An Occurrence can set its own with quietPeriod, in seconds.',
+      save: 'Save Incident settings',
       example: 'Example request',
       exampleHelp:
         'Put the secret key in the NUDGE_SECRET_KEY environment variable of the server that reports. The same title and Environment are grouped into one Incident; a fingerprint groups different titles.',
@@ -501,6 +511,7 @@ export const en = {
     occurrences: 'Occurrences',
     firstSeen: 'First seen',
     lastSeen: 'Last seen',
+    closed: 'Closed',
     fingerprint: 'Fingerprint',
     firstReport: 'First Occurrence',
     lastReport: 'Last Occurrence',
@@ -514,6 +525,12 @@ export const en = {
     noContext: 'No context.',
     noMessage: 'No message.',
     deliveries: 'Deliveries',
+    close: {
+      action: 'Close Incident',
+      help: 'Close it once you know the problem is over: its Destinations are told, and a new Occurrence will open a new Incident.',
+      question:
+        'The Incident will be Closed for good and its Destinations told. A new Occurrence will open a new Incident. Close it?',
+    },
     redispatch: {
       help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
       action: 'Redispatch',
@@ -610,6 +627,7 @@ export const en = {
           feedback: 'Feedback',
           'incident.opened': 'Incident opened',
           'incident.raised': 'Incident raised',
+          'incident.closed': 'Incident closed',
           alert: 'Alert',
           ping: 'Ping',
         },
@@ -620,6 +638,8 @@ export const en = {
             'An Incident that opened, with its stable id: track the Incident by it. Its title, message, Environment and context are raw: encode them for your target.',
           'incident.raised':
             'An Incident whose Level rose enough to reach this Destination: it had not received it at its previous Level. Each Destination gets a single opened or raised event per Incident.',
+          'incident.closed':
+            'The Incident closed: resolved by its sender, closed by a Member, or silent past its Quiet period (incident.closure). It comes on the Delivery of its opening. An id you never saw is an Incident that opened and closed while this Destination was unreachable: it is delivered once.',
           alert:
             'An alert for the Members: a Feedback In review or a Suspended Destination. It never carries a Feedback’s text.',
           ping: 'The health check, while the Destination is Suspended: answer with a 2xx to resume its Deliveries.',
@@ -628,7 +648,7 @@ export const en = {
         headers: 'Headers',
         body: 'Example body',
         headerHelp: {
-          event: 'feedback, incident.opened, incident.raised, alert or ping.',
+          event: 'feedback, incident.opened, incident.raised, incident.closed, alert or ping.',
           delivery: 'The Delivery’s stable id: ignore a retry you already processed.',
           alert: 'The alert’s stable id: ignore a retry you already processed.',
           timestamp: 'Unix seconds at signing: reject a call older than a few minutes.',

@@ -3,6 +3,7 @@ import {
   presentAlert,
   presentIncident,
   type Alert,
+  type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -35,6 +36,8 @@ export interface WebhookOptions {
  * - `feedback`: a dispatched piece of Feedback (`isTest: true` for the "test" button);
  * - `incident.opened`, `incident.raised`: an Incident that opened, or whose Level rose to
  *   reach this Destination, with its stable id;
+ * - `incident.closed`: the closing of that Incident, on the same Delivery; also the single
+ *   event of an Incident that closed before its opening could be delivered;
  * - `alert`: an alert for the Members, when the webhook is the Alert destination;
  * - `ping`: the `healthCheck()` probe, which the receiver answers with a 2xx.
  *
@@ -108,6 +111,10 @@ export function webhookAdapter(
       const body = incidentBody(delivery);
       return post(body.event, body, { 'x-nudge-delivery': delivery.deliveryId });
     },
+    closeIncident(closing) {
+      const body = incidentBody(closing);
+      return post(body.event, body, { 'x-nudge-delivery': closing.deliveryId });
+    },
     alert(alert) {
       return post('alert', alertBody(alert), { 'x-nudge-alert': alert.id });
     },
@@ -157,12 +164,22 @@ function feedbackBody(
   };
 }
 
-/** The structured Incident, and its text (`title`, `summary`) for whoever relays it as is. */
-function incidentBody(delivery: OutgoingIncidentDelivery): WebhookIncidentEvent {
+/**
+ * The structured Incident, and its text (`title`, `summary`) for whoever relays it as is.
+ * A Closed Incident is always `incident.closed`: its closing, or its single delivery.
+ */
+function incidentBody(
+  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
+): WebhookIncidentEvent {
   const { deliveryId, project, moment, incident } = delivery;
   const { title, summary } = presentIncident(delivery);
+  const { closure } = incident;
   return {
-    event: moment === 'raised' ? 'incident.raised' : 'incident.opened',
+    event: closure
+      ? 'incident.closed'
+      : moment === 'raised'
+        ? 'incident.raised'
+        : 'incident.opened',
     delivery: { id: deliveryId },
     project: { id: project.id, name: project.name },
     title,
@@ -180,6 +197,7 @@ function incidentBody(delivery: OutgoingIncidentDelivery): WebhookIncidentEvent 
       occurrences: incident.occurrences,
       firstSeenAt: incident.firstSeenAt.toISOString(),
       lastSeenAt: incident.lastSeenAt.toISOString(),
+      closure: closure ? { cause: closure.cause, closedAt: closure.closedAt.toISOString() } : null,
       dashboardUrl: incident.dashboardUrl,
     },
   };

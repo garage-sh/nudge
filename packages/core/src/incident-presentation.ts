@@ -1,6 +1,6 @@
-import { LEVEL_LABELS } from '@nudge/shared';
+import { LEVEL_LABELS, type IncidentCloseCause } from '@nudge/shared';
 import type { PresentedAlert } from './alert.js';
-import type { OutgoingIncidentDelivery } from './destination.js';
+import type { OutgoingIncidentClosing, OutgoingIncidentDelivery } from './destination.js';
 
 /**
  * An Incident put into words, shared by the adapters that write a message: the same
@@ -17,14 +17,16 @@ export function presentIncident({
   project,
   moment,
   incident,
-}: OutgoingIncidentDelivery): PresentedIncident {
+}: OutgoingIncidentDelivery | OutgoingIncidentClosing): PresentedIncident {
   const level = LEVEL_LABELS[incident.level];
   const where = incident.environment ? ` (${incident.environment})` : '';
   const context = Object.entries(incident.context);
+  const { closure } = incident;
   return {
     title: `${level} · ${incident.title}`,
-    summary:
-      moment === 'raised'
+    summary: closure
+      ? CLOSED_SUMMARIES[closure.cause](project.name)
+      : moment === 'raised'
         ? `An Incident of ${project.name} rose to ${level}.`
         : `An Incident opened in ${project.name}${where}.`,
     details: [
@@ -33,6 +35,12 @@ export function presentIncident({
       { label: 'Level', value: `${level} (${incident.levelOrigin})` },
       { label: 'Occurrences', value: String(incident.occurrences) },
       { label: 'First seen', value: incident.firstSeenAt.toISOString() },
+      ...(closure
+        ? [
+            { label: 'Last seen', value: incident.lastSeenAt.toISOString() },
+            { label: 'Closed', value: closure.closedAt.toISOString() },
+          ]
+        : []),
       ...(incident.message ? [{ label: 'Message', value: incident.message, long: true }] : []),
       ...(context.length > 0
         ? [
@@ -46,3 +54,11 @@ export function presentIncident({
     ],
   };
 }
+
+/** Why the Incident closed, in a sentence. */
+const CLOSED_SUMMARIES: Readonly<Record<IncidentCloseCause, (project: string) => string>> = {
+  resolved: (project) => `An Incident of ${project} was resolved by its sender.`,
+  member: (project) => `An Incident of ${project} was closed by a Member.`,
+  quiet_period: (project) =>
+    `An Incident of ${project} closed: its Quiet period went by without a new Occurrence.`,
+};

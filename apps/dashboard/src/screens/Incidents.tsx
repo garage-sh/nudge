@@ -227,6 +227,9 @@ function IncidentRow({ incident, to }: { incident: IncidentSummaryView; to: stri
       <span className="occurrences">{t.incidents.occurrences(incident.occurrences)}</span>
       <span className="states">
         <IncidentStatePill state={incident.state} />
+        {incident.closeCause ? (
+          <span className="close-cause muted">{t.labels.closeCause[incident.closeCause]}</span>
+        ) : null}
       </span>
       <time
         dateTime={incident.lastSeenAt}

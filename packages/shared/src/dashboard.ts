@@ -8,8 +8,10 @@ import {
   SOURCES,
   FEEDBACK_TYPES,
   INCIDENT_STATES,
+  QUIET_PERIOD_BOUNDS,
   LEVELS,
   type AuthorTrust,
+  type IncidentCloseCause,
   type IncidentState,
   type Level,
   type LevelOrigin,
@@ -158,6 +160,14 @@ export const projectUpdateSchema = z.strictObject({
   allowedOrigins: allowedOrigins.optional(),
   /** The Level of an Incident whose sender declared none. */
   defaultLevel: z.enum(LEVELS).optional(),
+  /** The Quiet period of the Project's Incidents, in seconds; `null`: the Instance default. */
+  quietPeriod: z
+    .number()
+    .int()
+    .min(QUIET_PERIOD_BOUNDS.min)
+    .max(QUIET_PERIOD_BOUNDS.max)
+    .nullable()
+    .optional(),
 });
 export type ProjectUpdate = z.input<typeof projectUpdateSchema>;
 
@@ -346,6 +356,11 @@ export interface ProjectView {
   readonly allowedOrigins: readonly string[];
   /** The Level of an Incident whose sender declared none. */
   readonly defaultLevel: Level;
+  /**
+   * Seconds an Incident of the Project stays Open without a new Occurrence, unless the
+   * Occurrence sets its own; `null`: the Instance default.
+   */
+  readonly quietPeriod: number | null;
   readonly createdAt: string;
 }
 
@@ -556,6 +571,9 @@ export interface IncidentSummaryView {
   readonly occurrences: number;
   readonly firstSeenAt: string;
   readonly lastSeenAt: string;
+  /** Why and when the Incident closed; `null` while it is Open. */
+  readonly closeCause: IncidentCloseCause | null;
+  readonly closedAt: string | null;
 }
 
 /** A page of a Project's Incidents, newest opened first. */

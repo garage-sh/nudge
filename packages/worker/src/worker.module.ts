@@ -11,6 +11,7 @@ import {
   jobOptions,
   ALERTS_QUEUE,
   SWEEP_CAPTURES_JOB,
+  SWEEP_QUIET_INCIDENTS_JOB,
   SWEEP_DELIVERIES_JOB,
   SWEEP_RECEIVED_JOB,
   PURGE_RETENTION_JOB,
@@ -46,6 +47,7 @@ import {
 import { JudgeResolver } from './judge-resolver.js';
 import {
   DEFAULT_CAPTURE_SWEEP,
+  DEFAULT_INCIDENTS,
   DEFAULT_CONCURRENCY,
   DEFAULT_SWEEP,
   DEFAULT_PURGE,
@@ -186,6 +188,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: captureSweep.intervalMs },
       { name: SWEEP_CAPTURES_JOB },
     );
+    const incidents = this.options.incidents ?? DEFAULT_INCIDENTS;
+    await this.maintenanceQueue.upsertJobScheduler(
+      SWEEP_QUIET_INCIDENTS_JOB,
+      { every: incidents.sweepIntervalMs },
+      { name: SWEEP_QUIET_INCIDENTS_JOB },
+    );
     const concurrency = this.options.concurrency ?? DEFAULT_CONCURRENCY;
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
@@ -219,6 +227,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           if (job.name === PROBE_SUSPENDED_JOB) await this.suspension.probe();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
           if (job.name === SWEEP_CAPTURES_JOB) await this.sweep.sweepCaptures();
+          if (job.name === SWEEP_QUIET_INCIDENTS_JOB) await this.sweep.sweepQuietIncidents();
         },
         { connection: this.redis, prefix },
       ),

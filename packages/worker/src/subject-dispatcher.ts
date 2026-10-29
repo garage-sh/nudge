@@ -19,6 +19,8 @@ export type PreparedDelivery =
        * an unreadable Capture; it is retried but does not count toward Suspension.
        */
       failedInternally(): boolean;
+      /** After a delivery recorded as such: what the subject does next, if anything. */
+      delivered?(): Promise<void>;
     };
 
 /**

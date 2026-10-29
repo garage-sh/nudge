@@ -1,4 +1,4 @@
-import { LEVELS, type Level, type ProjectView } from '@nudge/shared';
+import { LEVELS, QUIET_PERIOD_BOUNDS, type Level, type ProjectView } from '@nudge/shared';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router';
 import {
@@ -238,15 +238,24 @@ const incidentExample = (origin: string) =>
     `  -d '{"title": "Payment provider timed out", "level": "error", "environment": "production"}'`,
   ].join('\n');
 
-/** How the Project's Incidents are reported: the default Level, and an example request. */
+/** Seconds as the minutes the field shows; `null` (the Instance default) as an empty field. */
+const toMinutes = (seconds: number | null) =>
+  seconds === null ? '' : String(Math.max(1, Math.round(seconds / 60)));
+
+/**
+ * How the Project's Incidents are reported and closed: the default Level, the Quiet
+ * period, and an example request.
+ */
 function IncidentSettings({ project }: { project: ProjectView }) {
   const t = useT();
   const i = t.project.incidents;
   const [defaultLevel, setDefaultLevel] = useState<Level>(project.defaultLevel);
+  const [quietMinutes, setQuietMinutes] = useState(toMinutes(project.quietPeriod));
   const update = useUpdateProject(project.id);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    update.mutate({ defaultLevel });
+    const minutes = quietMinutes.trim();
+    update.mutate({ defaultLevel, quietPeriod: minutes === '' ? null : Number(minutes) * 60 });
   };
   return (
     <form
@@ -272,10 +281,27 @@ function IncidentSettings({ project }: { project: ProjectView }) {
         </select>
         <p className="help">{i.defaultLevelHelp}</p>
       </div>
+      <div className="field">
+        <label htmlFor="project-quiet-period">{i.quietPeriod}</label>
+        <input
+          id="project-quiet-period"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={QUIET_PERIOD_BOUNDS.max / 60}
+          step={1}
+          value={quietMinutes}
+          aria-describedby="project-quiet-period-help"
+          onChange={(e) => setQuietMinutes(e.target.value)}
+        />
+        <p className="help" id="project-quiet-period-help">
+          {i.quietPeriodHelp}
+        </p>
+      </div>
       <ErrorMessage error={update.error} />
       <div className="actions">
         <button type="submit" disabled={update.isPending}>
-          {i.saveDefaultLevel}
+          {i.save}
         </button>
       </div>
       <SaveStatus saved={update.isSuccess} />

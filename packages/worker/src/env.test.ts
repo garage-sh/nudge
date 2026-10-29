@@ -21,8 +21,21 @@ describe('Worker configuration from environment variables', () => {
       judgeTimeoutMs: 30_000,
       suspension: { failureThreshold: 5, cooldownMs: 300_000, probeIntervalMs: 60_000 },
       purge: { intervalMs: 3_600_000 },
+      incidents: { quietPeriodMs: 3_600_000, sweepIntervalMs: 60_000 },
       concurrency: { triage: 2, dispatch: 10 },
     });
+  });
+
+  it('reads the Instance default Quiet period and the period of its sweep', () => {
+    const config = workerConfigFromEnv({
+      ...MINIMAL,
+      NUDGE_INCIDENT_QUIET_PERIOD_MS: '900000',
+      NUDGE_INCIDENT_SWEEP_INTERVAL_MS: '30000',
+    });
+    expect(config.incidents).toEqual({ quietPeriodMs: 900_000, sweepIntervalMs: 30_000 });
+    expect(() => workerConfigFromEnv({ ...MINIMAL, NUDGE_INCIDENT_QUIET_PERIOD_MS: '0' })).toThrow(
+      /NUDGE_INCIDENT_QUIET_PERIOD_MS/,
+    );
   });
 
   it('reads the Triage thresholds, the Judge timeout, the Suspension, the purge, the concurrency and the dashboard', () => {

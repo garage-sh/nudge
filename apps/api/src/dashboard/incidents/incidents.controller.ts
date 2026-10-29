@@ -22,7 +22,7 @@ import { RedispatchService } from '../feedbacks/redispatch.service.js';
 import { parseBody } from '../../validation.js';
 import { incidentNotFound, IncidentsService } from './incidents.service.js';
 
-/** A Project's Incidents, and the Redispatch of an Open one. */
+/** A Project's Incidents, and the Redispatch and closing of an Open one. */
 @Controller('api/incidents')
 @UseGuards(SessionGuard)
 export class IncidentsController {
@@ -46,6 +46,16 @@ export class IncidentsController {
   @Get(':id')
   read(@Param('id') id: string): Promise<IncidentDetailView> {
     return this.incidents.read(id);
+  }
+
+  /**
+   * Closes an Open Incident by hand (cause `member`): 200 with the Closed Incident, 409
+   * `incident_not_open` (with its state) if it is already Closed.
+   */
+  @Post(':id/close')
+  @HttpCode(200)
+  close(@Param('id') id: string): Promise<IncidentDetailView> {
+    return this.incidents.close(id);
   }
 
   /**

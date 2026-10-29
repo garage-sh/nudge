@@ -365,7 +365,7 @@
       "post": {
         "operationId": "postIncident",
         "summary": "Report an Occurrence of an Incident",
-        "description": "From a server only, with the Project’s secret key (`nk_sec_…`): the public key is refused. One request is one Occurrence. It opens an Incident, or is absorbed by the Open Incident of the Project with the same Fingerprint (declared, or derived from the title and the Environment).",
+        "description": "From a server only, with the Project’s secret key (`nk_sec_…`): the public key is refused. One request is one Occurrence. It opens an Incident, or is absorbed by the Open Incident of the Project with the same Fingerprint (declared, or derived from the title and the Environment). With `resolved: true`, it closes that Open Incident, and opens none.",
         "security": [
           {
             "projectKey": []
@@ -433,6 +433,16 @@
                       ]
                     },
                     "description": "What whoever reads the Incident needs to act: version, host, service, trace link… 50 entries at most, with non-blank keys and scalar values (strings of 1000 characters at most). It never decides the Fingerprint. Never put secrets or personal data in it."
+                  },
+                  "quietPeriod": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2592000,
+                    "description": "Seconds the Incident stays Open without a new Occurrence before it closes on its own. Without it, the Project’s Quiet period applies. The last Occurrence’s value counts: send it on every Occurrence of a job that reports at its own rhythm."
+                  },
+                  "resolved": {
+                    "type": "boolean",
+                    "description": "The problem is over: the Occurrence closes the Open Incident it matches, and its Destinations are told. When no Open Incident matches, nothing is recorded."
                   }
                 },
                 "required": [
@@ -446,22 +456,29 @@
         },
         "responses": {
           "202": {
-            "description": "The Occurrence is recorded in the Incident returned.",
+            "description": "The Occurrence is recorded in the Incident returned; `id` and `state` are `null` when a `resolved` Occurrence matched no Open Incident (nothing recorded).",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid",
                       "description": "The Incident the Occurrence landed in."
                     },
                     "state": {
-                      "type": "string",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "enum": [
                         "open",
-                        "closed"
+                        "closed",
+                        null
                       ]
                     },
                     "opened": {

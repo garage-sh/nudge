@@ -202,4 +202,36 @@ describe('Webhook Destination end to end', () => {
     });
     expect(receiver.requests.filter((r) => r.path === team.path)).toHaveLength(1);
   });
+
+  it('an Incident its sender resolves reaches the receiver as signed incident.closed, on the Delivery of its opening', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Incident closed' });
+    const creation = await member.post<DestinationWithGeneratedSecrets>(
+      `/api/projects/${project.id}/destinations`,
+      {
+        type: 'webhook',
+        name: 'Closing receiver',
+        config: { url: `${receiver.url}/incident-closed` },
+        filter: null,
+        incidentFilter: { minimumLevel: 'info', environments: [], conditions: [] },
+      },
+    );
+    expect(creation.status).toBe(201);
+    const received = () => receiver.requests.filter((r) => r.path === '/incident-closed');
+    const occurrence = { title: 'Disk almost full', level: 'warning' };
+
+    const response = await pipeline.postIncident(secretKey, occurrence);
+    const { id } = (await response.json()) as { id: string };
+    await expect.poll(() => received().length).toBe(1);
+    await pipeline.postIncident(secretKey, { ...occurrence, resolved: true });
+    await expect.poll(() => received().length).toBe(2);
+
+    const [opened, closed] = received();
+    expect(closed!.headers['x-nudge-event']).toBe('incident.closed');
+    expect(closed!.headers['x-nudge-delivery']).toBe(opened!.headers['x-nudge-delivery']);
+    expect(validSignature(closed!, creation.body.generatedSecrets.signingSecret!)).toBe(true);
+    expect(JSON.parse(closed!.body)).toMatchObject({
+      event: 'incident.closed',
+      incident: { id, state: 'closed', occurrences: 2, closure: { cause: 'resolved' } },
+    });
+  });
 });

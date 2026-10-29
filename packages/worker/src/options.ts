@@ -5,6 +5,7 @@ import type {
   RetryPolicy,
   TriageThresholds,
 } from '@nudge/core';
+import { DEFAULT_QUIET_PERIOD_MS } from '@nudge/shared';
 import type { JudgeConfig, Judge } from '@nudge/judge';
 import type { CaptureStorage } from '@nudge/storage';
 
@@ -48,6 +49,8 @@ export interface WorkerOptions {
   readonly purge?: PurgeOptions;
   /** Sweep of the orphaned Captures; `DEFAULT_CAPTURE_SWEEP` by default. */
   readonly captureSweep?: CaptureSweepOptions;
+  /** Instance default Quiet period and its sweep; `DEFAULT_INCIDENTS` by default. */
+  readonly incidents?: IncidentOptions;
   /** Jobs each worker runs at the same time, per queue; `DEFAULT_CONCURRENCY` by default. */
   readonly concurrency?: ConcurrencyOptions;
   /** Suspension threshold, cooldown and probe period; `DEFAULT_SUSPENSION` by default. */
@@ -95,6 +98,22 @@ export interface CaptureSweepOptions {
 export const DEFAULT_CAPTURE_SWEEP: CaptureSweepOptions = {
   graceMs: 60 * 60_000,
   intervalMs: 60 * 60_000,
+};
+
+export interface IncidentOptions {
+  /**
+   * The Instance default Quiet period: how long an Incident stays Open without a new
+   * Occurrence when neither its last Occurrence nor its Project sets one.
+   */
+  readonly quietPeriodMs: number;
+  /** Period of the sweep that closes the Open Incidents silent past their Quiet period. */
+  readonly sweepIntervalMs: number;
+}
+
+/** One hour of silence closes an Incident; the sweep runs every minute. */
+export const DEFAULT_INCIDENTS: IncidentOptions = {
+  quietPeriodMs: DEFAULT_QUIET_PERIOD_MS,
+  sweepIntervalMs: 60_000,
 };
 
 export interface ConcurrencyOptions {

@@ -18,6 +18,7 @@ const SHOP: ProjectView = {
   publicKey: 'nk_pub_shop',
   allowedOrigins: [],
   defaultLevel: 'error',
+  quietPeriod: null,
   createdAt: '2026-10-24T08:00:00.000Z',
 };
 
@@ -32,6 +33,8 @@ const TIMEOUT: IncidentSummaryView = {
   occurrences: 42,
   firstSeenAt: '2026-10-29T08:00:00.000Z',
   lastSeenAt: '2026-10-29T09:30:00.000Z',
+  closeCause: null,
+  closedAt: null,
 };
 
 const SLOW: IncidentSummaryView = {
@@ -53,6 +56,8 @@ const TIMEOUT_DETAIL: IncidentDetailView = {
     environment: 'production',
     fingerprint: 'payment-timeout',
     context: { service: 'checkout', retried: true },
+    quietPeriod: null,
+    resolved: false,
     receivedAt: '2026-10-29T08:00:00.000Z',
   },
   lastReport: {
@@ -62,6 +67,8 @@ const TIMEOUT_DETAIL: IncidentDetailView = {
     environment: 'production',
     fingerprint: 'payment-timeout',
     context: { host: 'web-3' },
+    quietPeriod: null,
+    resolved: false,
     receivedAt: '2026-10-29T09:30:00.000Z',
   },
   deliveries: [],
@@ -251,6 +258,48 @@ describe('An Incident’s detail', () => {
     expect(within(deliveries).queryByRole('button', { name: 'Redispatch' })).toBeNull();
   });
 
+  it('a Member closes the Open Incident after confirming, and sees why it closed', async () => {
+    const closed: IncidentDetailView = {
+      ...TIMEOUT_DETAIL,
+      state: 'closed',
+      closeCause: 'member',
+      closedAt: '2026-10-29T10:00:00.000Z',
+    };
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: TIMEOUT_DETAIL },
+      'POST /api/incidents/incident-1/close': { status: 200, body: closed },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Close Incident' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    expect(api.calls.map((c) => c.route)).toContain('POST /api/incidents/incident-1/close');
+    const properties = await screen.findByRole('region', { name: 'Incident' });
+    expect(await within(properties).findByText('Closed by a Member')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Close Incident' })).toBeNull();
+  });
+
+  it('a Closed Incident says why it closed, in the list and in the detail', async () => {
+    const quiet = { ...TIMEOUT, state: 'closed', closeCause: 'quiet_period' } as const;
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents?project=project-1': page([quiet]),
+      'GET /api/incidents/incident-1': {
+        status: 200,
+        body: { ...TIMEOUT_DETAIL, ...quiet, closedAt: '2026-10-29T10:30:00.000Z' },
+      },
+    });
+    renderDashboard('/projects/project-1/incidents');
+
+    const link = await screen.findByRole('link', { name: 'Payment provider timed out' });
+    expect(within(link.closest('li') as HTMLElement).getByText('Quiet period over')).toBeTruthy();
+    await userEvent.click(link);
+    const properties = await screen.findByRole('region', { name: 'Incident' });
+    expect(within(properties).getByText('Quiet period over')).toBeTruthy();
+  });
+
   it('says when the Incident does not exist', async () => {
     fakeApi({
       ...routes(),
@@ -276,6 +325,30 @@ describe('An Incident under another Project’s URL', () => {
 });
 
 describe('A Project’s Incident settings', () => {
+  it('sets the Quiet period in minutes, and empties it back to the Instance default', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/projects/project-1': { status: 200, body: { ...SHOP, quietPeriod: 7200 } },
+      'PATCH /api/projects/project-1': { status: 200, body: { ...SHOP, quietPeriod: 600 } },
+    });
+    renderDashboard('/projects/project-1');
+
+    const field = await screen.findByLabelText('Quiet period (minutes)');
+    expect((field as HTMLInputElement).value).toBe('120');
+    await userEvent.clear(field);
+    await userEvent.type(field, '10');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    await userEvent.clear(field);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+
+    const patches = api.calls.filter((call) => call.route === 'PATCH /api/projects/project-1');
+    expect(patches.map((call) => call.body)).toEqual([
+      { defaultLevel: 'error', quietPeriod: 600 },
+      { defaultLevel: 'error', quietPeriod: null },
+    ]);
+  });
+
   it('saves the default Level and shows an example request', async () => {
     const api = fakeApi({
       ...routes(),
@@ -284,11 +357,12 @@ describe('A Project’s Incident settings', () => {
     renderDashboard('/projects/project-1');
 
     await userEvent.selectOptions(await screen.findByLabelText('Default Level'), 'warning');
-    await userEvent.click(screen.getByRole('button', { name: 'Save default Level' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
 
     expect(await screen.findByText('Saved.')).toBeTruthy();
     expect(api.calls.find((call) => call.route === 'PATCH /api/projects/project-1')?.body).toEqual({
       defaultLevel: 'warning',
+      quietPeriod: null,
     });
     const example = screen.getByLabelText('Example request').textContent ?? '';
     expect(example).toContain('/v1/incidents');

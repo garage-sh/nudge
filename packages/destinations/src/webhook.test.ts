@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type {
   ConfiguredDestination,
   OutgoingDelivery,
+  OutgoingIncidentClosing,
   OutgoingIncidentDelivery,
 } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
@@ -59,8 +60,22 @@ const INCIDENT_DELIVERY: OutgoingIncidentDelivery = {
     occurrences: 3,
     firstSeenAt: new Date('2026-10-24T09:00:00.000Z'),
     lastSeenAt: new Date('2026-10-24T09:29:00.000Z'),
+    closure: null,
     dashboardUrl: null,
   },
+};
+
+const CLOSED_INCIDENT = {
+  ...INCIDENT_DELIVERY.incident,
+  state: 'closed',
+  closure: { cause: 'resolved', closedAt: new Date('2026-10-24T09:31:00.000Z') },
+} as const;
+
+const INCIDENT_CLOSING: OutgoingIncidentClosing = {
+  ...INCIDENT_DELIVERY,
+  moment: 'closed',
+  incident: CLOSED_INCIDENT,
+  opening: { externalUrl: null },
 };
 
 interface ReceivedRequest {
@@ -170,8 +185,48 @@ describe('Webhook adapter', () => {
           occurrences: 3,
           firstSeenAt: '2026-10-24T09:00:00.000Z',
           lastSeenAt: '2026-10-24T09:29:00.000Z',
+          closure: null,
           dashboardUrl: null,
         },
+      });
+    });
+
+    it('the closing of an Incident goes, signed, as incident.closed on the same Delivery, with why and when it closed', async () => {
+      const { fetch, requests } = receiver({ status: 200 });
+
+      expect(await webhook(fetch).closeIncident(INCIDENT_CLOSING)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      const [request] = requests;
+      expect(request?.headers.get('x-nudge-event')).toBe('incident.closed');
+      expect(request?.headers.get('x-nudge-delivery')).toBe(INCIDENT_DELIVERY.deliveryId);
+      expect(request?.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, request!.body),
+      );
+      expect(JSON.parse(request!.body)).toMatchObject({
+        event: 'incident.closed',
+        delivery: { id: INCIDENT_DELIVERY.deliveryId },
+        summary: 'An Incident of Shop was resolved by its sender.',
+        incident: {
+          id: INCIDENT_DELIVERY.incident.id,
+          state: 'closed',
+          closure: { cause: 'resolved', closedAt: '2026-10-24T09:31:00.000Z' },
+        },
+      });
+    });
+
+    it('an Incident that closed before its opening could be delivered goes once, as incident.closed', async () => {
+      const { fetch, requests } = receiver({ status: 200 });
+
+      await webhook(fetch).deliverIncident({ ...INCIDENT_DELIVERY, incident: CLOSED_INCIDENT });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.headers.get('x-nudge-event')).toBe('incident.closed');
+      expect(JSON.parse(requests[0]!.body)).toMatchObject({
+        event: 'incident.closed',
+        incident: { state: 'closed', closure: { cause: 'resolved' } },
       });
     });
 

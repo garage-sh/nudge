@@ -93,3 +93,16 @@ export function useRedispatchIncident(id: string) {
     onSettled: (result) => after(result?.incident),
   });
 }
+
+/** Close the Open Incident by hand; the Closed Incident is stored, and the lists read again. */
+export function useCloseIncident(id: string) {
+  const after = useAfterAction(id);
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<IncidentDetailView>(`${incidentPath(id)}/close`),
+    onSettled: (incident) => {
+      after(incident);
+      void client.invalidateQueries({ queryKey: ['incidents', 'list'] });
+    },
+  });
+}

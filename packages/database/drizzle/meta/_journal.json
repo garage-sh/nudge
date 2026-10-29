@@ -43,6 +43,13 @@
       "when": 1793312880510,
       "tag": "0005_incident_routing",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793314398450,
+      "tag": "0006_incident_closing",
+      "breakpoints": true
     }
   ]
 }

@@ -61,6 +61,11 @@ export const fr: Messages = {
       open: 'Ouvert',
       closed: 'Clos',
     },
+    closeCause: {
+      resolved: 'Résolu par son émetteur',
+      member: 'Clos par un Membre',
+      quiet_period: 'Période de calme écoulée',
+    },
     failureClass: {
       transient: 'indisponibilité passagère',
       auth: 'identifiants refusés',
@@ -435,7 +440,10 @@ export const fr: Messages = {
       help: 'Votre application signale un Incident quand quelque chose se passe mal de son côté, depuis son serveur uniquement, avec la clé secrète.',
       defaultLevel: 'Niveau par défaut',
       defaultLevelHelp: 'Le Niveau d’un Incident dont l’émetteur n’en déclare aucun.',
-      saveDefaultLevel: 'Enregistrer le Niveau par défaut',
+      quietPeriod: 'Période de calme (minutes)',
+      quietPeriodHelp:
+        'Un Incident sans nouvelle Occurrence pendant cette durée se clôt de lui-même. Vide : la valeur par défaut de l’Instance (une heure, sauf si NUDGE_INCIDENT_QUIET_PERIOD_MS en fixe une autre). Une Occurrence peut fixer la sienne avec quietPeriod, en secondes.',
+      save: 'Enregistrer les réglages des Incidents',
       example: 'Exemple de requête',
       exampleHelp:
         'Placez la clé secrète dans la variable d’environnement NUDGE_SECRET_KEY du serveur qui signale. Un même titre et un même Environnement sont regroupés en un seul Incident ; une empreinte regroupe des titres différents.',
@@ -477,6 +485,7 @@ export const fr: Messages = {
     occurrences: 'Occurrences',
     firstSeen: 'Vu pour la première fois',
     lastSeen: 'Vu pour la dernière fois',
+    closed: 'Clos',
     fingerprint: 'Empreinte',
     firstReport: 'Première Occurrence',
     lastReport: 'Dernière Occurrence',
@@ -490,6 +499,12 @@ export const fr: Messages = {
     noContext: 'Aucun contexte.',
     noMessage: 'Aucun message.',
     deliveries: 'Envois',
+    close: {
+      action: 'Clore l’Incident',
+      help: 'Clôturez-le quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
+      question:
+        'L’Incident sera Clos définitivement et ses Destinations prévenues. Une nouvelle Occurrence ouvrira un nouvel Incident. Le clore ?',
+    },
     redispatch: {
       help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
       action: 'Redispatcher',
@@ -590,6 +605,7 @@ export const fr: Messages = {
           feedback: 'Retour',
           'incident.opened': 'Incident ouvert',
           'incident.raised': 'Incident aggravé',
+          'incident.closed': 'Incident clos',
           alert: 'Alerte',
           ping: 'Ping',
         },
@@ -600,6 +616,8 @@ export const fr: Messages = {
             'Un Incident qui s’ouvre, avec son identifiant stable : suivez l’Incident grâce à lui. Son titre, son message, son Environnement et son contexte sont bruts : encodez-les pour votre cible.',
           'incident.raised':
             'Un Incident dont le Niveau a assez monté pour atteindre cette Destination : elle ne l’avait pas reçu à son Niveau précédent. Chaque Destination reçoit un seul événement opened ou raised par Incident.',
+          'incident.closed':
+            'L’Incident est clos : résolu par son émetteur, clos par un Membre, ou silencieux au-delà de sa Période de calme (incident.closure). Il arrive sur l’Envoi de son ouverture. Un identifiant jamais vu est un Incident ouvert puis clos pendant que cette Destination était injoignable : il est envoyé une seule fois.',
           alert:
             'Une alerte pour les Membres : un Retour En revue ou une Destination Suspendue. Elle ne porte jamais le texte d’un Retour.',
           ping: 'La vérification de santé, tant que la Destination est Suspendue : répondez par un 2xx pour reprendre ses Envois.',
@@ -608,7 +626,7 @@ export const fr: Messages = {
         headers: 'En-têtes',
         body: 'Exemple de corps',
         headerHelp: {
-          event: 'feedback, incident.opened, incident.raised, alert ou ping.',
+          event: 'feedback, incident.opened, incident.raised, incident.closed, alert ou ping.',
           delivery:
             'L’identifiant stable de l’Envoi : ignorez une nouvelle tentative déjà traitée.',
           alert: 'L’identifiant stable de l’alerte : ignorez une nouvelle tentative déjà traitée.',

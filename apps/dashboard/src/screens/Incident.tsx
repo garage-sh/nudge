@@ -2,9 +2,21 @@ import type { IncidentReport } from '@nudge/shared';
 import { useState, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router';
 import { ApiError } from '../api/client.js';
-import { useIncident, useRedispatchIncident, useReplayIncidentDelivery } from '../api/incidents.js';
+import {
+  useCloseIncident,
+  useIncident,
+  useRedispatchIncident,
+  useReplayIncidentDelivery,
+} from '../api/incidents.js';
 import { useI18n, useT } from '../i18n/index.js';
-import { DetailSection, ErrorMessage, Loading, PageHeader, Properties } from '../layout/ui.js';
+import {
+  ConfirmAction,
+  DetailSection,
+  ErrorMessage,
+  Loading,
+  PageHeader,
+  Properties,
+} from '../layout/ui.js';
 import { DeliveryList } from './DeliveryList.js';
 import { IncidentStatePill, LevelPill } from './feedback-badges.js';
 
@@ -89,9 +101,21 @@ export function Incident() {
                 [t.incident.occurrences, <span className="number">{detail.occurrences}</span>],
                 [t.incident.firstSeen, <Instant key="first" iso={detail.firstSeenAt} />],
                 [t.incident.lastSeen, <Instant key="last" iso={detail.lastSeenAt} />],
+                ...(detail.closeCause && detail.closedAt
+                  ? [
+                      [
+                        t.incident.closed,
+                        <span key="closed" className="closure">
+                          {t.labels.closeCause[detail.closeCause]}
+                          <Instant iso={detail.closedAt} />
+                        </span>,
+                      ] as const,
+                    ]
+                  : []),
                 [t.incident.fingerprint, <code key="fingerprint">{detail.fingerprint}</code>],
               ]}
             />
+            {detail.state === 'open' ? <Close incidentId={detail.id} afterClose={poll} /> : null}
           </Section>
         </aside>
       </div>
@@ -130,6 +154,29 @@ function Report({ id, title, report }: { id: string; title: string; report: Inci
         <Properties rows={context.map(([key, value]) => [key, String(value)])} />
       )}
     </Section>
+  );
+}
+
+/**
+ * Close the Open Incident by hand, once the Member knows the problem is over: its
+ * Destinations receive the closing, as when its sender resolves it.
+ */
+function Close({ incidentId, afterClose }: { incidentId: string; afterClose: () => void }) {
+  const t = useT();
+  const close = useCloseIncident(incidentId);
+  return (
+    <>
+      <p className="help">{t.incident.close.help}</p>
+      <div className="actions">
+        <ConfirmAction
+          label={t.incident.close.action}
+          question={t.incident.close.question}
+          pending={close.isPending}
+          onConfirm={() => close.mutate(undefined, { onSuccess: afterClose })}
+        />
+      </div>
+      <ErrorMessage error={close.error} />
+    </>
   );
 }
 

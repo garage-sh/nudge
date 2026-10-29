@@ -21,6 +21,7 @@ export const toProjectView = (project: Project): ProjectView => ({
   publicKey: project.publicKey,
   allowedOrigins: project.allowedOrigins,
   defaultLevel: project.defaultLevel,
+  quietPeriod: project.quietPeriod,
   createdAt: project.createdAt.toISOString(),
 });
 
@@ -29,6 +30,7 @@ export interface ProjectFields {
   readonly description?: string | null;
   readonly allowedOrigins?: readonly string[];
   readonly defaultLevel?: Level;
+  readonly quietPeriod?: number | null;
 }
 
 /** Projects of the Instance: every Member sees them all (no roles in v1). */

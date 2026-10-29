@@ -23,7 +23,7 @@ describe('Reporting an Incident', () => {
   const report = async (secretKey: string, body: Record<string, unknown>) => {
     const response = await pipeline.postIncident(secretKey, body);
     expect(response.status).toBe(202);
-    return (await response.json()) as ReceivedIncident;
+    return (await response.json()) as ReceivedIncident & { readonly id: string };
   };
 
   const read = async (id: string) => {

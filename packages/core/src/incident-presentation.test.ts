@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OutgoingIncidentDelivery } from './destination.js';
+import type { OutgoingIncidentClosing, OutgoingIncidentDelivery } from './destination.js';
 import { presentIncident } from './incident-presentation.js';
 
 const OPENED: OutgoingIncidentDelivery = {
@@ -19,6 +19,7 @@ const OPENED: OutgoingIncidentDelivery = {
     occurrences: 1,
     firstSeenAt: new Date('2026-10-29T08:00:00.000Z'),
     lastSeenAt: new Date('2026-10-29T08:00:00.000Z'),
+    closure: null,
     dashboardUrl: null,
   },
 };
@@ -63,5 +64,47 @@ describe('The presentation of an Incident, shared by the adapters', () => {
         { label: 'First seen', value: '2026-10-29T08:00:00.000Z' },
       ],
     });
+  });
+
+  const closed = (cause: 'resolved' | 'member' | 'quiet_period'): OutgoingIncidentClosing => ({
+    ...OPENED,
+    moment: 'closed',
+    opening: { externalUrl: null },
+    incident: {
+      ...OPENED.incident,
+      state: 'closed',
+      message: null,
+      context: {},
+      occurrences: 3,
+      lastSeenAt: new Date('2026-10-29T08:10:00.000Z'),
+      closure: { cause, closedAt: new Date('2026-10-29T09:10:00.000Z') },
+    },
+  });
+
+  it('a closed Incident says why it closed, and when it was last seen and closed', () => {
+    expect(presentIncident(closed('quiet_period'))).toEqual({
+      title: 'Error · Payment provider timed out',
+      summary: 'An Incident of Shop closed: its Quiet period went by without a new Occurrence.',
+      details: [
+        { label: 'Project', value: 'Shop' },
+        { label: 'Environment', value: 'production' },
+        { label: 'Level', value: 'Error (declared)' },
+        { label: 'Occurrences', value: '3' },
+        { label: 'First seen', value: '2026-10-29T08:00:00.000Z' },
+        { label: 'Last seen', value: '2026-10-29T08:10:00.000Z' },
+        { label: 'Closed', value: '2026-10-29T09:10:00.000Z' },
+      ],
+    });
+    expect(presentIncident(closed('resolved')).summary).toBe(
+      'An Incident of Shop was resolved by its sender.',
+    );
+    expect(presentIncident(closed('member')).summary).toBe(
+      'An Incident of Shop was closed by a Member.',
+    );
+  });
+
+  it('an Incident delivered once its closing came is presented closed, whatever its opening moment', () => {
+    const late: OutgoingIncidentDelivery = { ...OPENED, incident: closed('resolved').incident };
+    expect(presentIncident(late).summary).toBe('An Incident of Shop was resolved by its sender.');
   });
 });

@@ -40,6 +40,7 @@ import {
   createWorker,
   type CaptureSweepOptions,
   type ConcurrencyOptions,
+  type IncidentOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,
@@ -107,6 +108,8 @@ export interface PipelineOptions {
   readonly captureSweep?: CaptureSweepOptions;
   /** Jobs each worker runs at the same time; the worker's otherwise. */
   readonly concurrency?: ConcurrencyOptions;
+  /** Instance default Quiet period and its sweep; the worker's (1 h, every minute) otherwise. */
+  readonly incidents?: IncidentOptions;
 }
 
 export interface Pipeline {
@@ -319,6 +322,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.purge ? { purge: options.purge } : {}),
     ...(options.captureSweep ? { captureSweep: options.captureSweep } : {}),
     ...(options.concurrency ? { concurrency: options.concurrency } : {}),
+    ...(options.incidents ? { incidents: options.incidents } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     onSuspension: (suspension) => {
       suspensions.push(suspension);

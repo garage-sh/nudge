@@ -56,7 +56,7 @@ function WebhookPayload({ url, purpose }: { url: string; purpose: TypeFieldsProp
   // A Project's Destination receives Feedback and Incidents; the Alert destination, alerts.
   const events: readonly WebhookEventName[] =
     purpose === 'feedback'
-      ? ['feedback', 'incident.opened', 'incident.raised', 'ping']
+      ? ['feedback', 'incident.opened', 'incident.raised', 'incident.closed', 'ping']
       : [purpose, 'ping'];
   const [event, setEvent] = useState<WebhookEventName>(purpose);
   const example = WEBHOOK_EXAMPLES[event];
