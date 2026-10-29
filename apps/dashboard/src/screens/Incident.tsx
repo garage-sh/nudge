@@ -1,9 +1,10 @@
 import type { IncidentReport } from '@nudge/shared';
 import type { ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router';
+import { ApiError } from '../api/client.js';
 import { useIncident } from '../api/incidents.js';
 import { useI18n, useT } from '../i18n/index.js';
-import { ErrorMessage, Loading, PageHeader, Properties } from '../layout/ui.js';
+import { DetailSection, ErrorMessage, Loading, PageHeader, Properties } from '../layout/ui.js';
 import { IncidentStatePill, LevelPill } from './feedback-badges.js';
 
 /**
@@ -22,11 +23,17 @@ export function Incident() {
     label: t.incident.backToList,
   };
   if (incident.isPending) return <Loading />;
-  if (incident.isError) {
+  // An Incident of another Project does not exist under this one's URL.
+  const elsewhere = incident.isSuccess && incident.data.project.id !== projectId;
+  if (incident.isError || elsewhere) {
     return (
       <section>
         <PageHeader title={t.incident.properties} back={back} />
-        <ErrorMessage error={incident.error} onRetry={() => void incident.refetch()} />
+        {elsewhere ? (
+          <ErrorMessage error={new ApiError(404, { error: 'incident_not_found' })} />
+        ) : (
+          <ErrorMessage error={incident.error} onRetry={() => void incident.refetch()} />
+        )}
       </section>
     );
   }
@@ -124,9 +131,8 @@ function Instant({ iso }: { iso: string }) {
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section className="panel" aria-labelledby={`incident-${id}`}>
-      <h2 id={`incident-${id}`}>{title}</h2>
+    <DetailSection headingId={`incident-${id}`} title={title}>
       {children}
-    </section>
+    </DetailSection>
   );
 }

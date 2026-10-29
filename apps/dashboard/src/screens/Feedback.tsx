@@ -28,6 +28,7 @@ import {
 import { useI18n, useT } from '../i18n/index.js';
 import {
   ConfirmAction,
+  DetailSection,
   ErrorMessage,
   ExternalLink,
   Loading,
@@ -303,10 +304,9 @@ const CAPTURE_FORMATS: Record<CaptureView['contentType'], string> = {
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section className="panel" aria-labelledby={`feedback-${id}`}>
-      <h2 id={`feedback-${id}`}>{title}</h2>
+    <DetailSection headingId={`feedback-${id}`} title={title}>
       {children}
-    </section>
+    </DetailSection>
   );
 }
 

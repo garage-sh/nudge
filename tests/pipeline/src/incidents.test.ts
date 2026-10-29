@@ -74,6 +74,18 @@ describe('Reporting an Incident', () => {
     );
   });
 
+  it('opens a single Incident for Occurrences arriving together', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Together' });
+
+    const received = await Promise.all(
+      Array.from({ length: 8 }, () => report(secretKey, { title: 'Burst', environment: 'prod' })),
+    );
+
+    expect(new Set(received.map((r) => r.id)).size).toBe(1);
+    expect(received.filter((r) => r.opened)).toHaveLength(1);
+    expect(await read(received[0]!.id)).toMatchObject({ occurrences: 8 });
+  });
+
   it('groups two different titles under a declared Fingerprint', async () => {
     const { secretKey } = await pipeline.createProject({ name: 'Orders' });
 

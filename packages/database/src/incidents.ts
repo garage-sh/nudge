@@ -59,7 +59,8 @@ export async function recordOccurrence(db: Db, occurrence: Occurrence): Promise<
     .returning({
       id: incidents.id,
       state: incidents.state,
-      // A freshly inserted row has no deleting transaction yet.
+      // Postgres idiom: a row this statement inserted has `xmax = 0`; a row it updated on
+      // conflict carries this transaction's id there.
       opened: sql<boolean>`xmax = 0`,
     });
   if (!row) throw new Error('Occurrence not recorded');

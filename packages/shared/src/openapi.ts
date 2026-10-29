@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INCIDENT_STATES } from './domain.js';
 import { feedbackInputSchema } from './feedback-input.js';
 import { incidentInputSchema } from './incident-input.js';
 
@@ -121,7 +122,7 @@ export function publicApiDocument() {
                         format: 'uuid',
                         description: 'The Incident the Occurrence landed in.',
                       },
-                      state: { type: 'string', enum: ['open', 'closed'] },
+                      state: { type: 'string', enum: [...INCIDENT_STATES] },
                       opened: {
                         type: 'boolean',
                         description: '`true` when this Occurrence opened the Incident.',

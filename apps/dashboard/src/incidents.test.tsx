@@ -191,6 +191,19 @@ describe('An Incident’s detail', () => {
   });
 });
 
+describe('An Incident under another Project’s URL', () => {
+  it('is not shown there', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: TIMEOUT_DETAIL },
+    });
+    renderDashboard('/projects/project-2/incidents/incident-1');
+
+    expect(await screen.findByText('This Incident does not exist.')).toBeTruthy();
+    expect(screen.queryByText('POST /charges took 30 s')).toBeNull();
+  });
+});
+
 describe('A Project’s Incident settings', () => {
   it('saves the default Level and shows an example request', async () => {
     const api = fakeApi({

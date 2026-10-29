@@ -31,4 +31,10 @@ describe('A derived Fingerprint', () => {
   it('is a fixed-length hexadecimal digest', () => {
     expect(deriveFingerprint(project, 'Job failed', null)).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it('ignores spaces around the title', () => {
+    expect(deriveFingerprint(project, '  Job failed \n', null)).toBe(
+      deriveFingerprint(project, 'Job failed', null),
+    );
+  });
 });

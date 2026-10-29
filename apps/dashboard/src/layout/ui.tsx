@@ -479,3 +479,21 @@ export function useScrollToHash(ready: boolean) {
     document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
   }, [ready, hash]);
 }
+
+/** A titled `.panel` section of a detail screen, labelled by its heading (`headingId`). */
+export function DetailSection({
+  headingId,
+  title,
+  children,
+}: {
+  headingId: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="panel" aria-labelledby={headingId}>
+      <h2 id={headingId}>{title}</h2>
+      {children}
+    </section>
+  );
+}
