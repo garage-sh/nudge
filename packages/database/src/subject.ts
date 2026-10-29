@@ -14,6 +14,12 @@ export interface DeliverySubject {
   readonly id: string;
 }
 
+/** The subject of a Delivery of this Feedback. */
+export const feedbackSubject = (feedbackId: string): DeliverySubject => ({
+  kind: 'feedback',
+  id: feedbackId,
+});
+
 /** The columns that make a Delivery's row reference its subject. */
 export function subjectColumns(
   subject: DeliverySubject,

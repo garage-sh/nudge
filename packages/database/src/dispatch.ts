@@ -11,6 +11,7 @@ import { filterOf } from './destinations.js';
 import { destinations, deliveries, feedbacks, verdicts } from './schema.js';
 import {
   deliveriesOf,
+  feedbackSubject,
   subjectColumns,
   subjectConflictTarget,
   type DeliverySubject,
@@ -51,7 +52,7 @@ export async function createMissingDeliveries(
     .where(eq(destinations.projectId, projectId));
   const targets = projectDestinations.filter((d) => filterAccepts(filterOf(d), verdict));
   if (targets.length === 0) return [];
-  const created = await insertDeliveries(tx, { kind: 'feedback', id: feedbackId }, targets);
+  const created = await insertDeliveries(tx, feedbackSubject(feedbackId), targets);
   await tx
     .update(feedbacks)
     .set({ state: 'dispatched' })
@@ -156,7 +157,7 @@ export async function undoRedispatch(
             tx
               .select({ id: deliveries.id })
               .from(deliveries)
-              .where(deliveriesOf({ kind: 'feedback', id: feedbackId })),
+              .where(deliveriesOf(feedbackSubject(feedbackId))),
           ),
         ),
       );

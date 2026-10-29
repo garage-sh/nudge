@@ -1,7 +1,10 @@
 import type { DeliveryResult, DestinationAdapter } from '@nudge/core';
 import type { DeliverySubject } from '@nudge/database';
 
-/** What a Delivery's subject makes of it, before any outgoing call. */
+/**
+ * What a Delivery's subject makes of it, before any outgoing call. A `reason` never names
+ * the Delivery: the caller logs it after the Delivery's id, and records it as the error.
+ */
 export type PreparedDelivery =
   /** Nothing to send and nothing to record: the inconsistency is logged. */
   | { readonly status: 'ignored'; readonly reason: string }

@@ -16,8 +16,8 @@ import {
 } from '@nudge/database';
 import type { DeliverySubjectKind } from '@nudge/shared';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
-import type { SubjectDispatcher } from './delivery-subject.js';
-import { FeedbackSubject } from './feedback-subject.js';
+import type { SubjectDispatcher } from './subject-dispatcher.js';
+import { FeedbackDispatcher } from './feedback-dispatcher.js';
 import { TransientFailure } from './transient-failure.js';
 import { SuspensionService } from './suspension.service.js';
 import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from './tokens.js';
@@ -39,9 +39,9 @@ export class DispatchProcessor {
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
     private readonly suspension: SuspensionService,
-    feedbackSubject: FeedbackSubject,
+    feedbackDispatcher: FeedbackDispatcher,
   ) {
-    this.subjects = { feedback: feedbackSubject };
+    this.subjects = { feedback: feedbackDispatcher };
   }
 
   /** What each subject of a Delivery adds to Dispatch: one dispatcher per kind. */
@@ -75,7 +75,7 @@ export class DispatchProcessor {
     const subject = subjectOf(delivery);
     const prepared = await this.subjects[subject.kind].prepare(deliveryId, subject);
     if (prepared.status === 'ignored') {
-      this.logger.error(`${prepared.reason}, ignored`);
+      this.logger.error(`Delivery ${deliveryId}: ${prepared.reason}, ignored`);
       return;
     }
     if (prepared.status === 'not_dispatchable') {

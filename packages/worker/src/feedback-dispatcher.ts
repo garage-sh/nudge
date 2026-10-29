@@ -2,13 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import { buildDashboardUrl, type CaptureToDispatch, type OutgoingDelivery } from '@nudge/core';
 import { feedbacks, type captures, type Db, type DeliverySubject } from '@nudge/database';
 import { eq } from 'drizzle-orm';
-import type { PreparedDelivery, SubjectDispatcher } from './delivery-subject.js';
+import type { PreparedDelivery, SubjectDispatcher } from './subject-dispatcher.js';
 import type { WorkerOptions } from './options.js';
 import { DB, OPTIONS } from './tokens.js';
 
 /** Dispatch of a Delivery whose subject is a Feedback: it goes out with its Verdict. */
 @Injectable()
-export class FeedbackSubject implements SubjectDispatcher {
+export class FeedbackDispatcher implements SubjectDispatcher {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
@@ -19,11 +19,10 @@ export class FeedbackSubject implements SubjectDispatcher {
       where: eq(feedbacks.id, id),
       with: { project: true, verdict: true, capture: true },
     });
-    if (!feedback)
-      return { status: 'ignored', reason: `Delivery ${deliveryId} without a Feedback` };
+    if (!feedback) return { status: 'ignored', reason: 'no Feedback' };
     const { verdict } = feedback;
     if (!verdict) {
-      return { status: 'ignored', reason: `Delivery ${deliveryId} without a Verdict` };
+      return { status: 'ignored', reason: 'no Verdict' };
     }
     // Deliveries are only created for a Triaged or Dispatched Feedback: one of a
     // Feedback that is not (any more) is never sent.

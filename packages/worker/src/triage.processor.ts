@@ -13,6 +13,7 @@ import {
 } from '@nudge/core';
 import {
   createMissingDeliveries,
+  feedbackSubject,
   feedbacks,
   pendingDeliveriesOf,
   verdicts,
@@ -155,7 +156,7 @@ export class TriageProcessor {
   ): Promise<void> {
     const toSend = await this.db.transaction(async (tx) => {
       if (state === 'triaged') await createMissingDeliveries(tx, feedbackId, projectId);
-      return pendingDeliveriesOf(tx, { kind: 'feedback', id: feedbackId });
+      return pendingDeliveriesOf(tx, feedbackSubject(feedbackId));
     });
 
     // After the commit: the dispatch job reads a Delivery that exists.
