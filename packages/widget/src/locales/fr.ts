@@ -24,6 +24,8 @@ export const fr: Messages = {
     'Tracez un rectangle sur l’aperçu pour flouter une zone. Les zones sensibles de l’application sont déjà masquées.',
   capturePreview: 'Aperçu de la capture',
   clearBlurs: 'Retirer les flous',
+  enlargeCapture: 'Agrandir',
+  editorDone: 'Terminé',
   captureFailed: 'La capture de la page a échoué : envoyez votre retour sans elle.',
   captureTooLarge: 'La capture est trop lourde pour être envoyée : retirez-la, puis réessayez.',
   submit: 'Envoyer',
