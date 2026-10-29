@@ -7,7 +7,12 @@ import {
   SEVERITIES,
   SOURCES,
   FEEDBACK_TYPES,
+  INCIDENT_STATES,
+  LEVELS,
   type AuthorTrust,
+  type IncidentState,
+  type Level,
+  type LevelOrigin,
   type DestinationState,
   type FeedbackState,
   type JudgeProvider,
@@ -17,6 +22,7 @@ import {
   type FeedbackType,
 } from './domain.js';
 import type { Context, CaptureType } from './feedback-input.js';
+import { INCIDENT_LIMITS, type IncidentReport } from './incident-input.js';
 
 /**
  * Contract of the dashboard API (`/api/…`): accepted bodies (zod schemas, validated
@@ -38,6 +44,8 @@ export const DASHBOARD_LIMITS = {
   feedbacksPerPageMax: 100,
   /** Characters of a Feedback's text shown in the inbox. */
   feedbackPreview: 280,
+  incidentsPerPage: 50,
+  incidentsPerPageMax: 100,
   judgeModel: 200,
   judgeUrl: 2048,
   judgeKey: 1000,
@@ -148,6 +156,8 @@ export const projectUpdateSchema = z.strictObject({
   name: projectName.optional(),
   description: projectDescription.optional(),
   allowedOrigins: allowedOrigins.optional(),
+  /** The Level of an Incident whose sender declared none. */
+  defaultLevel: z.enum(LEVELS).optional(),
 });
 export type ProjectUpdate = z.input<typeof projectUpdateSchema>;
 
@@ -334,6 +344,8 @@ export interface ProjectView {
   readonly description: string | null;
   readonly publicKey: string;
   readonly allowedOrigins: readonly string[];
+  /** The Level of an Incident whose sender declared none. */
+  readonly defaultLevel: Level;
   readonly createdAt: string;
 }
 
@@ -506,3 +518,57 @@ export const verdictCorrectionSchema = z
     },
   );
 export type VerdictCorrection = z.input<typeof verdictCorrectionSchema>;
+
+/**
+ * Filters and pagination of a Project's Incidents (`GET /api/incidents?…`), newest
+ * opened first. `environment` is matched exactly.
+ */
+export const incidentFiltersSchema = z.strictObject({
+  project: z.uuid(),
+  state: z.enum(INCIDENT_STATES).optional(),
+  level: z.enum(LEVELS).optional(),
+  environment: z.string().max(INCIDENT_LIMITS.environment).optional(),
+  /** The `next` of the previous page. */
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(DASHBOARD_LIMITS.incidentsPerPageMax)
+    .default(DASHBOARD_LIMITS.incidentsPerPage),
+});
+
+/** The Project whose Environments are listed (`GET /api/incidents/environments?project=…`). */
+export const incidentEnvironmentsSchema = z.strictObject({ project: z.uuid() });
+
+/** A row of a Project's Incident list. Every text comes from the sender: render it as text. */
+export interface IncidentSummaryView {
+  readonly id: string;
+  readonly project: ProjectRefView;
+  readonly state: IncidentState;
+  /** The title of the Occurrence that opened the Incident. */
+  readonly title: string;
+  readonly level: Level;
+  readonly levelOrigin: LevelOrigin;
+  /** The Environment of the Occurrence that opened it; `null`: none. */
+  readonly environment: string | null;
+  /** Occurrences absorbed, the first one included. */
+  readonly occurrences: number;
+  readonly firstSeenAt: string;
+  readonly lastSeenAt: string;
+}
+
+/** A page of a Project's Incidents, newest opened first. */
+export interface IncidentPage {
+  readonly incidents: readonly IncidentSummaryView[];
+  /** Cursor of the next page, `null` on the last one. */
+  readonly next: string | null;
+}
+
+/** The details of an Incident (`GET /api/incidents/:id`). */
+export interface IncidentDetailView extends IncidentSummaryView {
+  /** Declared by the sender, or derived by nudge (a digest). */
+  readonly fingerprint: string;
+  readonly firstReport: IncidentReport;
+  readonly lastReport: IncidentReport;
+}

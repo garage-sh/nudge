@@ -22,6 +22,24 @@ export const SEVERITY_LABELS: Readonly<Record<Severity, string>> = {
   blocking: 'Blocking',
 };
 
+/**
+ * How serious an Incident is, ordered from least to most serious. A scale of its own,
+ * never mixed with Severity, which belongs to Feedback.
+ */
+export const LEVELS = ['info', 'warning', 'error', 'critical'] as const;
+export type Level = (typeof LEVELS)[number];
+
+/** Where an Incident's Level came from: its sender, the Judge, or the Project's default Level. */
+export const LEVEL_ORIGINS = ['declared', 'judge', 'default'] as const;
+export type LevelOrigin = (typeof LEVEL_ORIGINS)[number];
+
+/** The Level an undeclared Incident gets when its Project sets none. */
+export const DEFAULT_LEVEL: Level = 'error';
+
+/** An Open Incident absorbs Occurrences; a Closed one never reopens. */
+export const INCIDENT_STATES = ['open', 'closed'] as const;
+export type IncidentState = (typeof INCIDENT_STATES)[number];
+
 /** `extension` is reserved for the future QA module. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];

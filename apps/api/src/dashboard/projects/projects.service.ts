@@ -8,7 +8,7 @@ import {
   type Db,
   type Project,
 } from '@nudge/database';
-import type { ProjectActivityView, ProjectWithSecretKey, ProjectView } from '@nudge/shared';
+import type { Level, ProjectActivityView, ProjectWithSecretKey, ProjectView } from '@nudge/shared';
 import { asc, eq, sql, type SQL } from 'drizzle-orm';
 import { DB } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
@@ -20,6 +20,7 @@ export const toProjectView = (project: Project): ProjectView => ({
   description: project.description,
   publicKey: project.publicKey,
   allowedOrigins: project.allowedOrigins,
+  defaultLevel: project.defaultLevel,
   createdAt: project.createdAt.toISOString(),
 });
 
@@ -27,6 +28,7 @@ export interface ProjectFields {
   readonly name?: string;
   readonly description?: string | null;
   readonly allowedOrigins?: readonly string[];
+  readonly defaultLevel?: Level;
 }
 
 /** Projects of the Instance: every Member sees them all (no roles in v1). */

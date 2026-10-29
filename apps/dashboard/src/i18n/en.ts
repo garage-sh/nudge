@@ -5,7 +5,10 @@ import type {
   FailureClass,
   FeedbackState,
   FeedbackType,
+  IncidentState,
   JudgeProvider,
+  Level,
+  LevelOrigin,
   Severity,
   SmtpSecurity,
   Source,
@@ -59,6 +62,22 @@ export const en = {
       active: 'Active',
       suspended: 'Suspended',
     } satisfies Record<DestinationState, string>,
+    level: {
+      info: 'Info',
+      warning: 'Warning',
+      error: 'Error',
+      critical: 'Critical',
+    } satisfies Record<Level, string>,
+    /** Where an Incident's Level came from. */
+    levelOrigin: {
+      declared: 'Declared by the sender',
+      judge: 'Assessed by the Judge',
+      default: 'Project’s default Level',
+    } satisfies Record<LevelOrigin, string>,
+    incidentState: {
+      open: 'Open',
+      closed: 'Closed',
+    } satisfies Record<IncidentState, string>,
     /** A Delivery's failure class, as a Member reads it. */
     failureClass: {
       transient: 'temporarily unavailable',
@@ -91,6 +110,7 @@ export const en = {
     invalid_invitation: 'This invitation link is invalid, expired or already used.',
     project_not_found: 'This Project does not exist.',
     feedback_not_found: 'This Feedback does not exist.',
+    incident_not_found: 'This Incident does not exist.',
     transition_refused: 'This Feedback changed in the meantime: here is its current state.',
     storage_unavailable:
       'The Capture could not be erased from storage: the Feedback is kept. Try again later.',
@@ -411,6 +431,7 @@ export const en = {
     fallbackTitle: 'Project',
     sections: 'Project sections',
     destinationsTab: 'Destinations',
+    incidentsTab: 'Incidents',
     settingsTab: 'Settings',
     keys: 'Keys',
     publicKey: 'Public key',
@@ -432,6 +453,65 @@ export const en = {
     originsLabel: 'One origin per line',
     originsHelp: 'The Widget is accepted only from these origins (scheme://host[:port], no path).',
     saveOrigins: 'Save origins',
+    incidents: {
+      title: 'Incidents',
+      help: 'Your application reports an Incident when something goes wrong on its side, from its server only, with the secret key.',
+      defaultLevel: 'Default Level',
+      defaultLevelHelp: 'The Level of an Incident whose sender declares none.',
+      saveDefaultLevel: 'Save default Level',
+      example: 'Example request',
+      exampleHelp:
+        'Put the secret key in the NUDGE_SECRET_KEY environment variable of the server that reports. The same title and Environment are grouped into one Incident; a fingerprint groups different titles.',
+    },
+  },
+
+  incidents: {
+    views: 'Views',
+    view: {
+      all: 'All',
+      open: 'Open',
+      closed: 'Closed',
+    } satisfies Record<IncidentState | 'all', string>,
+    filters: 'Filters',
+    filter: { level: 'Level', environment: 'Environment' },
+    anyLevel: 'All',
+    anyEnvironment: 'All',
+    shown: (count: number, more: boolean) =>
+      `${count} Incident${count === 1 ? '' : 's'} shown${more ? ', more to load' : ''}.`,
+    noMatch: 'No Incident matches these filters.',
+    clearFilters: 'Clear filters',
+    emptyTitle: 'No Incident reported yet.',
+    emptyHelp:
+      'Incidents arrive here when the Project’s server reports something going wrong, with its secret key.',
+    emptyAction: 'See how to report one',
+    showMore: 'Show more',
+    occurrences: (count: number) => `${count} Occurrence${count === 1 ? '' : 's'}`,
+    noEnvironment: 'No Environment',
+    lastSeen: 'Last seen',
+  },
+
+  incident: {
+    backToList: 'Back to Incidents',
+    properties: 'Incident',
+    state: 'State',
+    level: 'Level',
+    levelOrigin: 'Level from',
+    environment: 'Environment',
+    occurrences: 'Occurrences',
+    firstSeen: 'First seen',
+    lastSeen: 'Last seen',
+    fingerprint: 'Fingerprint',
+    firstReport: 'First Occurrence',
+    lastReport: 'Last Occurrence',
+    onlyReport: 'Occurrence',
+    title: 'Title',
+    message: 'Message',
+    declaredLevel: 'Declared Level',
+    notDeclared: 'Not declared',
+    receivedAt: 'Received',
+    context: 'Context',
+    noContext: 'No context.',
+    noMessage: 'No message.',
   },
 
   destinations: {

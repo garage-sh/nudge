@@ -7,7 +7,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
 } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ApiError } from '../api/client.js';
 import { useT, type Messages } from '../i18n/index.js';
 
@@ -452,4 +452,30 @@ export function ExternalLink({ href }: { href: string }) {
       {href}
     </a>
   );
+}
+
+/** A list of label / value pairs (`.properties`), values rendered as text. */
+export function Properties({ rows }: { rows: readonly (readonly [string, ReactNode])[] }) {
+  return (
+    <dl className="properties">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A link to a panel (`/settings#settings-smtp`, `/projects/:id#project-incidents`)
+ * lands on it once the panels are drawn: the router does not scroll to a hash by itself.
+ */
+export function useScrollToHash(ready: boolean) {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!ready || !hash) return;
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+  }, [ready, hash]);
 }

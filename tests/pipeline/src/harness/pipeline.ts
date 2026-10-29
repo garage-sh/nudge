@@ -33,7 +33,7 @@ import {
 } from '@nudge/database';
 import type { JudgeConfig } from '@nudge/judge';
 import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
-import type { FeedbackState, FeedbackInput } from '@nudge/shared';
+import type { FeedbackState, FeedbackInput, IncidentInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
@@ -178,6 +178,8 @@ export interface Pipeline {
   ageFeedback(feedbackId: string, days: number): Promise<void>;
   /** POST /v1/feedbacks with the Project's secret key. */
   postFeedback(secretKey: string, body: FeedbackInput | Record<string, unknown>): Promise<Response>;
+  /** POST /v1/incidents with the Project's secret key: one Occurrence. */
+  postIncident(secretKey: string, body: IncidentInput | Record<string, unknown>): Promise<Response>;
   /**
    * POST /v1/feedbacks with the Project's public key, like the Widget from a page
    * of origin `origin` (`null`: without an Origin header).
@@ -439,6 +441,12 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     },
     postFeedback: (secretKey, body) =>
       fetch(`${url}/v1/feedbacks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secretKey}` },
+        body: JSON.stringify(body),
+      }),
+    postIncident: (secretKey, body) =>
+      fetch(`${url}/v1/incidents`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${secretKey}` },
         body: JSON.stringify(body),

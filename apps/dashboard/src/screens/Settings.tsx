@@ -17,8 +17,7 @@ import {
   type RetentionView,
   type SmtpSecurity,
 } from '@nudge/shared';
-import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router';
+import { useState, type FormEvent } from 'react';
 import {
   useAlertDestination,
   useChangeRetention,
@@ -45,6 +44,7 @@ import {
   PanelHeader,
   Pill,
   SaveStatus,
+  useScrollToHash,
 } from '../layout/ui.js';
 import { GeneratedSecrets, TestResult, type ShownSecrets } from './destinations/Destinations.js';
 import { DestinationForm } from './destinations/DestinationForm.js';
@@ -98,18 +98,6 @@ export function Settings() {
       </div>
     </section>
   );
-}
-
-/**
- * A link to `/settings#settings-smtp` (from an email Destination's form) lands on its
- * panel once the panels are drawn: the router does not scroll to a hash by itself.
- */
-function useScrollToHash(ready: boolean) {
-  const { hash } = useLocation();
-  useEffect(() => {
-    if (!ready || !hash) return;
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
-  }, [ready, hash]);
 }
 
 /**

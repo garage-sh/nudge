@@ -17,6 +17,10 @@ import { ProjectKeyGuard } from './ingestion/project-key.guard.js';
 import { CorsIngestionMiddleware } from './ingestion/cors-ingestion.middleware.js';
 import { IngestionController } from './ingestion/ingestion.controller.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
+import { IncidentsIngestionController } from './ingestion/incidents-ingestion.controller.js';
+import { IncidentsIngestionService } from './ingestion/incidents-ingestion.service.js';
+import { SecretKeyGuard } from './ingestion/secret-key.guard.js';
+import { SecretKeys } from './ingestion/secret-keys.js';
 
 export interface IngestionOptions {
   /** Rate limit of the Widget path; `DEFAULT_WIDGET_LIMITS` otherwise. */
@@ -29,12 +33,15 @@ export class ApiModule implements NestModule {
     return {
       module: ApiModule,
       imports: [InfraModule.forRoot(options), DashboardModule.forRoot(options)],
-      controllers: [IngestionController],
+      controllers: [IngestionController, IncidentsIngestionController],
       providers: [
         { provide: WIDGET_LIMITS, useValue: options.widgetLimits ?? DEFAULT_WIDGET_LIMITS },
         WidgetAccess,
         IngestionService,
+        IncidentsIngestionService,
+        SecretKeys,
         ProjectKeyGuard,
+        SecretKeyGuard,
       ],
     };
   }

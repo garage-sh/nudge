@@ -32,6 +32,7 @@ import {
   ExternalLink,
   Loading,
   Pill,
+  Properties,
   useReturnFocus,
 } from '../layout/ui.js';
 import {
@@ -306,20 +307,6 @@ function Section({ id, title, children }: { id: string; title: string; children:
       <h2 id={`feedback-${id}`}>{title}</h2>
       {children}
     </section>
-  );
-}
-
-/** A list of label / value pairs, values rendered as text. */
-function Properties({ rows }: { rows: readonly (readonly [string, ReactNode])[] }) {
-  return (
-    <dl className="properties">
-      {rows.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 

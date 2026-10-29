@@ -4,6 +4,7 @@ export * from './destinations.js';
 export * from './dispatch.js';
 export * from './deliveries.js';
 export * from './feedbacks.js';
+export * from './incidents.js';
 export * from './migrations.js';
 export * from './settings.js';
 export * from './projects.js';

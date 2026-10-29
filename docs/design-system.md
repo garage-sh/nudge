@@ -94,6 +94,9 @@ The mark is the Severity gauge at its full level: four rising bars, in the accen
 | `Pill`                                                                      | `ui.tsx`              | A State or a Status, colored by a tone: `neutral`, `success`, `review`, `danger`, `held`, `off`.                                              |
 | `SeverityGauge`                                                             | `feedback-badges.tsx` | A Feedback's Severity; `large` in the detail view. Dotted when there is no Severity.                                                          |
 | `StatePill`, `DeliveryStatusPill`, `DestinationStatePill`, `UncertainBadge` | `feedback-badges.tsx` | Domain values, with their tone set once and for all.                                                                                          |
+| `LevelPill`, `IncidentStatePill`                                            | `feedback-badges.tsx` | An Incident's Level (Critical is solid, so it differs from Error without color) and its state.                                                |
+| `Properties`                                                                | `ui.tsx`              | Label / value pairs (`.properties`), values rendered as text.                                                                                 |
+| `useScrollToHash`                                                           | `ui.tsx`              | A link to a panel (`#settings-smtp`, `#project-incidents`) scrolls to it once the screen is drawn.                                            |
 
 ### Classes
 
@@ -136,6 +139,7 @@ Every signed-in screen starts with `PageHeader`. The patterns below are the shap
   - `.trail`: back to the originating list, with its filters, and Previous / Next from the `ListState` navigation state;
   - `.feedback-grid`: content and decision on the left, properties on the right (`.feedback-side`, flat sections separated by hairlines). A single column below 1100 px;
   - a decision awaiting a Member is shown as a banner (`.review-banner`), above everything else.
+- **Incident list** (a Project's Incidents tab, `screens/Incidents.tsx`): the Inbox's views and filters, without day groups; `.incident-row` puts the Level first, then the title, Environment, Occurrences, state and last seen. The detail (`screens/Incident.tsx`) states Level, state, Environment and Occurrences under its title, then the first and last Occurrence beside the Incident's properties.
 - **Tabbed object** (Project, `ProjectHeader` in `screens/Project.tsx`):
   - a shared header and `.tabs` as `NavLink`s, one route per tab;
   - the tab's primary action goes in the header.

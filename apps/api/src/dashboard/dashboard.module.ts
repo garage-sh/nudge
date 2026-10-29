@@ -37,6 +37,8 @@ import { DeliveriesController } from './feedbacks/deliveries.controller.js';
 import { DeliveriesService } from './feedbacks/deliveries.service.js';
 import { FeedbacksController } from './feedbacks/feedbacks.controller.js';
 import { FeedbacksService } from './feedbacks/feedbacks.service.js';
+import { IncidentsController } from './incidents/incidents.controller.js';
+import { IncidentsService } from './incidents/incidents.service.js';
 import { RedispatchService } from './feedbacks/redispatch.service.js';
 import { ReviewService } from './feedbacks/review.service.js';
 import { ClientHeaderMiddleware } from './client-header.middleware.js';
@@ -61,6 +63,7 @@ const CONTROLLERS = [
   ProjectsController,
   FeedbacksController,
   DeliveriesController,
+  IncidentsController,
   InstanceController,
   DestinationsController,
   AlertsController,
@@ -88,6 +91,7 @@ export class DashboardModule implements NestModule {
         InvitationsService,
         ProjectsService,
         FeedbacksService,
+        IncidentsService,
         ReviewService,
         RedispatchService,
         DeliveriesService,

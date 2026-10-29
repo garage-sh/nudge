@@ -6,13 +6,18 @@ import {
   DESTINATION_STATES,
   FEEDBACK_STATES,
   FEEDBACK_TYPES,
+  DEFAULT_LEVEL,
+  INCIDENT_STATES,
   JUDGE_PROVIDERS,
+  LEVEL_ORIGINS,
+  LEVELS,
   SEVERITIES,
   SOURCES,
   type Author,
   type SmtpSecurity,
   type CaptureType,
   type Context,
+  type IncidentReport,
 } from '@nudge/shared';
 import { relations, sql } from 'drizzle-orm';
 import {
@@ -27,6 +32,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -39,6 +45,10 @@ export const destinationStateEnum = pgEnum('destination_state', DESTINATION_STAT
 export const deliveryStatusEnum = pgEnum('delivery_status', DELIVERY_STATUSES);
 export const deliverySubjectEnum = pgEnum('delivery_subject', DELIVERY_SUBJECTS);
 export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
+/** Declared in order, from least to most serious: Postgres compares the values that way. */
+export const levelEnum = pgEnum('level', LEVELS);
+export const levelOriginEnum = pgEnum('level_origin', LEVEL_ORIGINS);
+export const incidentStateEnum = pgEnum('incident_state', INCIDENT_STATES);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -57,6 +67,8 @@ export const projects = pgTable('projects', {
   secretKeyHash: text('secret_key_hash').notNull().unique(),
   /** Origins (`https://example.com`) from which the public key is accepted, normalized. */
   allowedOrigins: text('allowed_origins').array().notNull().default([]),
+  /** The Level of an Incident whose sender declared none. */
+  defaultLevel: levelEnum('default_level').notNull().default(DEFAULT_LEVEL),
   ...timestamps,
 });
 
@@ -130,6 +142,45 @@ export const feedbacks = pgTable(
     index('feedbacks_received_sweep_idx')
       .on(t.nextTriageSweepAt.asc().nullsFirst(), t.createdAt)
       .where(sql`${t.state} = 'received'`),
+  ],
+);
+
+/**
+ * An Incident: one row whatever the number of its Occurrences, which are not stored.
+ * It keeps their counter, the first and last instants, and the first and last reports
+ * in full, so the rows an Incident costs stay bounded whatever its sender does.
+ */
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    state: incidentStateEnum('state').notNull().default('open'),
+    /** Declared by the sender, or derived from the Project, the title and the Environment. */
+    fingerprint: text('fingerprint').notNull(),
+    /** Title and Environment of the Occurrence that opened the Incident. */
+    title: text('title').notNull(),
+    environment: text('environment'),
+    level: levelEnum('level').notNull(),
+    levelOrigin: levelOriginEnum('level_origin').notNull(),
+    /** Occurrences absorbed, the first one included. */
+    occurrences: integer('occurrences').notNull().default(1),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+    firstReport: jsonb('first_report').$type<IncidentReport>().notNull(),
+    lastReport: jsonb('last_report').$type<IncidentReport>().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    // At most one Open Incident per (Project, Fingerprint): the Occurrence that matches it
+    // is absorbed; one that matches only Closed Incidents opens a new one.
+    uniqueIndex('incidents_open_fingerprint_uniq')
+      .on(t.projectId, t.fingerprint)
+      .where(sql`${t.state} = 'open'`),
+    // A Project's Incident list, newest opened first.
+    index('incidents_project_created_at_idx').on(t.projectId, t.createdAt, t.id),
   ],
 );
 
@@ -299,7 +350,12 @@ export const instanceSettings = pgTable(
 
 export const projectsRelations = relations(projects, ({ many }) => ({
   feedbacks: many(feedbacks),
+  incidents: many(incidents),
   destinations: many(destinations),
+}));
+
+export const incidentsRelations = relations(incidents, ({ one }) => ({
+  project: one(projects, { fields: [incidents.projectId], references: [projects.id] }),
 }));
 
 export const feedbacksRelations = relations(feedbacks, ({ one, many }) => ({

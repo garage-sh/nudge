@@ -2,6 +2,8 @@ import {
   SEVERITIES,
   type DestinationState,
   type FeedbackState,
+  type IncidentState,
+  type Level,
   type Severity,
   type DeliveryStatus,
 } from '@nudge/shared';
@@ -85,4 +87,26 @@ export function DestinationStatePill({ state }: { state: DestinationState }) {
   return (
     <Pill tone={state === 'active' ? 'success' : 'held'}>{t.labels.destinationState[state]}</Pill>
   );
+}
+
+const LEVEL_TONES: Record<Level, Tone> = {
+  info: 'neutral',
+  warning: 'held',
+  error: 'danger',
+  critical: 'danger',
+};
+
+/** An Incident's Level. Critical is solid, so it stands out from Error without color. */
+export function LevelPill({ level }: { level: Level }) {
+  const t = useT();
+  return (
+    <span className="level" data-level={level}>
+      <Pill tone={LEVEL_TONES[level]}>{t.labels.level[level]}</Pill>
+    </span>
+  );
+}
+
+export function IncidentStatePill({ state }: { state: IncidentState }) {
+  const t = useT();
+  return <Pill tone={state === 'open' ? 'neutral' : 'off'}>{t.labels.incidentState[state]}</Pill>;
 }

@@ -1166,6 +1166,129 @@ button.danger {
   }
 }
 
+/* A Project's Incidents: the Level first, then what is going wrong */
+.incident-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 140px 120px 72px 116px;
+  gap: 0.9rem;
+  align-items: center;
+  min-height: 42px;
+  padding: 0.45rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-rows > .incident-row:first-child {
+  border-top: 0;
+}
+
+.incident-row .summary {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.incident-row .row-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.incident-row[data-state='closed'] .row-link {
+  color: var(--muted);
+}
+
+.incident-row .environment,
+.incident-row .occurrences {
+  color: var(--muted);
+  font-size: var(--t-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-row .occurrences,
+.incident-row time {
+  font-variant-numeric: tabular-nums;
+}
+
+.incident-row .states {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.incident-row time {
+  color: var(--muted);
+  font-size: var(--t-s);
+  text-align: right;
+  white-space: nowrap;
+}
+
+@container list (max-width: 760px) {
+  /* The title takes the width left by the date; the rest shares the second line. */
+  .incident-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 1rem;
+  }
+
+  .incident-row .summary {
+    grid-column: 1 / 4;
+    grid-row: 1;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .incident-row time {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .incident-row .level {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .incident-row .environment {
+    grid-column: 2;
+    grid-row: 2;
+    max-width: 10rem;
+  }
+
+  .incident-row .occurrences {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .incident-row .states {
+    grid-column: 4;
+    grid-row: 2;
+  }
+}
+
+/* Critical is solid: it stands out from Error without relying on color alone. */
+.level[data-level='critical'] .badge {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.incident .page-header h1 {
+  overflow-wrap: anywhere;
+}
+
+.incident .report-text {
+  white-space: pre-wrap;
+}
+
+.incident code {
+  overflow-wrap: anywhere;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;

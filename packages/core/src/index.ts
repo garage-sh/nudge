@@ -4,6 +4,7 @@ export * from './keys.js';
 export * from './lifecycle.js';
 export * from './destination.js';
 export * from './filter.js';
+export * from './fingerprint.js';
 export * from './mail.js';
 export * from './queues.js';
 export * from './triage.js';

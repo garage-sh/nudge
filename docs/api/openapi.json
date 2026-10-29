@@ -3,7 +3,7 @@
   "info": {
     "title": "nudge public API",
     "version": "v1",
-    "description": "Posts a Feedback to a Project of a nudge Instance. The server URL is the Instance’s own."
+    "description": "Posts a Feedback, or reports an Incident, to a Project of a nudge Instance. The server URL is the Instance’s own."
   },
   "servers": [
     {
@@ -203,7 +203,7 @@
                     },
                     "details": {
                       "type": "array",
-                      "description": "The refused fields, for `invalid_feedback`.",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -244,7 +244,7 @@
                     },
                     "details": {
                       "type": "array",
-                      "description": "The refused fields, for `invalid_feedback`.",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -284,7 +284,7 @@
                     },
                     "details": {
                       "type": "array",
-                      "description": "The refused fields, for `invalid_feedback`.",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -333,7 +333,296 @@
                     },
                     "details": {
                       "type": "array",
-                      "description": "The refused fields, for `invalid_feedback`.",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/incidents": {
+      "post": {
+        "operationId": "postIncident",
+        "summary": "Report an Occurrence of an Incident",
+        "description": "From a server only, with the Project’s secret key (`nk_sec_…`): the public key is refused. One request is one Occurrence. It opens an Incident, or is absorbed by the Open Incident of the Project with the same Fingerprint (declared, or derived from the title and the Environment).",
+        "security": [
+          {
+            "projectKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "description": "What is going wrong, not blank. Without a Fingerprint, Occurrences with the same title and Environment are grouped into one Incident.",
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "message": {
+                    "description": "The detail of what went wrong.",
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warning",
+                      "error",
+                      "critical"
+                    ],
+                    "description": "How serious it is. Without it, the Project’s default Level applies. A higher Level on a later Occurrence raises the Incident’s Level."
+                  },
+                  "environment": {
+                    "description": "Where the application runs (production, staging…), as you name it.",
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "fingerprint": {
+                    "description": "Groups the Occurrences that share it into one Open Incident, whatever their titles (for a title carrying a variable id). Derived from the title and the Environment when absent.",
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "context": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "description": "What whoever reads the Incident needs to act: version, host, service, trace link… 50 entries at most, with non-blank keys and scalar values (strings of 1000 characters at most). It never decides the Fingerprint. Never put secrets or personal data in it."
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "additionalProperties": false,
+                "description": "One request is one Occurrence. Strict: an unknown field refuses the Occurrence."
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The Occurrence is recorded in the Incident returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "The Incident the Occurrence landed in."
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "closed"
+                      ]
+                    },
+                    "opened": {
+                      "type": "boolean",
+                      "description": "`true` when this Occurrence opened the Incident."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "state",
+                    "opened"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_incident"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The key is missing or rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_key",
+                        "invalid_key"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A public key was sent: Incidents require the secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "secret_key_required"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many rejected secret keys from this IP.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "too_many_attempts"
+                      ]
+                    },
+                    "details": {
+                      "type": "array",
+                      "description": "The refused fields, for `invalid_feedback` and `invalid_incident`.",
                       "items": {
                         "type": "object",
                         "properties": {

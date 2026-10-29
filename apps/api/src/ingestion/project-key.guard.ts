@@ -1,19 +1,10 @@
-import {
-  HttpException,
-  HttpStatus,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-  type CanActivate,
-  type ExecutionContext,
-} from '@nestjs/common';
-import { hashSecretKey } from '@nudge/core';
+import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { projects, type Db, type Project } from '@nudge/database';
 import { PUBLIC_KEY_PREFIX, type Source } from '@nudge/shared';
 import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
-import { clientKey, RateLimiter } from '../infra/rate-limiter.js';
 import { DB } from '../infra/tokens.js';
+import { bearerKey, invalidKey, projectWhere, SecretKeys } from './secret-keys.js';
 import { WidgetAccess, TooManyFeedbacks } from './widget-access.js';
 
 export type AuthenticatedRequest = Request & { project: Project; source: Source };
@@ -26,24 +17,22 @@ export type AuthenticatedRequest = Request & { project: Project; source: Source 
  */
 @Injectable()
 export class ProjectKeyGuard implements CanActivate {
-  /**
-   * Unknown secret keys per IP: 20 per minute. Guessing a 256-bit key is hopeless, but
-   * each attempt costs a Postgres lookup; past the limit, the IP is refused before it.
-   */
-  private readonly invalidSecretKeys = new RateLimiter({ limit: 20, windowMs: 60_000 });
-
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly widgetAccess: WidgetAccess,
+    private readonly secretKeys: SecretKeys,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
     const request = http.getRequest<AuthenticatedRequest>();
-    const [scheme, key] = (request.headers.authorization ?? '').split(' ');
-    if (scheme !== 'Bearer' || !key) throw new UnauthorizedException({ error: 'missing_key' });
+    const key = bearerKey(request.headers.authorization);
     if (!key.startsWith(PUBLIC_KEY_PREFIX)) {
-      request.project = await this.secretKeyProject(key, request.ip, http.getResponse<Response>());
+      request.project = await this.secretKeys.project(
+        key,
+        request.ip,
+        http.getResponse<Response>(),
+      );
       request.source = 'api';
       return true;
     }
@@ -63,28 +52,9 @@ export class ProjectKeyGuard implements CanActivate {
     }
   }
 
-  private async secretKeyProject(
-    key: string,
-    ip: string | undefined,
-    response: Response,
-  ): Promise<Project> {
-    const client = clientKey(ip);
-    const wait = this.invalidSecretKeys.msUntilReset(client);
-    if (wait > 0) {
-      response.setHeader('Retry-After', String(Math.ceil(wait / 1000)));
-      throw new HttpException({ error: 'too_many_attempts' }, HttpStatus.TOO_MANY_REQUESTS);
-    }
-    try {
-      return await this.project(eq(projects.secretKeyHash, hashSecretKey(key)));
-    } catch (error) {
-      if (error instanceof UnauthorizedException) this.invalidSecretKeys.consume(client);
-      throw error;
-    }
-  }
-
   private async project(condition: ReturnType<typeof eq>): Promise<Project> {
-    const [project] = await this.db.select().from(projects).where(condition).limit(1);
-    if (!project) throw new UnauthorizedException({ error: 'invalid_key' });
+    const project = await projectWhere(this.db, condition);
+    if (!project) throw invalidKey();
     return project;
   }
 }

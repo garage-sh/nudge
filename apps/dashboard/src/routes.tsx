@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router';
 import { Destinations } from './screens/destinations/Destinations.js';
 import { Feedback } from './screens/Feedback.js';
 import { Feedbacks } from './screens/Feedbacks.js';
+import { Incident } from './screens/Incident.js';
+import { Incidents } from './screens/Incidents.js';
 import { Invitation } from './screens/Invitation.js';
 import { Members } from './screens/Members.js';
 import { NotFound } from './screens/NotFound.js';
@@ -33,6 +35,8 @@ export function AppRoutes() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<Project />} />
           <Route path="projects/:id/destinations" element={<Destinations />} />
+          <Route path="projects/:id/incidents" element={<Incidents />} />
+          <Route path="projects/:id/incidents/:incidentId" element={<Incident />} />
           <Route path="members" element={<Members />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />

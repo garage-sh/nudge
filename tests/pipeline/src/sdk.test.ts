@@ -76,4 +76,37 @@ describe('JS SDK (secret key)', () => {
 
     expect(await pipeline.readFeedback(id)).toMatchObject({ author: null, authorTrust: null });
   });
+
+  it('reports an Incident: the first Occurrence opens it, the same one again is absorbed', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Incidents' });
+    const nudge = createClient({ url: pipeline.url, secretKey });
+    const occurrence = {
+      title: 'Payment provider timed out',
+      level: 'critical',
+      environment: 'production',
+      context: { service: 'checkout' },
+    } as const;
+
+    const opened = await nudge.sendIncident(occurrence);
+    const absorbed = await nudge.sendIncident(occurrence);
+
+    expect(opened).toEqual({ id: expect.any(String), state: 'open', opened: true });
+    expect(absorbed).toEqual({ id: opened.id, state: 'open', opened: false });
+  });
+
+  it('rejects an Incident refused by the Instance with the API code and the field details', async () => {
+    const { secretKey } = await pipeline.createProject({ name: 'Incident refusal' });
+    const nudge = createClient({ url: pipeline.url, secretKey });
+
+    const refusal = await nudge
+      .sendIncident({ title: 'Hello', level: 'fatal' as 'error' })
+      .catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(NudgeError);
+    expect(refusal).toMatchObject({
+      status: 400,
+      code: 'invalid_incident',
+      details: [{ path: 'level', message: expect.any(String) }],
+    });
+  });
 });

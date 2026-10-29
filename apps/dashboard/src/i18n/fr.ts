@@ -46,6 +46,21 @@ export const fr: Messages = {
       active: 'Active',
       suspended: 'Suspendue',
     },
+    level: {
+      info: 'Info',
+      warning: 'Avertissement',
+      error: 'Erreur',
+      critical: 'Critique',
+    },
+    levelOrigin: {
+      declared: 'Déclaré par l’émetteur',
+      judge: 'Évalué par le Juge',
+      default: 'Niveau par défaut du Projet',
+    },
+    incidentState: {
+      open: 'Ouvert',
+      closed: 'Clos',
+    },
     failureClass: {
       transient: 'indisponibilité passagère',
       auth: 'identifiants refusés',
@@ -66,6 +81,7 @@ export const fr: Messages = {
   },
 
   apiErrors: {
+    incident_not_found: 'Cet Incident n’existe pas.',
     invalid_credentials: 'Email ou mot de passe incorrect.',
     setup_completed: 'Le premier compte existe déjà : connectez-vous.',
     email_already_used: 'Un Membre utilise déjà cet email.',
@@ -388,6 +404,7 @@ export const fr: Messages = {
     fallbackTitle: 'Projet',
     sections: 'Sections du Projet',
     destinationsTab: 'Destinations',
+    incidentsTab: 'Incidents',
     settingsTab: 'Réglages',
     keys: 'Clés',
     publicKey: 'Clé publique',
@@ -411,6 +428,65 @@ export const fr: Messages = {
     originsHelp:
       'Le Widget n’est accepté que depuis ces origines (schéma://hôte[:port], sans chemin).',
     saveOrigins: 'Enregistrer les origines',
+    incidents: {
+      title: 'Incidents',
+      help: 'Votre application signale un Incident quand quelque chose se passe mal de son côté, depuis son serveur uniquement, avec la clé secrète.',
+      defaultLevel: 'Niveau par défaut',
+      defaultLevelHelp: 'Le Niveau d’un Incident dont l’émetteur n’en déclare aucun.',
+      saveDefaultLevel: 'Enregistrer le Niveau par défaut',
+      example: 'Exemple de requête',
+      exampleHelp:
+        'Placez la clé secrète dans la variable d’environnement NUDGE_SECRET_KEY du serveur qui signale. Un même titre et un même Environnement sont regroupés en un seul Incident ; une empreinte regroupe des titres différents.',
+    },
+  },
+
+  incidents: {
+    views: 'Vues',
+    view: {
+      all: 'Tous',
+      open: 'Ouverts',
+      closed: 'Clos',
+    },
+    filters: 'Filtres',
+    filter: { level: 'Niveau', environment: 'Environnement' },
+    anyLevel: 'Tous',
+    anyEnvironment: 'Tous',
+    shown: (count: number, more: boolean) =>
+      `${count} Incident${s(count)} affiché${s(count)}${more ? ', d’autres à charger' : ''}.`,
+    noMatch: 'Aucun Incident ne correspond à ces filtres.',
+    clearFilters: 'Effacer les filtres',
+    emptyTitle: 'Aucun Incident signalé pour l’instant.',
+    emptyHelp:
+      'Les Incidents arrivent ici quand le serveur du Projet signale un problème, avec sa clé secrète.',
+    emptyAction: 'Voir comment en signaler un',
+    showMore: 'Afficher plus',
+    occurrences: (count: number) => `${count} Occurrence${s(count)}`,
+    noEnvironment: 'Aucun Environnement',
+    lastSeen: 'Vu pour la dernière fois',
+  },
+
+  incident: {
+    backToList: 'Retour aux Incidents',
+    properties: 'Incident',
+    state: 'État',
+    level: 'Niveau',
+    levelOrigin: 'Origine du Niveau',
+    environment: 'Environnement',
+    occurrences: 'Occurrences',
+    firstSeen: 'Vu pour la première fois',
+    lastSeen: 'Vu pour la dernière fois',
+    fingerprint: 'Empreinte',
+    firstReport: 'Première Occurrence',
+    lastReport: 'Dernière Occurrence',
+    onlyReport: 'Occurrence',
+    title: 'Titre',
+    message: 'Message',
+    declaredLevel: 'Niveau déclaré',
+    notDeclared: 'Non déclaré',
+    receivedAt: 'Reçue',
+    context: 'Contexte',
+    noContext: 'Aucun contexte.',
+    noMessage: 'Aucun message.',
   },
 
   destinations: {

@@ -11,6 +11,7 @@ const SHOP: ProjectView = {
   description: null,
   publicKey: 'nk_pub_shop',
   allowedOrigins: [],
+  defaultLevel: 'error',
   createdAt: '2026-10-24T08:00:00.000Z',
 };
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { feedbackInputSchema } from './feedback-input.js';
+import { incidentInputSchema } from './incident-input.js';
 
 const errorBody = (codes: readonly string[]) => ({
   type: 'object',
@@ -7,7 +8,7 @@ const errorBody = (codes: readonly string[]) => ({
     error: { type: 'string', enum: codes },
     details: {
       type: 'array',
-      description: 'The refused fields, for `invalid_feedback`.',
+      description: 'The refused fields, for `invalid_feedback` and `invalid_incident`.',
       items: {
         type: 'object',
         properties: { path: { type: 'string' }, message: { type: 'string' } },
@@ -33,7 +34,7 @@ const refusal = (description: string, codes: readonly string[], retryAfter = fal
 
 /**
  * OpenAPI description of the public ingestion API, the contract the Widget, the SDK and
- * any other caller post Feedback against. Only this surface is described: the dashboard
+ * any other caller post Feedback and report Incidents against. Only this surface is described: the dashboard
  * API is not a public contract.
  */
 export function publicApiDocument() {
@@ -43,7 +44,7 @@ export function publicApiDocument() {
       title: 'nudge public API',
       version: 'v1',
       description:
-        'Posts a Feedback to a Project of a nudge Instance. The server URL is the Instance’s own.',
+        'Posts a Feedback, or reports an Incident, to a Project of a nudge Instance. The server URL is the Instance’s own.',
     },
     servers: [{ url: 'https://nudge.example.com' }],
     paths: {
@@ -86,6 +87,59 @@ export function publicApiDocument() {
             '429': refusal(
               'Too many Feedbacks (public key) or too many rejected secret keys (from this IP).',
               ['too_many_feedbacks', 'too_many_attempts'],
+              true,
+            ),
+          },
+        },
+      },
+      '/v1/incidents': {
+        post: {
+          operationId: 'postIncident',
+          summary: 'Report an Occurrence of an Incident',
+          description:
+            'From a server only, with the Project’s secret key (`nk_sec_…`): the public key ' +
+            'is refused. One request is one Occurrence. It opens an Incident, or is absorbed ' +
+            'by the Open Incident of the Project with the same Fingerprint (declared, or ' +
+            'derived from the title and the Environment).',
+          security: [{ projectKey: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': { schema: z.toJSONSchema(incidentInputSchema, { io: 'output' }) },
+            },
+          },
+          responses: {
+            '202': {
+              description: 'The Occurrence is recorded in the Incident returned.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      id: {
+                        type: 'string',
+                        format: 'uuid',
+                        description: 'The Incident the Occurrence landed in.',
+                      },
+                      state: { type: 'string', enum: ['open', 'closed'] },
+                      opened: {
+                        type: 'boolean',
+                        description: '`true` when this Occurrence opened the Incident.',
+                      },
+                    },
+                    required: ['id', 'state', 'opened'],
+                  },
+                },
+              },
+            },
+            '400': refusal('The body is malformed.', ['invalid_incident']),
+            '401': refusal('The key is missing or rejected.', ['missing_key', 'invalid_key']),
+            '403': refusal('A public key was sent: Incidents require the secret key.', [
+              'secret_key_required',
+            ]),
+            '429': refusal(
+              'Too many rejected secret keys from this IP.',
+              ['too_many_attempts'],
               true,
             ),
           },
