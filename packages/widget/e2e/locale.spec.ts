@@ -11,7 +11,7 @@ test('speaks French on a French page, rate limit message included', async ({ pag
 
   await page.getByRole('button', { name: fr.launcher }).click();
   await page.getByLabel(fr.text).fill('Hello');
-  await page.getByLabel(fr.type).selectOption({ label: fr.feedbackTypes.opinion });
+  await page.getByRole('radio', { name: fr.feedbackTypes.opinion }).check();
   await page.getByRole('button', { name: fr.submit, exact: true }).click();
 
   await expect(page.getByRole('alert')).toHaveText(fr.rateLimited(1));

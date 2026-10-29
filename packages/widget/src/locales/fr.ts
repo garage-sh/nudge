@@ -4,11 +4,12 @@ import type { Messages } from './en.js';
 export const fr: Messages = {
   launcher: 'Laisser un retour',
   title: 'Laisser un retour',
+  subtitle: 'Un bug, une idée, une question ? Dites-nous tout.',
   close: 'Fermer',
   text: 'Votre message',
+  textPlaceholder: 'Ce qui s’est passé, ce que vous attendiez, ou votre idée…',
   textEmpty: 'Écrivez votre message avant d’envoyer.',
   type: 'Type (facultatif)',
-  typeUnspecified: 'Non précisé',
   feedbackTypes: {
     bug: 'Bug',
     suggestion: 'Suggestion',
@@ -16,6 +17,7 @@ export const fr: Messages = {
     question: 'Question',
   },
   email: 'Email (facultatif)',
+  emailPlaceholder: 'vous@exemple.fr',
   attachCapture: 'Joindre une capture de la page',
   captureInProgress: 'Capture de la page en cours…',
   captureHelp:
@@ -27,6 +29,7 @@ export const fr: Messages = {
   submit: 'Envoyer',
   submitting: 'Envoi…',
   sent: 'Merci ! Votre retour a bien été envoyé.',
+  sendAnother: 'Envoyer un autre retour',
   network: 'Envoi impossible : vérifiez votre connexion, puis réessayez.',
   invalid:
     'Votre retour n’a pas été accepté : vérifiez le message, l’email et la capture, puis réessayez.',

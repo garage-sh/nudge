@@ -13,7 +13,7 @@ const widgetIn = (container: HTMLElement) => {
 };
 
 const launcherText = (widget: WidgetElement) =>
-  widget.shadowRoot?.querySelector('.launcher')?.textContent;
+  widget.shadowRoot?.querySelector('.launcher-label')?.textContent;
 
 it('mounts the Widget with the host key, Instance, identity, metadata and URL redaction', () => {
   const redactUrl = (url: URL) => url.origin;
