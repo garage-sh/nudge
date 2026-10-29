@@ -4,11 +4,12 @@ import type { FeedbackType } from '@nudge/shared';
 export const en = {
   launcher: 'Send feedback',
   title: 'Send feedback',
+  subtitle: 'A bug, an idea, a question? Tell us about it.',
   close: 'Close',
   text: 'Your message',
+  textPlaceholder: 'What happened, what you expected, or your idea…',
   textEmpty: 'Write your message before sending.',
   type: 'Type (optional)',
-  typeUnspecified: 'Not specified',
   feedbackTypes: {
     bug: 'Bug',
     suggestion: 'Suggestion',
@@ -16,6 +17,7 @@ export const en = {
     question: 'Question',
   } satisfies Record<FeedbackType, string>,
   email: 'Email (optional)',
+  emailPlaceholder: 'you@example.com',
   attachCapture: 'Attach a screenshot of the page',
   captureInProgress: 'Taking a screenshot of the page…',
   captureHelp:
@@ -27,6 +29,7 @@ export const en = {
   submit: 'Send',
   submitting: 'Sending…',
   sent: 'Thank you! Your feedback has been sent.',
+  sendAnother: 'Send more feedback',
   network: 'Could not send: check your connection, then try again.',
   invalid:
     'Your feedback was not accepted: check the message, the email and the screenshot, then try again.',

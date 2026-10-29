@@ -103,7 +103,7 @@ test('sends the Type and email the Author chose', async ({ page, host, api }) =>
 
   await page.getByRole('button', { name: 'Send feedback' }).click();
   await page.getByLabel('Your message').fill('A dark mode would be welcome');
-  await page.getByLabel('Type (optional)').selectOption({ label: 'Suggestion' });
+  await page.getByRole('radio', { name: 'Suggestion' }).check();
   await page.getByLabel('Email (optional)').fill('ada@example.test');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 
