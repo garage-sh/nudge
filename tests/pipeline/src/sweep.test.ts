@@ -167,7 +167,7 @@ describe('Sweep of Deliveries left pending', () => {
     pipeline = await startPipeline({
       sweep: { delayMs: 300, intervalMs: 100 },
       // Enough slots that Deliveries held at a slow Destination leave room for the others.
-      concurrency: { triage: 2, dispatch: 200 },
+      concurrency: { triage: 2, dispatch: 200, incidentLevel: 10 },
     });
   });
 

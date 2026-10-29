@@ -51,8 +51,9 @@ export const incidentInputSchema = z
     level: z
       .enum(LEVELS)
       .describe(
-        'How serious it is. Without it, the Project’s default Level applies. A higher Level ' +
-          'on a later Occurrence raises the Incident’s Level.',
+        'How serious it is. Without it, the Judge assesses the Level within a bounded wait, ' +
+          'failing that the Project’s default Level applies. A higher Level on a later ' +
+          'Occurrence raises the Incident’s Level.',
       )
       .optional(),
     environment: label(

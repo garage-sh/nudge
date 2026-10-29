@@ -439,7 +439,8 @@ export const fr: Messages = {
       title: 'Incidents',
       help: 'Votre application signale un Incident quand quelque chose se passe mal de son côté, depuis son serveur uniquement, avec la clé secrète.',
       defaultLevel: 'Niveau par défaut',
-      defaultLevelHelp: 'Le Niveau d’un Incident dont l’émetteur n’en déclare aucun.',
+      defaultLevelHelp:
+        'Le Niveau d’un Incident dont l’émetteur n’en déclare aucun, quand le Juge n’en donne aucun à temps.',
       quietPeriod: 'Période de calme (minutes)',
       quietPeriodHelp:
         'Un Incident sans nouvelle Occurrence pendant cette durée se clôt de lui-même. Vide : la valeur par défaut de l’Instance (une heure, sauf si NUDGE_INCIDENT_QUIET_PERIOD_MS en fixe une autre). Une Occurrence peut fixer la sienne avec quietPeriod, en secondes.',

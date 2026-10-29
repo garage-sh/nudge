@@ -465,7 +465,8 @@ export const en = {
       title: 'Incidents',
       help: 'Your application reports an Incident when something goes wrong on its side, from its server only, with the secret key.',
       defaultLevel: 'Default Level',
-      defaultLevelHelp: 'The Level of an Incident whose sender declares none.',
+      defaultLevelHelp:
+        'The Level of an Incident whose sender declares none, when the Judge gives none in time.',
       quietPeriod: 'Quiet period (minutes)',
       quietPeriodHelp:
         'An Incident with no new Occurrence for this long closes on its own. Empty: the Instance default (one hour, unless NUDGE_INCIDENT_QUIET_PERIOD_MS sets another). An Occurrence can set its own with quietPeriod, in seconds.',

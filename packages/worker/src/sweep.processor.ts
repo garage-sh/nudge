@@ -3,10 +3,13 @@ import {
   CAPTURE_KEY_PREFIX,
   closingJobId,
   DISPATCH_JOB,
+  INCIDENT_LEVEL_JOB,
+  incidentLevelSweepJobId,
   sweepJobId,
   triageJobId,
   TRIAGE_JOB,
   type DispatchJob,
+  type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
 import {
@@ -14,6 +17,7 @@ import {
   closeQuietIncidents,
   deliveries,
   feedbacks,
+  incidentsLeftAwaitingLevel,
   rearmForClosing,
   type Db,
 } from '@nudge/database';
@@ -26,7 +30,13 @@ import {
   MAX_TRIAGE_SWEEP_BACKOFF_MS,
   type WorkerOptions,
 } from './options.js';
-import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import {
+  DB,
+  DISPATCH_QUEUE_TOKEN,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
+  OPTIONS,
+  TRIAGE_QUEUE_TOKEN,
+} from './tokens.js';
 
 /** Items handled per run (or per page): the next run picks up the rest. */
 const BATCH = 100;
@@ -59,6 +69,8 @@ export class SweepProcessor {
     @Inject(DB) private readonly db: Db,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue<TriageJob>,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
+    @Inject(INCIDENT_LEVEL_QUEUE_TOKEN)
+    private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
 
@@ -152,6 +164,34 @@ export class SweepProcessor {
     );
     for (const id of batch) {
       this.logger.warn(`Delivery ${id} left pending without a job: sent back to dispatch`);
+    }
+  }
+
+  /**
+   * Queues again the Level assessment of the Incidents still awaiting their Level one
+   * Judge wait after its end: their job was lost (queueing failed, retries exhausted).
+   * Past the wait, the assessment no longer asks the Judge: the default Level applies and
+   * the Incident is dispatched. A job still on its way does no harm: the first one to
+   * settle the Level wins, the other does nothing.
+   */
+  async sweepIncidentLevels(): Promise<void> {
+    const { judgeWaitMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const due = await incidentsLeftAwaitingLevel(
+      this.db,
+      new Date(Date.now() - 2 * judgeWaitMs),
+      BATCH,
+    );
+    if (due.length === 0) return;
+    const run = Date.now();
+    await this.incidentLevelQueue.addBulk(
+      due.map((incidentId) => ({
+        name: INCIDENT_LEVEL_JOB,
+        data: { incidentId },
+        opts: { jobId: incidentLevelSweepJobId(incidentId, run) },
+      })),
+    );
+    for (const id of due) {
+      this.logger.warn(`Incident ${id} left awaiting its Level: its assessment queued again`);
     }
   }
 

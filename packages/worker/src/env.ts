@@ -120,6 +120,12 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
         DEFAULT_INCIDENTS.sweepIntervalMs,
         durationBounds,
       ),
+      judgeWaitMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_JUDGE_WAIT_MS',
+        DEFAULT_INCIDENTS.judgeWaitMs,
+        durationBounds,
+      ),
     },
     concurrency: {
       triage: integerEnv(env, 'NUDGE_TRIAGE_CONCURRENCY', DEFAULT_CONCURRENCY.triage, {
@@ -128,6 +134,12 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
       dispatch: integerEnv(env, 'NUDGE_DISPATCH_CONCURRENCY', DEFAULT_CONCURRENCY.dispatch, {
         min: 1,
       }),
+      incidentLevel: integerEnv(
+        env,
+        'NUDGE_INCIDENT_LEVEL_CONCURRENCY',
+        DEFAULT_CONCURRENCY.incidentLevel,
+        { min: 1 },
+      ),
     },
   };
 }

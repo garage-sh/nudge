@@ -1,0 +1,2 @@
+ALTER TABLE "incidents" ADD COLUMN "awaiting_level" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "incidents_awaiting_level_idx" ON "incidents" USING btree ("first_seen_at") WHERE "incidents"."awaiting_level";

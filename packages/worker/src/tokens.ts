@@ -3,6 +3,8 @@ export const DB = Symbol('DB');
 export const DESTINATION_ADAPTER_RESOLVER = Symbol('DESTINATION_ADAPTER_RESOLVER');
 export const DISPATCH_QUEUE_TOKEN = Symbol('DISPATCH_QUEUE');
 export const TRIAGE_QUEUE_TOKEN = Symbol('TRIAGE_QUEUE');
+/** Queue of the Judge's assessments of an undeclared Incident Level. */
+export const INCIDENT_LEVEL_QUEUE_TOKEN = Symbol('INCIDENT_LEVEL_QUEUE');
 /** Queue of the Member alerts (`AlertsService`). */
 export const ALERTS_QUEUE_TOKEN = Symbol('ALERTS_QUEUE');
 export const OPTIONS = Symbol('OPTIONS');

@@ -397,7 +397,7 @@
                       "error",
                       "critical"
                     ],
-                    "description": "How serious it is. Without it, the Project’s default Level applies. A higher Level on a later Occurrence raises the Incident’s Level."
+                    "description": "How serious it is. Without it, the Judge assesses the Level within a bounded wait, failing that the Project’s default Level applies. A higher Level on a later Occurrence raises the Incident’s Level."
                   },
                   "environment": {
                     "description": "Where the application runs (production, staging…), as you name it.",

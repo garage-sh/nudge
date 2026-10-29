@@ -5,9 +5,9 @@ import {
   type IncidentState,
   type Level,
 } from '@nudge/shared';
-import { and, asc, eq, exists, isNotNull, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, isNotNull, lt, ne, sql, type SQL } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
-import type { CreatedDelivery } from './dispatch.js';
+import { createMissingIncidentDeliveries, type CreatedDelivery } from './dispatch.js';
 import { deliveries, incidents, projects } from './schema.js';
 
 export type IncidentRow = typeof incidents.$inferSelect;
@@ -28,6 +28,11 @@ export interface RecordedOccurrence {
   readonly opened: boolean;
   /** `true` when the Occurrence, absorbed, raised the Level of the Open Incident. */
   readonly raised: boolean;
+  /**
+   * `true` while the Incident waits for the worker to settle its Level (opened without a
+   * declared one): its Dispatch `opened` has not run, the worker runs it.
+   */
+  readonly awaitingLevel: boolean;
 }
 
 /**
@@ -43,6 +48,9 @@ export interface RecordedOccurrence {
  * Incident), but never opens one: with no Open Incident to match, nothing is recorded and
  * `null` is returned. Every Occurrence sets the Incident's Quiet period override to its
  * own (`null` when it sets none).
+ *
+ * An Incident opened without a declared Level opens awaiting its Level: the worker
+ * settles it (`settleIncidentLevel`), then runs its Dispatch `opened`.
  */
 export async function recordOccurrence(
   tx: Transaction,
@@ -53,7 +61,7 @@ export async function recordOccurrence(
   const declared = report.level !== null;
   for (;;) {
     const [open] = await tx
-      .select({ id: incidents.id, level: incidents.level })
+      .select({ id: incidents.id, level: incidents.level, awaitingLevel: incidents.awaitingLevel })
       .from(incidents)
       .where(
         and(
@@ -76,7 +84,7 @@ export async function recordOccurrence(
           updatedAt: sql`now()`,
         })
         .where(eq(incidents.id, open.id));
-      return { id: open.id, opened: false, raised };
+      return { id: open.id, opened: false, raised, awaitingLevel: open.awaitingLevel };
     }
     if (report.resolved) return null;
     const [inserted] = await tx
@@ -88,6 +96,7 @@ export async function recordOccurrence(
         environment: report.environment,
         level: occurrence.level,
         levelOrigin: declared ? 'declared' : 'default',
+        awaitingLevel: !declared,
         firstSeenAt: receivedAt,
         lastSeenAt: receivedAt,
         firstReport: report,
@@ -96,7 +105,9 @@ export async function recordOccurrence(
       })
       .onConflictDoNothing()
       .returning({ id: incidents.id });
-    if (inserted) return { id: inserted.id, opened: true, raised: false };
+    if (inserted) {
+      return { id: inserted.id, opened: true, raised: false, awaitingLevel: !declared };
+    }
     // Another Occurrence opened the Incident meanwhile: this one is absorbed by it.
   }
 }
@@ -224,4 +235,81 @@ export async function closeQuietIncidents(
     if (closings) closed.push({ id, deliveries: closings });
   }
   return closed;
+}
+
+/** An Incident awaiting its Level, as the worker assesses it. */
+export interface IncidentAwaitingLevel {
+  readonly id: string;
+  readonly firstSeenAt: Date;
+  readonly firstReport: IncidentReport;
+  readonly projectDescription: string | null;
+}
+
+/** The Incident if it still awaits its Level, otherwise `null` (settled, or deleted). */
+export async function readIncidentAwaitingLevel(
+  db: Db,
+  incidentId: string,
+): Promise<IncidentAwaitingLevel | null> {
+  const [incident] = await db
+    .select({
+      id: incidents.id,
+      firstSeenAt: incidents.firstSeenAt,
+      firstReport: incidents.firstReport,
+      projectDescription: projects.description,
+    })
+    .from(incidents)
+    .innerJoin(projects, eq(projects.id, incidents.projectId))
+    .where(and(eq(incidents.id, incidentId), eq(incidents.awaitingLevel, true)));
+  return incident ?? null;
+}
+
+/**
+ * Settles the Level of an Incident awaiting it, then runs its Dispatch `opened`: the
+ * Judge's Level (`judged`, origin `judge`), or with `null` the default Level it opened
+ * with. A Level an Occurrence declared meanwhile wins over the Judge's. A Closed
+ * Incident is dispatched all the same: its Deliveries go out once, in its final state
+ * ("opened then closed"). Returns the Deliveries to queue after the commit, or `null` if
+ * the Incident no longer awaits its Level (settled already, or deleted).
+ */
+export async function settleIncidentLevel(
+  db: Db,
+  incidentId: string,
+  judged: Level | null,
+): Promise<CreatedDelivery[] | null> {
+  return db.transaction(async (tx) => {
+    const [incident] = await tx
+      .select({ levelOrigin: incidents.levelOrigin })
+      .from(incidents)
+      .where(and(eq(incidents.id, incidentId), eq(incidents.awaitingLevel, true)))
+      .for('update');
+    if (!incident) return null;
+    const judge = judged !== null && incident.levelOrigin !== 'declared';
+    await tx
+      .update(incidents)
+      .set({
+        awaitingLevel: false,
+        ...(judge ? { level: judged, levelOrigin: 'judge' as const } : {}),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(incidents.id, incidentId));
+    return createMissingIncidentDeliveries(tx, incidentId, 'opened');
+  });
+}
+
+/**
+ * Up to `limit` Incidents still awaiting their Level although they opened before
+ * `openedBefore`: their assessment was lost (queueing failed, retries exhausted).
+ */
+export async function incidentsLeftAwaitingLevel(
+  db: Db,
+  openedBefore: Date,
+  limit: number,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(and(eq(incidents.awaitingLevel, true), lt(incidents.firstSeenAt, openedBefore)))
+    .orderBy(asc(incidents.firstSeenAt))
+    .limit(limit);
+  return rows.map(({ id }) => id);
 }

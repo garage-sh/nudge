@@ -17,12 +17,14 @@ import {
   PURGE_RETENTION_JOB,
   PROBE_SUSPENDED_JOB,
   DISPATCH_QUEUE,
+  INCIDENT_LEVEL_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
   DEFAULT_QUEUE_PREFIX,
   alertJobId,
   type AlertJob,
   type DispatchJob,
+  type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
@@ -32,6 +34,7 @@ import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import { FeedbackDispatcher } from './feedback-dispatcher.js';
 import { IncidentDispatcher } from './incident-dispatcher.js';
+import { IncidentLevelProcessor } from './incident-level.processor.js';
 import { PurgeProcessor } from './purge.processor.js';
 import { SweepProcessor } from './sweep.processor.js';
 import {
@@ -41,6 +44,7 @@ import {
   SECRET_CIPHER,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
   TRIAGE_QUEUE_TOKEN,
   ON_SUSPENSION,
 } from './tokens.js';
@@ -87,10 +91,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
+    @Inject(INCIDENT_LEVEL_QUEUE_TOKEN) private readonly incidentLevelQueue: Queue,
     @Inject(MAINTENANCE_QUEUE_TOKEN) private readonly maintenanceQueue: Queue,
     @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
+    private readonly incidentLevel: IncidentLevelProcessor,
     private readonly sweep: SweepProcessor,
     private readonly purge: PurgeProcessor,
     private readonly suspension: SuspensionService,
@@ -138,6 +144,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           jobOptions(options.retryPolicy),
         ),
         queueProvider(TRIAGE_QUEUE_TOKEN, TRIAGE_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(
+          INCIDENT_LEVEL_QUEUE_TOKEN,
+          INCIDENT_LEVEL_QUEUE,
+          prefix,
+          jobOptions(options.retryPolicy),
+        ),
         queueProvider(ALERTS_QUEUE_TOKEN, ALERTS_QUEUE, prefix, jobOptions(options.retryPolicy)),
         queueProvider(MAINTENANCE_QUEUE_TOKEN, MAINTENANCE_QUEUE, prefix, {
           removeOnComplete: 100,
@@ -148,6 +160,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         DispatchProcessor,
         FeedbackDispatcher,
         IncidentDispatcher,
+        IncidentLevelProcessor,
         SweepProcessor,
         PurgeProcessor,
         SuspensionService,
@@ -209,6 +222,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           }),
         { connection: this.redis, prefix, concurrency: concurrency.dispatch },
       ),
+      new Worker<IncidentLevelJob>(
+        INCIDENT_LEVEL_QUEUE,
+        (job) => this.incidentLevel.handle(job.data),
+        { connection: this.redis, prefix, concurrency: concurrency.incidentLevel },
+      ),
       new Worker<AlertJob>(
         ALERTS_QUEUE,
         (job) =>
@@ -227,7 +245,10 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           if (job.name === PROBE_SUSPENDED_JOB) await this.suspension.probe();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
           if (job.name === SWEEP_CAPTURES_JOB) await this.sweep.sweepCaptures();
-          if (job.name === SWEEP_QUIET_INCIDENTS_JOB) await this.sweep.sweepQuietIncidents();
+          if (job.name === SWEEP_QUIET_INCIDENTS_JOB) {
+            await this.sweep.sweepQuietIncidents();
+            await this.sweep.sweepIncidentLevels();
+          }
         },
         { connection: this.redis, prefix },
       ),
@@ -239,6 +260,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await Promise.all([
       this.dispatchQueue.close(),
       this.triageQueue.close(),
+      this.incidentLevelQueue.close(),
       this.maintenanceQueue.close(),
       this.alertsQueue.close(),
     ]);

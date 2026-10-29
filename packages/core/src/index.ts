@@ -5,6 +5,7 @@ export * from './lifecycle.js';
 export * from './destination.js';
 export * from './filter.js';
 export * from './incident-filter.js';
+export * from './incident-level.js';
 export * from './incident-presentation.js';
 export * from './fingerprint.js';
 export * from './mail.js';

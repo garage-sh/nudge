@@ -177,6 +177,12 @@ export const incidents = pgTable(
     environment: text('environment'),
     level: levelEnum('level').notNull(),
     levelOrigin: levelOriginEnum('level_origin').notNull(),
+    /**
+     * Opened without a declared Level, the Incident waits for the worker to settle it
+     * (the Judge's, within a bounded wait, otherwise the default one, already in `level`):
+     * its Dispatch `opened` has not run yet.
+     */
+    awaitingLevel: boolean('awaiting_level').notNull().default(false),
     /** Occurrences absorbed, the first one included. */
     occurrences: integer('occurrences').notNull().default(1),
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
@@ -198,6 +204,10 @@ export const incidents = pgTable(
       'incidents_closure',
       sql`(${t.state} = 'closed') = (${t.closedAt} is not null) and (${t.closedAt} is null) = (${t.closeCause} is null)`,
     ),
+    // The sweep of the Incidents whose Level was never settled (assessment not queued).
+    index('incidents_awaiting_level_idx')
+      .on(t.firstSeenAt)
+      .where(sql`${t.awaitingLevel}`),
     // The sweep of the Open Incidents silent past their Quiet period.
     index('incidents_open_last_seen_at_idx')
       .on(t.lastSeenAt)

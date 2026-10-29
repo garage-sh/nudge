@@ -6,6 +6,7 @@ import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from 
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
+  INCIDENT_LEVEL_QUEUE,
   jobOptions,
   TRIAGE_QUEUE,
   type ReviewAction,
@@ -224,7 +225,9 @@ export interface Pipeline {
    * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
    * a Redis that refuses writes. Returns the function that repairs it.
    */
-  breakEnqueue(name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE): Promise<() => Promise<void>>;
+  breakEnqueue(
+    name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE | typeof INCIDENT_LEVEL_QUEUE,
+  ): Promise<() => Promise<void>>;
   /** The instance settings row as stored (encrypted secrets), or `null`. */
   instanceSettings(): Promise<typeof instanceSettings.$inferSelect | null>;
   /** The Feedback as a Member reads it (state, Verdict, Deliveries), or `null`. */

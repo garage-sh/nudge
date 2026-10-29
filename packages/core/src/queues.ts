@@ -10,6 +10,11 @@ export const TRIAGE_QUEUE = 'triage';
 export const DISPATCH_QUEUE = 'dispatch';
 /** Member alerts, sent to the Instance's Alert destination (retried). */
 export const ALERTS_QUEUE = 'alerts';
+/**
+ * The Judge's assessment of the Level of an Incident whose sender declared none: the
+ * Incident's Dispatch `opened` follows it, within a bounded wait.
+ */
+export const INCIDENT_LEVEL_QUEUE = 'incident-level';
 /** The worker's scheduled tasks (repeatable jobs): sweep of Feedback left Received… */
 export const MAINTENANCE_QUEUE = 'maintenance';
 export const SWEEP_RECEIVED_JOB = 'sweep-received';
@@ -33,6 +38,7 @@ export const DEFAULT_QUEUE_PREFIX = 'nudge';
 /** Job names of the Triage and dispatch queues (a single kind of job each). */
 export const TRIAGE_JOB = 'triage';
 export const DISPATCH_JOB = 'dispatch';
+export const INCIDENT_LEVEL_JOB = 'incident-level';
 
 /** Job id: `triageJobId` or `reviewJobId`. */
 export interface TriageJob {
@@ -46,6 +52,18 @@ export interface TriageJob {
 export interface DispatchJob {
   readonly deliveryId: string;
 }
+
+/** Job id: `incidentLevelJobId`, then `incidentLevelSweepJobId`. */
+export interface IncidentLevelJob {
+  readonly incidentId: string;
+}
+
+/** The assessment of an Incident's Level queued when it opens: an Incident opens only once. */
+export const incidentLevelJobId = (incidentId: string): string => incidentId;
+
+/** The assessment queued again by the sweep, specific to the pass. */
+export const incidentLevelSweepJobId = (incidentId: string, pass: number): string =>
+  `${incidentId}-sweep-${pass}`;
 
 /** First Triage job of a Feedback (ingestion, sweep D18): it is queued only once. */
 export const triageJobId = (feedbackId: string): string => feedbackId;

@@ -141,8 +141,10 @@ describe('Reporting an Incident', () => {
     });
   });
 
-  it('applies the Project’s default Level when none is declared, and a Member can change it', async () => {
+  it('applies the Project’s default Level when none is declared and the Judge gives none, and a Member can change it', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Defaults' });
+    const titles = new Set(['Nightly job failed', 'Cache miss storm']);
+    pipeline.judge.refuse((request) => titles.has(String(request.state['title'])));
     const view = await member.get<ProjectView>(`/api/projects/${project.id}`);
     expect(view.body.defaultLevel).toBe('error');
 

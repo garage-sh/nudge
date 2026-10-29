@@ -21,7 +21,7 @@ describe('Closing an Incident', () => {
   beforeAll(async () => {
     pipeline = await startPipeline({
       suspension: { failureThreshold: 3, cooldownMs: 300, probeIntervalMs: 100 },
-      incidents: { quietPeriodMs: 60 * 60_000, sweepIntervalMs: 100 },
+      incidents: { quietPeriodMs: 60 * 60_000, sweepIntervalMs: 100, judgeWaitMs: 10_000 },
     });
     member = await pipeline.signIn();
   });
@@ -168,7 +168,7 @@ describe('Closing an Incident', () => {
   it('an Occurrence after closing opens a new Incident, notified as opened', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Recurrence' });
     const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
-    const occurrence = { title: 'Queue backing up', fingerprint: 'queue-backlog' };
+    const occurrence = { title: 'Queue backing up', fingerprint: 'queue-backlog', level: 'error' };
     const first = await report(secretKey, occurrence);
     await report(secretKey, { ...occurrence, resolved: true });
     await waitForIncident(first.id, (i) => closedAndDelivered(i) && fake.closings.length === 1);
