@@ -1,4 +1,10 @@
-import { presentAlert, type Alert } from '@nudge/core';
+import {
+  presentAlert,
+  presentIncident,
+  type Alert,
+  type OutgoingIncidentClosing,
+  type OutgoingIncidentDelivery,
+} from '@nudge/core';
 
 /**
  * CommonMark escaping shared by the Destinations that render markdown (Linear,
@@ -21,5 +27,23 @@ export function alertToMarkdown(alert: Alert, escape: (text: string) => string):
     summary,
     ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
     ...(isSafeLink(alert.dashboardUrl) ? [`[Open in nudge](<${alert.dashboardUrl}>)`] : []),
+  ].join('\n\n');
+}
+
+/**
+ * The markdown of an Incident (Linear, GitHub issue or closing comment): the summary,
+ * each detail as a paragraph, then the link to the dashboard. The summary and the
+ * values carry the sender's and the Members' text: both go through `escape`.
+ */
+export function incidentToMarkdown(
+  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
+  escape: (text: string) => string,
+): string {
+  const { summary, details } = presentIncident(delivery);
+  const { dashboardUrl } = delivery.incident;
+  return [
+    escape(summary),
+    ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
+    ...(isSafeLink(dashboardUrl) ? [`[View the Incident in nudge](<${dashboardUrl}>)`] : []),
   ].join('\n\n');
 }

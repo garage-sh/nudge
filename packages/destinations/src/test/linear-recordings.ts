@@ -15,7 +15,9 @@
  *   `RATELIMITED` in `extensions`);
  * - schema: https://github.com/linear/linear/blob/master/packages/sdk/src/schema.graphql
  *   (`IssueCreateInput.teamId` / `labelIds`, `IssuePayload`, `Issue.url`, `IssueLabel.team`
- *   null for a workspace label, `TeamFilter.key`);
+ *   null for a workspace label, `TeamFilter.key`, `Team.states`, `WorkflowState.type` /
+ *   `position`, `IssueUpdateInput.stateId`, `issueUpdate(id:)` taking the UUID or the
+ *   identifier, `commentCreate`, `CommentCreateInput.issueId` / `body`);
  * - error types (`extensions.type`): https://github.com/linear/linear/blob/master/packages/sdk/src/error.ts.
  */
 
@@ -44,6 +46,9 @@ export const UPLOAD_URL =
 export const ASSET_URL = 'https://uploads.linear.app/8c3f/1b2c/capture.png';
 export const LABEL_IDEA_ID = '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e';
 export const ISSUE_ID = '590a1127-f98b-49fc-ba74-2df8751c089e';
+export const ISSUE_IDENTIFIER = 'ENG-123';
+/** The team's workflow states: "Done" is the first `completed` one by position. */
+export const DONE_STATE_ID = '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b';
 export const ISSUE_URL = 'https://linear.app/shop/issue/ENG-123/bug-the-cart-empties';
 export const API_KEY = 'lin_api_0123456789abcdefghijklmnopqrstuvwxyzABCD';
 
@@ -65,7 +70,24 @@ export const LINEAR = {
     status: 200,
     body: {
       data: {
-        teams: { nodes: [{ id: TEAM_ID, key: 'ENG', name: 'Engineering' }] },
+        teams: {
+          nodes: [
+            {
+              id: TEAM_ID,
+              key: 'ENG',
+              name: 'Engineering',
+              states: {
+                nodes: [
+                  { id: '0a1b2c3d-0000-4000-8000-000000000001', type: 'backlog', position: 0 },
+                  { id: '0a1b2c3d-0000-4000-8000-000000000002', type: 'started', position: 1 },
+                  { id: '0a1b2c3d-0000-4000-8000-000000000003', type: 'completed', position: 4 },
+                  { id: DONE_STATE_ID, type: 'completed', position: 3 },
+                  { id: '0a1b2c3d-0000-4000-8000-000000000004', type: 'canceled', position: 5 },
+                ],
+              },
+            },
+          ],
+        },
         issueLabels: {
           nodes: [
             { id: LABEL_BUG_ID, name: 'Bug', isGroup: false, team: { id: TEAM_ID } },
@@ -79,6 +101,30 @@ export const LINEAR = {
             },
           ],
         },
+      },
+    },
+  },
+  /** The ENG team without any `completed` workflow state, nor labels. */
+  teamWithoutCompletedState: {
+    provenance: 'reconstructed',
+    source: `${SCHEMA} (Query.teams, Team.states)`,
+    status: 200,
+    body: {
+      data: {
+        teams: {
+          nodes: [
+            {
+              id: TEAM_ID,
+              key: 'ENG',
+              states: {
+                nodes: [
+                  { id: '0a1b2c3d-0000-4000-8000-000000000001', type: 'backlog', position: 0 },
+                ],
+              },
+            },
+          ],
+        },
+        issueLabels: { nodes: [] },
       },
     },
   },
@@ -105,6 +151,20 @@ export const LINEAR = {
         },
       },
     },
+  },
+  /** Successful `issueUpdate` (moved to the completed state): the issue's UUID. */
+  issueUpdated: {
+    provenance: 'reconstructed',
+    source: `${SCHEMA} (issueUpdate, IssuePayload)`,
+    status: 200,
+    body: { data: { issueUpdate: { success: true, issue: { id: ISSUE_ID } } } },
+  },
+  /** Successful `commentCreate`. */
+  commentCreated: {
+    provenance: 'reconstructed',
+    source: `${SCHEMA} (commentCreate, CommentPayload)`,
+    status: 200,
+    body: { data: { commentCreate: { success: true } } },
   },
   /**
    * Successful `fileUpload`: the signed URL to upload to (PUT), the image's permanent

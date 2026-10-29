@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { gitHubAdapter } from './github.js';
 import { resolveDestinationAdapter } from './index.js';
 import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   GITHUB,
+  ISSUE_NUMBER,
   ISSUE_URL,
   TOKEN,
   REPOSITORY_NAME,
@@ -412,6 +414,151 @@ describe('GitHub Issues adapter', () => {
         .join('');
       expect(text).toContain('[Shop](https://trap.test)');
       expect(text).not.toContain('@garage-sh');
+    });
+  });
+
+  describe('Incidents', () => {
+    const OPENING = incidentOpening(DESTINATION.projectId!);
+    const CLOSING = incidentClosing(DESTINATION.projectId!, ISSUE_URL);
+    const md = new MarkdownIt({ html: true, linkify: true });
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
+
+    it('creates an issue for an opened Incident and returns its link to close it later', async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated);
+
+      expect(await adapter(fetch).deliverIncident(OPENING)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.url).toBe(`${REPOSITORY_API}/issues`);
+      expect(requests[0]?.init.method).toBe('POST');
+      const { title, body } = jsonBody(requests[0]);
+      expect(title).toBe('Error · @​everyone <b>Payment</b> timed out');
+      expect(body).toContain('An Incident opened in Shop \\(production\\)\\.');
+      expect(body).toContain('**Level**: Error \\(declared\\)');
+      expect(body).toContain('**Occurrences**: 3');
+      const links = tokens(body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([OPENING.incident.dashboardUrl]);
+    });
+
+    it('lets no text of the sender make a link, HTML or a mention', async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated);
+      const hostile = '@octocat [login](https://trap.test) <img src=x> https://trap.test/direct';
+
+      await adapter(fetch).deliverIncident({
+        ...OPENING,
+        incident: {
+          ...OPENING.incident,
+          title: hostile,
+          message: hostile,
+          environment: hostile,
+          context: { service: hostile },
+        },
+      });
+
+      const { title, body } = jsonBody(requests[0]);
+      expect(title).not.toContain('@octocat');
+      const types = tokens(body).map((t) => t.type);
+      expect(types).not.toContain('html_inline');
+      expect(types).not.toContain('html_block');
+      const links = tokens(body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([OPENING.incident.dashboardUrl]);
+      expect(body).not.toContain('@octocat');
+    });
+
+    it('closes the issue its opening created, then comments the closing on it', async () => {
+      const { fetch, requests } = github(GITHUB.issueClosed, GITHUB.commentCreated);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      expect(requests.map((r) => [r.init.method, r.url])).toEqual([
+        ['PATCH', `${REPOSITORY_API}/issues/${ISSUE_NUMBER}`],
+        ['POST', `${REPOSITORY_API}/issues/${ISSUE_NUMBER}/comments`],
+      ]);
+      expect(JSON.parse(requests[0]!.body!)).toEqual({
+        state: 'closed',
+        state_reason: 'completed',
+      });
+      const comment = JSON.parse(requests[1]!.body!) as { body: string };
+      expect(Object.keys(comment)).toEqual(['body']);
+      expect(comment.body).toContain('An Incident of Shop was resolved by its sender\\.');
+      expect(comment.body).toContain('**Closed**: 2026\\-10\\-24T09\\:31\\:00\\.000Z');
+    });
+
+    it.each([
+      ['401 bad credentials', 'auth', GITHUB.badCredentials],
+      ['403 permission denied', 'auth', GITHUB.permissionDenied],
+      ['404 not found', 'auth', GITHUB.notFound],
+      ['422 validation failed', 'permanent', GITHUB.validationFailed],
+      ['403 primary rate limit', 'transient', GITHUB.primaryRateLimit],
+      ['503 unavailable', 'transient', GITHUB.unavailable],
+    ] as const)(
+      'classifies a closing refused with %s like a Delivery: %s, nothing commented',
+      async (_, failureClass, recording) => {
+        const { fetch, requests } = github(recording, GITHUB.commentCreated);
+
+        expect(await adapter(fetch).closeIncident(CLOSING)).toEqual({
+          status: 'failed',
+          failureClass,
+          message: expect.stringContaining(String(recording.status)),
+        });
+        expect(requests).toHaveLength(1);
+      },
+    );
+
+    it('a refused closing comment fails the closing, which a retry closes again harmlessly', async () => {
+      const { fetch } = github(GITHUB.issueClosed, GITHUB.unavailable);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toMatchObject({
+        status: 'failed',
+        failureClass: 'transient',
+      });
+    });
+
+    it.each([
+      ['no link', null],
+      ['a link to another repository', `https://github.com/${OWNER}/other/issues/${ISSUE_NUMBER}`],
+      ['a link that is not an issue', `https://github.com/${OWNER}/${REPOSITORY_NAME}/pull/7`],
+    ])(
+      'never creates a second issue: an opening with %s fails the closing permanently',
+      async (_, link) => {
+        const { fetch, requests } = github(GITHUB.issueCreated);
+
+        expect(
+          await adapter(fetch).closeIncident(incidentClosing(DESTINATION.projectId!, link)),
+        ).toMatchObject({ status: 'failed', failureClass: 'permanent' });
+        expect(requests).toHaveLength(0);
+      },
+    );
+
+    it('"opened then closed" after a suspension creates the issue, then closes it at once', async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated, GITHUB.issueClosed);
+
+      expect(
+        await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!)),
+      ).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
+
+      expect(requests.map((r) => [r.init.method, r.url])).toEqual([
+        ['POST', `${REPOSITORY_API}/issues`],
+        ['PATCH', `${REPOSITORY_API}/issues/${ISSUE_NUMBER}`],
+      ]);
+      expect(jsonBody(requests[0]).title).toMatch(/^Closed · Error · /);
+      expect(JSON.parse(requests[1]!.body!)).toMatchObject({ state: 'closed' });
+    });
+
+    it('"opened then closed" whose creation is refused closes nothing', async () => {
+      const { fetch, requests } = github(GITHUB.badCredentials);
+
+      expect(
+        await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!)),
+      ).toMatchObject({ status: 'failed', failureClass: 'auth' });
+      expect(requests).toHaveLength(1);
     });
   });
 
