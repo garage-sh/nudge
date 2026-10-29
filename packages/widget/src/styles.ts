@@ -166,9 +166,20 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 2px 18px 18px;
   scrollbar-width: thin;
+  scrollbar-color: var(--n-border-strong) transparent;
 }
+/* A thin rounded thumb on a transparent track, inset from the panel's corner. */
+.body::-webkit-scrollbar { width: 10px; }
+.body::-webkit-scrollbar-track { background: transparent; margin: 4px 0 12px; }
+.body::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--n-border-strong) padding-box;
+}
+.body::-webkit-scrollbar-thumb:hover { background-color: var(--n-faint); }
 form { display: flex; flex-direction: column; gap: 14px; }
 form > * { animation: n-rise 380ms var(--n-ease) both; }
 form > :nth-child(2) { animation-delay: 40ms; }
@@ -184,6 +195,8 @@ form > :nth-child(n + 5) { animation-delay: 160ms; }
   font-weight: 550;
 }
 
+/* A legend is no flex item: the fieldset's gap does not reach it. */
+.root legend { margin-bottom: 8px; }
 /* Feedback types: four tiles carrying a mark; clicking the chosen one clears it. */
 .types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .type { position: relative; display: block; cursor: pointer; }
@@ -335,15 +348,53 @@ canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-act
   background: color-mix(in srgb, var(--n-accent) 15%, transparent);
   pointer-events: none;
 }
-.clear-blurs {
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-color: var(--n-border);
-  color: var(--n-muted);
-  font-size: 12px;
-  line-height: 18px;
+.preview-actions { display: flex; gap: 6px; }
+.enlarge, .clear-blurs { gap: 6px; padding: 4px 10px; border-color: var(--n-border); }
+.enlarge, .enlarge *, .clear-blurs, .clear-blurs * { color: var(--n-muted); font-size: 12px; line-height: 18px; }
+.enlarge svg, .clear-blurs svg { width: 14px; height: 14px; }
+.enlarge:hover, .clear-blurs:hover { background: var(--n-surface-2); }
+.enlarge:hover, .enlarge:hover *, .clear-blurs:hover, .clear-blurs:hover * { color: var(--n-text); }
+
+/* The editor: the Capture full screen, to blur it precisely. */
+.editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 9, 11, 0.72);
+  backdrop-filter: blur(2px);
+  animation: n-fade 200ms ease-out;
 }
-.clear-blurs:hover { background: var(--n-surface-2); color: var(--n-text); }
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 100%;
+  max-height: 100%;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--n-surface);
+  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.5);
+  animation: n-panel-in 280ms var(--n-ease);
+}
+.editor-bar { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
+.editor-help { flex: 1; min-width: 0; color: var(--n-muted); font-size: 13px; line-height: 18px; }
+.editor-done {
+  height: 32px;
+  padding: 0 14px;
+  background: var(--n-accent);
+}
+.editor-done, .editor-done * { color: #ffffff; font-weight: 600; }
+.editor-done:hover { filter: brightness(1.08); }
+.editor-stage { display: flex; justify-content: center; min-height: 0; }
+.editor .frame { width: fit-content; max-width: 100%; }
+.editor canvas {
+  width: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 140px);
+}
 
 .error {
   display: flex;
@@ -430,6 +481,7 @@ kbd {
   from { opacity: 0; transform: scale(0.4); }
   to { opacity: 1; transform: none; }
 }
+@keyframes n-fade { from { opacity: 0; } }
 @keyframes n-draw { to { stroke-dashoffset: 0; } }
 @keyframes n-spin { to { transform: rotate(360deg); } }
 @keyframes n-shake {
@@ -443,6 +495,13 @@ kbd {
   :host { right: 12px; bottom: 12px; }
   .panel { max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
   .shortcut { display: none; }
+}
+/* Narrow screens: the help takes its own line above the buttons, the image what is left. */
+@media (max-width: 640px) {
+  .editor { padding: 8px; }
+  .editor-bar { flex-wrap: wrap; justify-content: flex-end; }
+  .editor-help { flex-basis: 100%; }
+  .editor canvas { max-height: calc(100vh - 170px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .root *, .root *::before, .root *::after {

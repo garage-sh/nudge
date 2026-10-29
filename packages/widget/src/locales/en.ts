@@ -24,6 +24,8 @@ export const en = {
     'Draw a rectangle on the preview to blur an area. Sensitive areas of the app are already masked.',
   capturePreview: 'Screenshot preview',
   clearBlurs: 'Remove blurs',
+  enlargeCapture: 'Enlarge',
+  editorDone: 'Done',
   captureFailed: 'The screenshot failed: send your feedback without it.',
   captureTooLarge: 'The screenshot is too large to send: remove it, then try again.',
   submit: 'Send',

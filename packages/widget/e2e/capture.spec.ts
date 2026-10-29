@@ -274,6 +274,45 @@ test('blurs the area the Author draws on the preview, and can remove the blurs',
   expect(rgb(sharp.stats[0]!.max)).toEqual([255, 255, 255]);
 });
 
+test('blurs in the enlarged Capture, which Escape closes without losing the blurs', async ({
+  page,
+  host,
+  api,
+}) => {
+  await host.open(PAGE);
+  await openAndAttach(page);
+  const small = (await page.getByRole('img', { name: 'Screenshot preview' }).boundingBox())!;
+  await page.getByRole('button', { name: 'Enlarge' }).click();
+
+  const editor = page.getByRole('dialog', { name: /Draw a rectangle/ });
+  await expect(editor).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Done' })).toBeFocused();
+  const preview = editor.getByRole('img', { name: 'Screenshot preview' });
+  const box = (await preview.boundingBox())!;
+  expect(box.width).toBeGreaterThan(small.width * 2);
+  const scale = box.width / 1280;
+  const toPreview = (x: number, y: number) => [box.x + x * scale, box.y + y * scale] as const;
+  await page.mouse.move(...toPreview(40, 200));
+  await page.mouse.down();
+  await page.mouse.move(...toPreview(360, 360), { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press('Escape');
+
+  await expect(editor).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Enlarge' })).toBeFocused();
+  await expect(page.getByRole('img', { name: 'Screenshot preview' })).toBeVisible();
+  await send(page);
+
+  await expect(page.getByRole('status')).toBeVisible();
+  const blurred = await analyze(page, receivedCapture(api)!, [
+    { x: 72, y: 232, width: 256, height: 96 },
+  ]);
+  for (const channel of [0, 1, 2]) {
+    expect(blurred.stats[0]!.min[channel]).toBeGreaterThan(60);
+    expect(blurred.stats[0]!.max[channel]).toBeLessThan(195);
+  }
+});
+
 test('the Author can remove the Capture before sending', async ({ page, host, api }) => {
   await host.open(PAGE);
 

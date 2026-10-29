@@ -29,6 +29,8 @@ const ICONS = {
   send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  enlarge: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
 };
 
 const TYPE_ICONS = {
@@ -93,7 +95,10 @@ const LAYOUT = `
               <canvas role="img" data-label="capturePreview"></canvas>
               <div class="selection" hidden></div>
             </div>
-            <button type="button" class="clear-blurs" data-text="clearBlurs"></button>
+            <div class="preview-actions">
+              <button type="button" class="enlarge">${icon(ICONS.enlarge)}<span data-text="enlargeCapture"></span></button>
+              <button type="button" class="clear-blurs">${icon(ICONS.undo)}<span data-text="clearBlurs"></span></button>
+            </div>
           </div>
         </div>
         <div class="error" role="alert" hidden>${icon(ICONS.alert)}<span class="error-text"></span></div>
@@ -111,6 +116,16 @@ const LAYOUT = `
       </div>
     </div>
   </section>
+  <div class="editor" role="dialog" aria-modal="true" aria-labelledby="editor-help" hidden>
+    <div class="editor-panel">
+      <div class="editor-bar">
+        <p class="editor-help" id="editor-help" data-text="captureHelp"></p>
+        <button type="button" class="clear-blurs">${icon(ICONS.undo)}<span data-text="clearBlurs"></span></button>
+        <button type="button" class="editor-done" data-text="editorDone"></button>
+      </div>
+      <div class="editor-stage"></div>
+    </div>
+  </div>
   <button type="button" class="launcher" aria-expanded="false">
     <span class="launcher-icons" aria-hidden="true">${icon(ICONS.message, 'icon-message')}${icon(ICONS.close, 'icon-close')}</span>
     <span class="launcher-label" data-text="launcher"></span>
@@ -160,6 +175,26 @@ export class NudgeWidget extends HtmlElement {
     this.#el('.launcher').addEventListener('click', () => this.#toggle());
     this.#el('.close').addEventListener('click', () => this.#close());
     this.#el('.again').addEventListener('click', () => this.#showForm());
+    this.#el('.enlarge').addEventListener('click', () => this.#openEditor());
+    this.#el('.editor-done').addEventListener('click', () => this.#closeEditor());
+    this.#el('.editor').addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        this.#closeEditor();
+      } else if (event.key === 'Tab') {
+        // The focus stays on the editor's two buttons while it covers the page.
+        const [first, last] = [this.#el('.editor .clear-blurs'), this.#el('.editor-done')];
+        const edge = event.shiftKey ? first : last;
+        if (this.#root.activeElement === edge) {
+          event.preventDefault();
+          (edge === first ? last : first).focus();
+        }
+      }
+    });
+    this.#el('.editor').addEventListener('click', (event) => {
+      // A click on the backdrop, outside the image and its bar.
+      if (event.target === event.currentTarget) this.#closeEditor();
+    });
     this.#el('.panel').addEventListener('keydown', (event) => {
       if ((event as KeyboardEvent).key === 'Escape') this.#close();
     });
@@ -338,6 +373,7 @@ export class NudgeWidget extends HtmlElement {
 
   /** Plays the closing animation; `animationend` then hides the panel. */
   #close(): void {
+    this.#closeEditor();
     const panel = this.#el('.panel');
     if (!panel.hidden) panel.classList.add('closing');
     this.#el('.launcher').setAttribute('aria-expanded', 'false');
@@ -387,7 +423,26 @@ export class NudgeWidget extends HtmlElement {
     }
   }
 
+  /**
+   * Shows the Capture full screen to blur it precisely: the preview's frame (canvas and
+   * selection) moves into the editor, so the drawing and the blurs stay the same ones.
+   */
+  #openEditor(): void {
+    this.#el('.editor-stage').append(this.#el('.frame'));
+    this.#el('.editor').hidden = false;
+    this.#el('.editor-done').focus();
+  }
+
+  #closeEditor(): void {
+    const editor = this.#el('.editor');
+    if (editor.hidden) return;
+    this.#el('.preview .help').after(this.#el('.frame'));
+    editor.hidden = true;
+    this.#el('.enlarge').focus();
+  }
+
   #removeCapture(): void {
+    this.#closeEditor();
     this.#capture = null;
     this.#el<HTMLInputElement>('input[name="capture"]').checked = false;
     this.#el('.preview').hidden = true;
@@ -447,9 +502,11 @@ export class NudgeWidget extends HtmlElement {
     };
     preview.addEventListener('pointerup', (event) => finish(event, true));
     preview.addEventListener('pointercancel', (event) => finish(event, false));
-    this.#el('.clear-blurs').addEventListener('click', () => {
-      if (this.#capture) preview.getContext('2d')!.putImageData(this.#capture, 0, 0);
-    });
+    for (const button of this.#root.querySelectorAll('.clear-blurs')) {
+      button.addEventListener('click', () => {
+        if (this.#capture) preview.getContext('2d')!.putImageData(this.#capture, 0, 0);
+      });
+    }
   }
 
   async #submit(): Promise<void> {
