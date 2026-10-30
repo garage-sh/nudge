@@ -1,5 +1,5 @@
 import type { IncidentReport } from '@nudge/shared';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { ApiError } from '../api/client.js';
 import {
@@ -35,6 +35,8 @@ export function Incident() {
   const id = params.incidentId ?? '';
   const { search } = useLocation();
   const [pollUntil, setPollUntil] = useState(0);
+  const [justClosed, setJustClosed] = useState(false);
+  const stateHeading = useRef<HTMLHeadingElement>(null);
   const poll = () => setPollUntil(Date.now() + POLL_AFTER_ACTION_MS);
   const incident = useIncident(id, { pollUntil });
   const replay = useReplayIncidentDelivery(id);
@@ -44,8 +46,11 @@ export function Incident() {
   };
   if (incident.isPending) return <Loading />;
   // An Incident of another Project does not exist under this one's URL.
-  const elsewhere = incident.isSuccess && incident.data.project.id !== projectId;
-  if (incident.isError || elsewhere) {
+  const elsewhere = incident.data !== undefined && incident.data.project.id !== projectId;
+  // The detail is read again every few seconds: a failed read keeps what was shown, with
+  // the error above it, unless the Incident is gone (deleted meanwhile).
+  const gone = incident.error instanceof ApiError && incident.error.status === 404;
+  if (incident.data === undefined || gone || elsewhere) {
     return (
       <section>
         <PageHeader title={t.incident.properties} back={back} />
@@ -59,6 +64,12 @@ export function Incident() {
   }
   const detail = incident.data;
   const single = detail.occurrences === 1;
+  const closeIncident = () => {
+    setJustClosed(true);
+    poll();
+    // The Close button is gone: focus goes to the State it changed, announced below it.
+    stateHeading.current?.focus();
+  };
   return (
     <article className="feedback incident">
       <PageHeader
@@ -75,6 +86,9 @@ export function Incident() {
           </span>
         }
       />
+      {incident.isError ? (
+        <ErrorMessage error={incident.error} onRetry={() => void incident.refetch()} />
+      ) : null}
       <div className="feedback-grid">
         <div className="feedback-main">
           <Report
@@ -103,7 +117,7 @@ export function Incident() {
           </Section>
         </div>
         <aside className="feedback-side">
-          <Section id="properties" title={t.incident.properties}>
+          <Section id="properties" title={t.incident.properties} headingRef={stateHeading}>
             <Properties
               rows={[
                 [
@@ -133,7 +147,12 @@ export function Incident() {
                 [t.incident.fingerprint, <code key="fingerprint">{detail.fingerprint}</code>],
               ]}
             />
-            {detail.state === 'open' ? <Close incidentId={detail.id} afterClose={poll} /> : null}
+            {detail.state === 'open' ? (
+              <Close incidentId={detail.id} afterClose={closeIncident} />
+            ) : null}
+            <p role="status" className="save-status">
+              {justClosed && detail.state === 'closed' ? t.incident.close.done : ''}
+            </p>
           </Section>
           <Section id="deletion" title={t.incident.deletion.title}>
             <Deletion incidentId={detail.id} leaveTo={back.to} />
@@ -249,16 +268,17 @@ function Redispatch({
           disabled={redispatch.isPending}
           onClick={() => redispatch.mutate(undefined, { onSuccess: afterRedispatch })}
         >
-          {t.incident.redispatch.action}
+          {redispatch.isPending ? t.incident.redispatch.pending : t.incident.redispatch.action}
         </button>
       </div>
-      {created === undefined ? null : (
-        <p role="status">
-          {created === 0
+      {/* Always present, so that the result is announced once it fills it. */}
+      <p role="status">
+        {created === undefined
+          ? ''
+          : created === 0
             ? t.incident.redispatch.noneCreated
             : t.incident.redispatch.created(created)}
-        </p>
-      )}
+      </p>
       <ErrorMessage error={redispatch.error} />
     </>
   );
@@ -273,9 +293,19 @@ function Instant({ iso }: { iso: string }) {
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+function Section({
+  id,
+  title,
+  headingRef,
+  children,
+}: {
+  id: string;
+  title: string;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
+  children: ReactNode;
+}) {
   return (
-    <DetailSection headingId={`incident-${id}`} title={title}>
+    <DetailSection headingId={`incident-${id}`} title={title} headingRef={headingRef}>
       {children}
     </DetailSection>
   );

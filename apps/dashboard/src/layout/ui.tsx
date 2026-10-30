@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
   type InputHTMLAttributes,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { Link, useLocation } from 'react-router';
 import { ApiError } from '../api/client.js';
@@ -484,15 +485,20 @@ export function useScrollToHash(ready: boolean) {
 export function DetailSection({
   headingId,
   title,
+  headingRef,
   children,
 }: {
   headingId: string;
   title: string;
+  /** To move focus to the heading, after an action removed the control that had it. */
+  headingRef?: RefObject<HTMLHeadingElement | null>;
   children: ReactNode;
 }) {
   return (
     <section className="panel" aria-labelledby={headingId}>
-      <h2 id={headingId}>{title}</h2>
+      <h2 id={headingId} ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
+        {title}
+      </h2>
       {children}
     </section>
   );

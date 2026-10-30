@@ -543,6 +543,7 @@ export const en = {
       help: 'Close it once you know the problem is over: its Destinations are told, and a new Occurrence will open a new Incident.',
       question:
         'The Incident will be Closed for good and its Destinations told. A new Occurrence will open a new Incident. Close it?',
+      done: 'Incident closed: its Destinations are being told.',
     },
     deletion: {
       title: 'Deletion',
@@ -552,6 +553,7 @@ export const en = {
     redispatch: {
       help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
       action: 'Redispatch',
+      pending: 'Redispatching…',
       noneCreated: 'No other Destination accepts this Incident.',
       created: (count: number) => `${count} ${count === 1 ? 'Delivery' : 'Deliveries'} created.`,
     },

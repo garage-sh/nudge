@@ -350,6 +350,33 @@ describe('An Incident’s detail', () => {
     const properties = await screen.findByRole('region', { name: 'Incident' });
     expect(await within(properties).findByText('Closed by a Member')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Close Incident' })).toBeNull();
+    // The button that had focus is gone: focus goes to the panel, the closing is announced.
+    expect(document.activeElement).toBe(
+      within(properties).getByRole('heading', { name: 'Incident' }),
+    );
+    expect(within(properties).getByRole('status').textContent).toBe(
+      'Incident closed: its Destinations are being told.',
+    );
+  });
+
+  it('a failed read of the detail keeps the Incident on screen, with the error and a retry', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: TIMEOUT_DETAIL },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+    expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy();
+
+    api.set('GET /api/incidents/incident-1', { status: 500, body: { error: 'internal' } });
+    api.set('POST /api/incidents/incident-1/redispatch', {
+      status: 500,
+      body: { error: 'internal' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Redispatch' }));
+
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(1));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(TIMEOUT_DETAIL.title);
+    expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(0);
   });
 
   it('a Closed Incident says why it closed, in the list and in the detail', async () => {

@@ -1166,6 +1166,12 @@ button.danger {
   }
 }
 
+/* An Incident's panels: a help text keeps its distance from the list it follows or explains */
+.incident .panel > .properties + .help,
+.incident .panel > .help + .muted {
+  margin-top: 0.75rem;
+}
+
 /* A Project's Incidents: the Level first, then what is going wrong */
 .incident-row {
   display: grid;

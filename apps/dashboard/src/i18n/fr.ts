@@ -517,6 +517,7 @@ export const fr: Messages = {
       help: 'Clore l’Incident quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
       question:
         'L’Incident sera Clos définitivement et ses Destinations prévenues. Une nouvelle Occurrence ouvrira un nouvel Incident. Le clore ?',
+      done: 'Incident clos : ses Destinations sont en train d’être prévenues.',
     },
     deletion: {
       title: 'Suppression',
@@ -526,6 +527,7 @@ export const fr: Messages = {
     redispatch: {
       help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
       action: 'Redispatcher',
+      pending: 'Redispatch en cours…',
       noneCreated: 'Aucune autre Destination ne retient cet Incident.',
       created: (count) => `${count} Envoi${s(count)} créé${s(count)}.`,
     },
@@ -586,7 +588,7 @@ export const fr: Messages = {
       minimumLevel: 'Niveau minimal',
       environments: 'Environnements',
       environmentsHelp:
-        'Séparés par des virgules. Vide : tous les Environnements. Un Incident sans Environnement ne passe qu’une liste vide.',
+        'Séparés par des virgules. Vide : tous les Environnements. Un Incident sans Environnement ne passe que si la liste est vide.',
       conditions: 'Conditions sur le contexte',
       conditionsHelp:
         'Toutes les conditions doivent être remplies. Un Incident dont le contexte n’a pas la clé est refusé.',
