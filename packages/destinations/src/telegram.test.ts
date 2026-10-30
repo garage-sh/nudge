@@ -363,6 +363,22 @@ describe('Telegram adapter', () => {
     expect(JSON.stringify(result)).not.toContain(BOT_TOKEN.split(':')[1]);
   });
 
+  it('keeps the bot token out of a network error that names the URL', async () => {
+    const leaky = new TypeError(
+      `request to https://api.telegram.org/bot${BOT_TOKEN}/sendMessage failed`,
+    );
+
+    const sent = await adapter(telegram(leaky).fetch).send(DELIVERY);
+    const checked = await adapter(telegram(leaky).fetch).healthCheck();
+
+    expect(sent).toMatchObject({ status: 'failed', failureClass: 'transient' });
+    expect(checked).toMatchObject({ reachable: false, failureClass: 'transient' });
+    for (const result of [sent, checked]) {
+      expect(JSON.stringify(result)).not.toContain(BOT_TOKEN.split(':')[1]);
+      expect(JSON.stringify(result)).toContain('<bot token>');
+    }
+  });
+
   it('does not follow redirects: a 3xx is a permanent failure', async () => {
     const { fetch } = telegram({ provenance: 'reconstructed', source: '', status: 302 });
 

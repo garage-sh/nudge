@@ -92,7 +92,10 @@ export function telegramAdapter(
           : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }),
       });
     } catch (error) {
-      return { ok: false, ...networkFailure(error) };
+      const { failureClass, message } = networkFailure(error);
+      // The token is in the URL path: a fetch that names the URL in its error must not
+      // carry it into lastError or the logs.
+      return { ok: false, failureClass, message: message.replaceAll(token, '<bot token>') };
     }
     if (response.ok) {
       const body = (await response.json().catch(() => ({}))) as { result?: unknown };
