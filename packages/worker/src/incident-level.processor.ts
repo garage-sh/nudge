@@ -1,10 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   buildIncidentLevelState,
-  DISPATCH_JOB,
   dispatchJobId,
   INCIDENT_LEVEL_INSTRUCTIONS,
   incidentLevelQuestions,
+  queueDeliveries,
   type DispatchJob,
   type IncidentLevelJob,
 } from '@nudge/core';
@@ -47,16 +47,9 @@ export class IncidentLevelProcessor {
     const level = await this.assess(incident);
     const created = await settleIncidentLevel(this.db, incidentId, level);
     const pending = (created ?? []).filter((delivery) => delivery.status === 'pending');
-    if (pending.length === 0) return;
     // After the commit; if the queueing fails, the sweep of pending Deliveries sends them.
     try {
-      await this.dispatchQueue.addBulk(
-        pending.map(({ id }) => ({
-          name: DISPATCH_JOB,
-          data: { deliveryId: id },
-          opts: { jobId: dispatchJobId(id) },
-        })),
-      );
+      await queueDeliveries(this.dispatchQueue, pending, dispatchJobId);
     } catch (error) {
       this.logger.error(
         `Incident ${incidentId} dispatched but its Deliveries not queued, the sweep will send them: ${String(error)}`,

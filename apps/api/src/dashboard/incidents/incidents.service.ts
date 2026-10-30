@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { closingJobId, DISPATCH_JOB, type DispatchJob } from '@nudge/core';
+import { closingJobId, queueDeliveries, type DispatchJob } from '@nudge/core';
 import {
   closeIncidentByMember,
   deleteIncident,
@@ -52,20 +52,12 @@ export class IncidentsService {
         state: result.state,
       } satisfies ApiErrorBody & { state: IncidentState });
     }
-    if (result.deliveries.length > 0) {
-      try {
-        await this.dispatchQueue.addBulk(
-          result.deliveries.map(({ id: deliveryId }) => ({
-            name: DISPATCH_JOB,
-            data: { deliveryId },
-            opts: { jobId: closingJobId(deliveryId) },
-          })),
-        );
-      } catch (error) {
-        this.logger.error(
-          `Incident ${id} closed but its closings not queued, the sweep will send them: ${String(error)}`,
-        );
-      }
+    try {
+      await queueDeliveries(this.dispatchQueue, result.deliveries, closingJobId);
+    } catch (error) {
+      this.logger.error(
+        `Incident ${id} closed but its closings not queued, the sweep will send them: ${String(error)}`,
+      );
     }
     return this.read(id);
   }

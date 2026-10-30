@@ -7,6 +7,7 @@ import {
   heldSummaryJobId,
   INCIDENT_LEVEL_JOB,
   incidentLevelSweepJobId,
+  queueDeliveries,
   sweepJobId,
   triageJobId,
   TRIAGE_JOB,
@@ -218,15 +219,8 @@ export class SweepProcessor {
       this.logger.warn(`Delivery ${id} delivered its opening without its closing: re-armed`);
     }
     const closings = [...closed.flatMap((incident) => incident.deliveries), ...missed];
-    if (closings.length === 0) return;
     try {
-      await this.dispatchQueue.addBulk(
-        closings.map(({ id }) => ({
-          name: DISPATCH_JOB,
-          data: { deliveryId: id },
-          opts: { jobId: closingJobId(id) },
-        })),
-      );
+      await queueDeliveries(this.dispatchQueue, closings, closingJobId);
     } catch (error) {
       this.logger.error(
         `Closings of quiet Incidents not queued, the sweep of pending Deliveries will send them: ${String(error)}`,

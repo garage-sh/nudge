@@ -3,10 +3,10 @@ import {
   alertJobId,
   closingJobId,
   deriveFingerprint,
-  DISPATCH_JOB,
   dispatchJobId,
   INCIDENT_LEVEL_JOB,
   incidentLevelJobId,
+  queueDeliveries,
   type AlertJob,
   type DispatchJob,
   type IncidentLevelJob,
@@ -190,15 +190,8 @@ export class IncidentsIngestionService {
     jobId: (deliveryId: string) => string,
   ): Promise<void> {
     const pending = created.filter((delivery) => delivery.status === 'pending');
-    if (pending.length === 0) return;
     try {
-      await this.dispatchQueue.addBulk(
-        pending.map(({ id }) => ({
-          name: DISPATCH_JOB,
-          data: { deliveryId: id },
-          opts: { jobId: jobId(id) },
-        })),
-      );
+      await queueDeliveries(this.dispatchQueue, pending, jobId);
     } catch (error) {
       this.logger.error(
         `Incident ${incidentId} recorded but its Deliveries not queued, the sweep will send them: ${String(error)}`,

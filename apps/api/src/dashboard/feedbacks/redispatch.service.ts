@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DISPATCH_JOB, dispatchJobId, type DispatchJob } from '@nudge/core';
+import { dispatchJobId, queueDeliveries, type DispatchJob } from '@nudge/core';
 import {
   redispatchFeedback,
   redispatchIncident,
@@ -60,13 +60,7 @@ export class RedispatchService {
   ): Promise<void> {
     const pending = created.filter((delivery) => delivery.status === 'pending');
     try {
-      await this.dispatchQueue.addBulk(
-        pending.map(({ id }) => ({
-          name: DISPATCH_JOB,
-          data: { deliveryId: id },
-          opts: { jobId: dispatchJobId(id) },
-        })),
-      );
+      await queueDeliveries(this.dispatchQueue, pending, dispatchJobId);
     } catch (error) {
       await undo(pending.map(({ id }) => id));
       throw error;

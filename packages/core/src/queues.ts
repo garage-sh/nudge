@@ -108,6 +108,34 @@ export const dispatchJobId = (deliveryId: string): string => deliveryId;
  */
 export const closingJobId = (deliveryId: string): string => `${deliveryId}-closing`;
 
+/** The part of the dispatch queue (a BullMQ `Queue<DispatchJob>`) `queueDeliveries` uses. */
+export interface DispatchJobQueue {
+  addBulk(
+    jobs: { name: typeof DISPATCH_JOB; data: DispatchJob; opts: { jobId: string } }[],
+  ): Promise<unknown>;
+}
+
+/**
+ * Queues one dispatch job per Delivery, each with the id `jobId` gives it
+ * (`dispatchJobId` for a new Delivery, `closingJobId` for the closing it carries). With
+ * no Delivery, it queues nothing. It rejects when the queueing fails: the caller undoes
+ * what it did, or leaves the Deliveries pending for the sweep.
+ */
+export async function queueDeliveries(
+  queue: DispatchJobQueue,
+  deliveries: readonly { readonly id: string }[],
+  jobId: (deliveryId: string) => string,
+): Promise<void> {
+  if (deliveries.length === 0) return;
+  await queue.addBulk(
+    deliveries.map(({ id }) => ({
+      name: DISPATCH_JOB,
+      data: { deliveryId: id },
+      opts: { jobId: jobId(id) },
+    })),
+  );
+}
+
 /** Manual replay of a Delivery (D9): a fresh job per Member request. */
 export const replayJobId = (deliveryId: string): string => `${deliveryId}-replay-${randomUUID()}`;
 
