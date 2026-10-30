@@ -276,6 +276,60 @@ describe('A Project’s Destinations from the dashboard', () => {
     expect(JSON.stringify(row)).not.toContain(token);
   });
 
+  it('adds a Telegram chat: the bot token is a validated secret, the chat and topic are validated configuration', async () => {
+    const { project } = await pipeline.createProject({ name: 'Telegram' });
+    const botToken = '4839574812:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw8';
+    const chat = (config: unknown, secrets?: unknown) => ({
+      type: 'telegram',
+      name: 'Telegram Shop bugs',
+      config,
+      ...(secrets === undefined ? {} : { secrets }),
+    });
+
+    for (const [body, path] of [
+      [chat({ chatId: '-1001234567890' }), /^secrets/],
+      [chat({ chatId: '-1001234567890' }, { botToken: 'not-a-token' }), /^secrets\.botToken/],
+      [
+        chat({ chatId: '-1001234567890' }, { botToken: '4839574812:short/../../evil' }),
+        /^secrets\.botToken/,
+      ],
+      [chat({ chatId: 'shop bugs' }, { botToken }), /^config\.chatId/],
+      [chat({ chatId: '@ab' }, { botToken }), /^config\.chatId/],
+      [chat({ chatId: '-1001234567890', topicId: 0 }, { botToken }), /^config\.topicId/],
+      [chat({ chatId: '-1001234567890', topicId: '7' }, { botToken }), /^config\.topicId/],
+    ] as const) {
+      const refusal = await member.post(`/api/projects/${project.id}/destinations`, body);
+      expect(refusal).toMatchObject({
+        status: 400,
+        body: { error: 'invalid_request', details: [{ path: expect.stringMatching(path) }] },
+      });
+    }
+
+    const { destination, generatedSecrets } = await create(
+      project.id,
+      chat({ chatId: ' -1001234567890 ', topicId: 7 }, { botToken }),
+    );
+    expect(destination).toMatchObject({
+      type: 'telegram',
+      config: { chatId: '-1001234567890', topicId: 7 },
+      secrets: ['botToken'],
+    });
+    expect(generatedSecrets).toEqual({});
+    const row = await pipeline.destinationRow(destination.id);
+    expect(JSON.stringify(row)).not.toContain(botToken);
+
+    // Edited without the token: the saved one is kept, and never returned.
+    const moved = await member.patch<DestinationView>(`/api/destinations/${destination.id}`, {
+      config: { chatId: '@shop_status', topicId: null },
+    });
+    expect(moved.body).toMatchObject({
+      config: { chatId: '@shop_status', topicId: null },
+      secrets: ['botToken'],
+    });
+    expect(JSON.stringify(moved.body)).not.toContain(botToken);
+    expect(JSON.stringify(await pipeline.destinationRow(destination.id))).not.toContain(botToken);
+  });
+
   it('undecryptable secrets (changed Instance key) prevent neither listing nor regenerating', async () => {
     const { project } = await pipeline.createProject({ name: 'Changed key' });
     const { destination } = await create(project.id);

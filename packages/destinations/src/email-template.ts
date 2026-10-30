@@ -17,7 +17,7 @@ import {
   type Source,
 } from '@nudge/shared';
 import { isSafeLink } from './markdown.js';
-import { firstLine, truncate } from './text.js';
+import { authorIdentity, firstLine, truncate } from './text.js';
 
 /*
  * The emails nudge sends, in its own colors: the dashboard's tokens
@@ -115,11 +115,7 @@ export function feedbackEmail(delivery: OutgoingDelivery, to: readonly string[])
   const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
   const severity = feedback.severity;
   const author = feedback.author;
-  const authorText = author
-    ? [author.name, author.email ? `<${author.email}>` : null, author.id ? `(${author.id})` : null]
-        .filter(Boolean)
-        .join(' ') || 'Anonymous'
-    : 'Anonymous';
+  const authorText = authorIdentity(author) ?? 'Anonymous';
   const viewport = feedback.context.viewport;
   const details: Detail[] = [
     { label: 'Project', value: project.name },

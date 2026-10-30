@@ -4,6 +4,7 @@ import { emailForm } from './email.js';
 import { gitHubForm } from './github.js';
 import { linearForm } from './linear.js';
 import { slackForm } from './slack.js';
+import { telegramForm } from './telegram.js';
 import type { DestinationTypeForm } from './destination-type-form.js';
 import { webhookForm } from './webhook.js';
 
@@ -20,6 +21,7 @@ export const DESTINATION_FORMS: {
   slack: slackForm,
   github: gitHubForm,
   email: emailForm,
+  telegram: telegramForm,
 };
 
 /** The form of any one of the types. */

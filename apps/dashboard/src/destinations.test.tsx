@@ -397,6 +397,89 @@ describe('A Project’s Destinations', () => {
     });
   });
 
+  it('adds a Telegram chat: bot token as a secret, chat and forum topic as configuration', async () => {
+    const CHAT: DestinationView = {
+      ...RECEIVER,
+      name: 'Telegram Shop bugs',
+      type: 'telegram',
+      config: { chatId: '-1001234567890', topicId: 7 },
+      secrets: ['botToken'],
+    };
+    const BOT_TOKEN = '4839574812:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw8';
+    const api = fakeApi({
+      ...baseRoutes([]),
+      'POST /api/projects/project-1/destinations': {
+        status: 201,
+        body: { destination: CHAT, generatedSecrets: {} },
+      },
+    });
+    renderDashboard('/projects/project-1/destinations');
+
+    const form = within(
+      (await screen.findByRole('heading', { name: 'Add Destination' })).closest(
+        'form',
+      ) as HTMLElement,
+    );
+    await userEvent.click(form.getByRole('radio', { name: 'Telegram' }));
+    await userEvent.type(form.getByLabelText('Name'), 'Telegram Shop bugs');
+    const tokenField = form.getByLabelText('Bot token') as HTMLInputElement;
+    expect(tokenField.type).toBe('password');
+    expect(tokenField.required).toBe(true);
+    expect(form.getByText(/BotFather/)).toBeTruthy();
+    await userEvent.type(tokenField, BOT_TOKEN);
+    await userEvent.type(form.getByLabelText('Chat id'), '-1001234567890');
+    expect(form.getByText(/getUpdates/)).toBeTruthy();
+    await userEvent.type(form.getByLabelText('Forum topic (optional)'), '7');
+    await userEvent.click(form.getByRole('button', { name: 'Add Destination' }));
+
+    await vi.waitFor(() =>
+      expect(
+        api.calls.find((c) => c.route === 'POST /api/projects/project-1/destinations')?.body,
+      ).toEqual({
+        type: 'telegram',
+        name: 'Telegram Shop bugs',
+        config: { chatId: '-1001234567890', topicId: 7 },
+        secrets: { botToken: BOT_TOKEN },
+        filter: { types: ['bug', 'suggestion', 'opinion', 'question'], minimumSeverity: null },
+        incidentFilter: null,
+      }),
+    );
+  });
+
+  it('edits a Telegram chat without typing the saved bot token again, the topic cleared', async () => {
+    const CHAT: DestinationView = {
+      ...RECEIVER,
+      name: 'Telegram Shop bugs',
+      type: 'telegram',
+      config: { chatId: '-1001234567890', topicId: 7 },
+      secrets: ['botToken'],
+    };
+    const api = fakeApi({
+      ...baseRoutes([CHAT]),
+      'PATCH /api/destinations/destination-1': { status: 200, body: CHAT },
+    });
+    renderDashboard('/projects/project-1/destinations');
+
+    const chatCard = await card('Telegram Shop bugs');
+    expect(chatCard.getByText('Telegram')).toBeTruthy();
+    expect(chatCard.getByText('Chat -1001234567890, topic 7')).toBeTruthy();
+    await userEvent.click(chatCard.getByRole('button', { name: 'Edit' }));
+    const form = within(screen.getByRole('form', { name: 'Edit Telegram Shop bugs' }));
+    const tokenField = form.getByLabelText('Bot token') as HTMLInputElement;
+    expect(tokenField.value).toBe('');
+    expect(tokenField.required).toBe(false);
+    expect((form.getByLabelText('Chat id') as HTMLInputElement).value).toBe('-1001234567890');
+    await userEvent.clear(form.getByLabelText('Forum topic (optional)'));
+    await userEvent.click(form.getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() => {
+      const body = api.calls.find((c) => c.route === 'PATCH /api/destinations/destination-1')
+        ?.body as Record<string, unknown> | undefined;
+      expect(body).not.toHaveProperty('secrets');
+      expect(body?.config).toEqual({ chatId: '-1001234567890', topicId: null });
+    });
+  });
+
   it('adds a Linear team: API key as a secret, team and labels by type and Severity', async () => {
     const TEAM: DestinationView = {
       ...RECEIVER,

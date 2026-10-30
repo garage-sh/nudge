@@ -18,7 +18,7 @@ nudge collects feedback from the users of several applications, triages it and s
 
 - **Collect** from every application: an embeddable Widget (with optional, consent-based screenshots), a server SDK, or a plain HTTP API.
 - **Triage** each Feedback with a Judge, a System One decision model (TypeSafe, OpenRouter or your own server): Type, Severity, Junk and Manipulation attempts.
-- **Dispatch** it to the Project's Destinations whose Filter accepts it: Linear, GitHub Issues, Slack, Discord, email, signed webhooks.
+- **Dispatch** it to the Project's Destinations whose Filter accepts it: Linear, GitHub Issues, Slack, Discord, Telegram, email, signed webhooks.
 - **Route Incidents** reported by the applications' servers: repeated Occurrences grouped into one Incident, closed when the problem calms down.
 - **Follow** everything from a dashboard, in English or French.
 
@@ -101,6 +101,7 @@ The coding agent skill is `integrate-nudge-incidents`. Read [Reporting Incidents
 | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | [Integrating a Project](docs/integration.md)     | Widget (identity, language, page URL, Captures), React, JS SDK, HTTP API, coding agent |
 | [Reporting Incidents](docs/incidents.md)         | Incidents from an application's server: grouping, Level, closing, routing, Storms      |
+| [Destinations](docs/destinations.md)             | Destination types and what each needs; setting up Telegram                             |
 | [Webhooks](docs/webhooks.md)                     | Webhook Destination: headers, payload, signature verification                          |
 | [Self-hosting](docs/self-hosting.md)             | HTTPS and proxies, updating, verifying images, backing up, scaling                     |
 | [Configuration](docs/configuration.md)           | Every environment variable, the Judge, outbound calls, Capture storage                 |

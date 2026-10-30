@@ -37,17 +37,55 @@ function recordedDiscord() {
   return { fetch, requests };
 }
 
+const BOT_TOKEN = '4839574812:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw8';
+const SUPERGROUP_ID = -1001234567890;
+const BOT_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
+interface TelegramRequest {
+  readonly url: string;
+  readonly body: Record<string, unknown>;
+}
+
+/** A recorded Telegram Bot API: `sendMessage` posts a numbered message in a supergroup. */
+function recordedTelegram() {
+  const requests: TelegramRequest[] = [];
+  let nextMessage = 2187;
+  const fetch = (async (url: string | URL, init: RequestInit = {}) => {
+    requests.push({
+      url: String(url),
+      body: JSON.parse(String(init.body)) as Record<string, unknown>,
+    });
+    const result = {
+      message_id: nextMessage++,
+      chat: { id: SUPERGROUP_ID, title: 'On-call', type: 'supergroup' },
+      date: 1792834200,
+    };
+    return new Response(JSON.stringify({ ok: true, result }), {
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof globalThis.fetch;
+  return { fetch, requests };
+}
+
 /**
- * The real Discord and email adapters receive an Incident's opening and its closing:
- * the Discord message is edited in place, the closing mail replies to the opening one.
+ * The real Discord, Telegram and email adapters receive an Incident's opening and its closing:
+ * the Discord message is edited in place, the Telegram closing replies to the opening
+ * message, the closing mail replies to the opening one.
  */
 describe('Incidents through the chat and email adapters end to end', () => {
   const discord = recordedDiscord();
+  const telegram = recordedTelegram();
   let pipeline: Pipeline;
   let member: DashboardClient;
 
   beforeAll(async () => {
-    pipeline = await startPipeline({ destinations: 'real', adapterFetch: discord.fetch });
+    pipeline = await startPipeline({
+      destinations: 'real',
+      adapterFetch: ((url: string | URL, init?: RequestInit) =>
+        String(url).startsWith(BOT_API)
+          ? telegram.fetch(url, init)
+          : discord.fetch(url, init)) as typeof globalThis.fetch,
+    });
     member = await pipeline.signIn();
   });
 
@@ -107,6 +145,45 @@ describe('Incidents through the chat and email adapters end to end', () => {
     const closed = await waitForIncident(id, (i) => i.deliveries[0]?.status === 'delivered');
     expect(closed.deliveries[0]!.externalUrl).toBe(link);
     expect(discord.requests.filter((r) => r.method === 'POST')).toHaveLength(1);
+  });
+
+  it('Telegram: the closing replies to the opening message, whose link the Delivery keeps', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Telegram incidents' });
+    const creation = await member.post(`/api/projects/${project.id}/destinations`, {
+      type: 'telegram',
+      name: 'On-call group',
+      config: { chatId: String(SUPERGROUP_ID), topicId: 7 },
+      secrets: { botToken: BOT_TOKEN },
+      filter: null,
+      incidentFilter: anyLevel,
+    });
+    expect(creation.status).toBe(201);
+
+    const occurrence = { title: 'Payment provider timed out', level: 'critical' };
+    const response = await pipeline.postIncident(secretKey, occurrence);
+    const { id } = (await response.json()) as { id: string };
+    const opened = await waitForIncident(id, (i) => i.deliveries[0]?.status === 'delivered');
+    const [post] = telegram.requests;
+    expect(post?.url).toBe(`${BOT_API}/sendMessage`);
+    expect(post?.body).toMatchObject({ chat_id: String(SUPERGROUP_ID), message_thread_id: 7 });
+    expect(post?.body.text).toMatch(/^<b>Critical · Payment provider timed out<\/b>/);
+    const link = opened.deliveries[0]!.externalUrl!;
+    expect(link).toBe('https://t.me/c/1234567890/2187');
+
+    await pipeline.postIncident(secretKey, { ...occurrence, resolved: true });
+
+    await expect.poll(() => telegram.requests.length).toBe(2);
+    const closing = telegram.requests[1];
+    expect(closing?.body.reply_parameters).toEqual({
+      message_id: 2187,
+      allow_sending_without_reply: true,
+    });
+    expect(closing?.body.text).toMatch(/^<b>Closed · Critical · /);
+    const closed = await waitForIncident(
+      id,
+      (i) => i.state === 'closed' && i.deliveries[0]?.status === 'delivered',
+    );
+    expect(closed.deliveries[0]!.externalUrl).toBe(link);
   });
 
   it('email: the closing mail replies to the opening one', async () => {

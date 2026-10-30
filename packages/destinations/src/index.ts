@@ -7,6 +7,7 @@ import { linearAdapter } from './linear.js';
 import { guardedFetch, STRICT_OUTBOUND_POLICY } from './outbound.js';
 import { slackAdapter } from './slack.js';
 import { smtpMailer } from './smtp.js';
+import { telegramAdapter } from './telegram.js';
 import { webhookAdapter } from './webhook.js';
 
 export { discordAdapter, type DiscordOptions } from './discord.js';
@@ -26,6 +27,7 @@ export {
 } from './outbound.js';
 export { slackAdapter, type SlackOptions } from './slack.js';
 export { smtpMailer, smtpFailure, type SmtpMailerOptions } from './smtp.js';
+export { telegramAdapter, type TelegramOptions } from './telegram.js';
 export { webhookAdapter, type WebhookOptions } from './webhook.js';
 
 /** What every adapter of the registry receives. */
@@ -52,6 +54,7 @@ export const DESTINATION_ADAPTERS: Readonly<Record<DestinationType, AdapterFacto
   slack: slackAdapter,
   github: gitHubAdapter,
   email: emailAdapter,
+  telegram: telegramAdapter,
 };
 
 export class UnknownDestinationTypeError extends Error {

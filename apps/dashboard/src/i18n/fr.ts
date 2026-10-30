@@ -542,7 +542,7 @@ export const fr: Messages = {
     incidentConditions: (count) => `${count} condition${s(count)} de contexte`,
     emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
     emptyHelp:
-      'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
+      'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack, Discord ou Telegram, ou votre propre webhook.',
     copySecretNow: (name) =>
       `Copiez maintenant le secret de « ${name} » : il ne sera plus jamais affiché.`,
     anySeverity: 'toute Gravité',
@@ -704,6 +704,19 @@ export const fr: Messages = {
       labelsHelp:
         'Le nom du label tel qu’il s’affiche dans Linear, de l’équipe ou de l’espace de travail. Laissé vide : aucun label. Un label introuvable suspend la Destination.',
       summary: (team) => `Équipe ${team}`,
+    },
+    telegram: {
+      botToken: 'Jeton du bot',
+      botTokenHelp:
+        'Dans Telegram, envoyez /newbot à @BotFather et collez le jeton qu’il vous donne. Stocké chiffré, jamais réaffiché.',
+      chatId: 'Identifiant du chat',
+      chatIdHelp:
+        'Ajoutez le bot au groupe ou au canal (administrateur pour un canal), postez-y un message, puis ouvrez api.telegram.org/bot<jeton>/getUpdates : l’identifiant est chat.id, -100… pour un supergroupe ou un canal. Un canal public peut se donner en @nom ; une personne doit d’abord démarrer le bot.',
+      topicId: 'Sujet du forum (facultatif)',
+      topicIdHelp:
+        'Dans un groupe à sujets, l’identifiant du sujet : le dernier nombre d’un lien vers le sujet (t.me/c/…/7). Vide : le chat lui-même.',
+      summary: (chatId, topicId) =>
+        topicId === null ? `Chat ${chatId}` : `Chat ${chatId}, sujet ${topicId}`,
     },
   },
 

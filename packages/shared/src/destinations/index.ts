@@ -17,6 +17,7 @@ import { emailDefinition } from './email.js';
 import { gitHubDefinition } from './github.js';
 import { linearDefinition } from './linear.js';
 import { slackDefinition } from './slack.js';
+import { telegramDefinition } from './telegram.js';
 import { webhookDefinition } from './webhook.js';
 
 export { httpUrlSchema, type DestinationDefinition } from './definition.js';
@@ -25,6 +26,7 @@ export * from './email.js';
 export * from './github.js';
 export * from './linear.js';
 export * from './slack.js';
+export * from './telegram.js';
 export * from './webhook.js';
 
 /**
@@ -39,6 +41,7 @@ export const DESTINATION_DEFINITIONS = {
   slack: slackDefinition,
   github: gitHubDefinition,
   email: emailDefinition,
+  telegram: telegramDefinition,
 } as const satisfies Record<string, DestinationDefinition>;
 
 export type DestinationType = keyof typeof DESTINATION_DEFINITIONS;

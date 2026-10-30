@@ -569,7 +569,7 @@ export const en = {
       `${count} context ${count === 1 ? 'condition' : 'conditions'}`,
     emptyTitle: 'No Destination: Triaged Feedback goes nowhere.',
     emptyHelp:
-      'Add one below: a GitHub repository, a Linear team, a Slack or Discord channel, or your own webhook.',
+      'Add one below: a GitHub repository, a Linear team, a Slack, Discord or Telegram channel, or your own webhook.',
     copySecretNow: (name: string) =>
       `Copy the secret of “${name}” now: it will never be shown again.`,
     anySeverity: 'any Severity',
@@ -722,6 +722,19 @@ export const en = {
       labelsHelp:
         'The label’s name as Linear shows it, from the team or the workspace. Left empty: no label. A label that cannot be found suspends the Destination.',
       summary: (team: string) => `Team ${team}`,
+    },
+    telegram: {
+      botToken: 'Bot token',
+      botTokenHelp:
+        'In Telegram, send /newbot to @BotFather and paste the token it gives you. Stored encrypted, never shown again.',
+      chatId: 'Chat id',
+      chatIdHelp:
+        'Add the bot to the group or channel (as an administrator for a channel), post a message there, then open api.telegram.org/bot<token>/getUpdates: the id is chat.id, -100… for a supergroup or a channel. A public channel can be given as @username; a person must start the bot first.',
+      topicId: 'Forum topic (optional)',
+      topicIdHelp:
+        'In a group with topics, the topic’s id: the last number of a link to the topic (t.me/c/…/7). Empty: the chat itself.',
+      summary: (chatId: string, topicId: number | null) =>
+        topicId === null ? `Chat ${chatId}` : `Chat ${chatId}, topic ${topicId}`,
     },
   },
 
