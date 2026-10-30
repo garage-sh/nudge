@@ -406,6 +406,7 @@ export const en = {
       none: 'No Delivery.',
       attempts: (count: number) => `${count} ${count === 1 ? 'attempt' : 'attempts'}`,
       replay: 'Replay',
+      replayLabel: (destination: string) => `Replay the Delivery to ${destination}`,
       lastError: (error: string) => `Last error: ${error}`,
     },
     redispatch: {
@@ -496,7 +497,9 @@ export const en = {
     shown: (count: number, more: boolean) =>
       `${count} Incident${count === 1 ? '' : 's'} shown${more ? ', more to load' : ''}.`,
     noMatch: 'No Incident matches these filters.',
+    noneInView: { open: 'No Open Incident.', closed: 'No Closed Incident.' },
     clearFilters: 'Clear filters',
+    invalidFilters: 'This address carries filters nudge does not know.',
     emptyTitle: 'No Incident reported yet.',
     emptyHelp:
       'Incidents arrive here when the Project’s server reports something going wrong, with its secret key.',
@@ -533,7 +536,6 @@ export const en = {
     noContext: 'No context.',
     noMessage: 'No message.',
     deliveries: 'Deliveries',
-    held: 'Held',
     heldHelp:
       'Opened while the Project went past its Opening cap: recorded, but sent to no Destination. Redispatch it if it matters; the Destinations concerned get a summary of the Held Incidents instead.',
     heldClosedHelp:

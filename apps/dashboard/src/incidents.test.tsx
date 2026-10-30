@@ -121,6 +121,29 @@ describe('A Project’s Incidents', () => {
     expect(screen.getByRole('link', { name: 'Slow search page' })).toBeTruthy();
   });
 
+  it('names the empty view', async () => {
+    fakeApi({ ...routes(), 'GET /api/incidents?project=project-1&state=closed': page([]) });
+    renderDashboard('/projects/project-1/incidents?state=closed');
+    expect(await screen.findByText('No Closed Incident.')).toBeTruthy();
+  });
+
+  it('offers to clear filters the API refuses, rather than a retry', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents?project=project-1&level=urgent': {
+        status: 400,
+        body: { error: 'invalid_filter' },
+      },
+    });
+    renderDashboard('/projects/project-1/incidents?level=urgent');
+    expect(
+      await screen.findByText('This address carries filters nudge does not know.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(await screen.findByRole('link', { name: 'Slow search page' })).toBeTruthy();
+  });
+
   it('filters by state, Level and Environment through the API', async () => {
     const api = fakeApi({
       ...routes(),
@@ -270,8 +293,12 @@ describe('An Incident’s detail', () => {
     expect(within(deliveries).getByText('On-call webhook')).toBeTruthy();
     expect(within(deliveries).getByText('Last error: permanent: HTTP 422')).toBeTruthy();
     // Replaying a delivered Incident Delivery would open its issue or message again.
-    expect(within(deliveries).getAllByRole('button', { name: 'Replay' })).toHaveLength(1);
-    await userEvent.click(within(deliveries).getByRole('button', { name: 'Replay' }));
+    expect(
+      within(deliveries).getAllByRole('button', { name: /^Replay the Delivery to / }),
+    ).toHaveLength(1);
+    await userEvent.click(
+      within(deliveries).getByRole('button', { name: /^Replay the Delivery to / }),
+    );
     expect(api.calls.map((c) => c.route)).toContain('POST /api/deliveries/delivery-1/replay');
 
     await userEvent.click(within(deliveries).getByRole('button', { name: 'Redispatch' }));

@@ -5,6 +5,7 @@ import {
   type IncidentSummaryView,
 } from '@nudge/shared';
 import { Link, useParams, useSearchParams } from 'react-router';
+import { ApiError } from '../api/client.js';
 import {
   INCIDENT_FILTERS,
   useIncidentEnvironments,
@@ -49,6 +50,8 @@ export function Incidents() {
     if (filters.state) next.set('state', filters.state);
     setParams(next, { replace: true });
   };
+  // A filter the api refuses (an address edited by hand, an old link): retrying cannot help.
+  const refused = incidents.error instanceof ApiError && incidents.error.status === 400;
   const rows = incidents.data?.pages.flatMap((page) => page.incidents) ?? [];
   const filtered = Boolean(filters.level || filters.environment || filters.held);
   const search = params.toString() ? `?${params.toString()}` : '';
@@ -59,7 +62,20 @@ export function Incidents() {
       <ProjectHeader project={project.data} />
       <Views projectId={projectId} state={filters.state} params={params} />
       <Filters projectId={projectId} filters={filters} filter={filter} />
-      {incidents.isFetchNextPageError ? null : (
+      {refused ? (
+        <EmptyState
+          title={t.incidents.invalidFilters}
+          action={
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setParams(new URLSearchParams(), { replace: true })}
+            >
+              {t.incidents.clearFilters}
+            </button>
+          }
+        />
+      ) : incidents.isFetchNextPageError ? null : (
         <ErrorMessage error={incidents.error} onRetry={() => void incidents.refetch()} />
       )}
       <p role="status" className="visually-hidden">
@@ -73,7 +89,11 @@ export function Incidents() {
       {incidents.isSuccess && rows.length === 0 ? (
         filtered || filters.state ? (
           <EmptyState
-            title={t.incidents.noMatch}
+            title={
+              !filtered && (filters.state === 'open' || filters.state === 'closed')
+                ? t.incidents.noneInView[filters.state]
+                : t.incidents.noMatch
+            }
             action={
               filtered ? (
                 <button type="button" className="secondary" onClick={clearFilters}>

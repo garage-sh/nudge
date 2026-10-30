@@ -378,6 +378,7 @@ export const fr: Messages = {
       none: 'Aucun Envoi.',
       attempts: (count) => `${count} tentative${s(count)}`,
       replay: 'Rejouer',
+      replayLabel: (destination) => `Rejouer l’Envoi à ${destination}`,
       lastError: (error) => `Dernière erreur : ${error}`,
     },
     redispatch: {
@@ -470,7 +471,9 @@ export const fr: Messages = {
     shown: (count: number, more: boolean) =>
       `${count} Incident${s(count)} affiché${s(count)}${more ? ', d’autres à charger' : ''}.`,
     noMatch: 'Aucun Incident ne correspond à ces filtres.',
+    noneInView: { open: 'Aucun Incident Ouvert.', closed: 'Aucun Incident Clos.' },
     clearFilters: 'Effacer les filtres',
+    invalidFilters: 'Cette adresse porte des filtres que nudge ne connaît pas.',
     emptyTitle: 'Aucun Incident signalé pour l’instant.',
     emptyHelp:
       'Les Incidents arrivent ici quand le serveur du Projet signale un problème, avec sa clé secrète.',
@@ -507,7 +510,6 @@ export const fr: Messages = {
     noContext: 'Aucun contexte.',
     noMessage: 'Aucun message.',
     deliveries: 'Envois',
-    held: 'Retenu',
     heldHelp:
       'Ouvert pendant que le Projet dépassait son Plafond d’ouvertures : enregistré, mais envoyé à aucune Destination. Redispatchez-le s’il compte ; les Destinations concernées reçoivent à la place un récapitulatif des Incidents retenus.',
     heldClosedHelp:

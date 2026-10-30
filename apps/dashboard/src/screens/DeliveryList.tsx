@@ -50,6 +50,7 @@ export function DeliveryList({
               <button
                 type="button"
                 className="secondary"
+                aria-label={t.feedback.deliveries.replayLabel(delivery.destination.name)}
                 disabled={replay.isPending}
                 onClick={() => replay.mutate(delivery.id, { onSuccess: afterReplay })}
               >
