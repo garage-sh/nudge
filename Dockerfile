@@ -63,7 +63,7 @@ RUN --mount=type=cache,target=/root/.yarn/berry/cache \
 FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS server
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge" \
-      org.opencontainers.image.description="Collects, triages and dispatches user feedback: api and worker." \
+      org.opencontainers.image.description="Collects user Feedback and application Incidents, triages and dispatches them: api and worker." \
       org.opencontainers.image.source="https://github.com/garage-sh/nudge" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"

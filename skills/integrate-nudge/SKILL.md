@@ -1,6 +1,6 @@
 ---
 name: integrate-nudge
-description: Integrate nudge, the self-hosted feedback tool, into an application. Use when adding the nudge Widget to a web app, sending Feedback to a nudge Instance from a server, or wiring the signed-in user, metadata or a Capture into nudge.
+description: Integrate nudge, the self-hosted feedback and incident router, into an application. Use when adding the nudge Widget to a web app, sending Feedback to a nudge Instance from a server, or wiring the signed-in user, metadata or a Capture into nudge.
 ---
 
 # Integrate nudge

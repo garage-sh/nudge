@@ -18,7 +18,7 @@ Both reach one self-hosted Instance, which makes sense of them and sends each on
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/flow-dark.svg" />
-  <img src="docs/assets/flow.svg" alt="Feedback from several Projects reaches nudge, which triages it and dispatches it to Linear, GitHub Issues, Slack, Discord and webhooks" width="100%" />
+  <img src="docs/assets/flow.svg" alt="Feedback from users and Incidents from servers, sent by several applications, reach nudge, which triages the Feedback, groups the Incidents, and dispatches both to Linear, GitHub Issues, Slack, Discord, email and webhooks" width="100%" />
 </picture>
 
 ### What it does

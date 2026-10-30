@@ -1,6 +1,6 @@
 # nudge
 
-Open-source, self-hosted tool that collects, triages and dispatches user feedback from several projects. The domain vocabulary is in `CONTEXT.md`; the v1 spec is issue #1.
+Open-source, self-hosted tool that collects user Feedback and application Incidents from several projects, triages them and dispatches them. The domain vocabulary is in `CONTEXT.md`; the v1 spec is issue #1.
 
 ## Language
 
