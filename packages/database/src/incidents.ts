@@ -18,7 +18,6 @@ import {
   lt,
   ne,
   sql,
-  type SQL,
 } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
 import { createMissingIncidentDeliveries, type CreatedDelivery } from './dispatch.js';
@@ -240,11 +239,17 @@ export async function closeIncident(
     .where(and(eq(incidents.id, incidentId), eq(incidents.state, 'open')))
     .returning({ id: incidents.id });
   if (!closed) return null;
-  return rearmForClosing(tx, eq(deliveries.incidentId, incidentId));
+  return rearmForClosing(tx, { incidentId });
 }
 
 /**
- * Sets back to pending, to carry the closing, the delivered Deliveries among `scope`
+ * The Deliveries `rearmForClosing` looks at: those of one Incident, one Delivery, or
+ * all of them (the Quiet period sweep).
+ */
+export type RearmScope = { readonly incidentId: string } | { readonly deliveryId: string } | 'all';
+
+/**
+ * Sets back to pending, to carry the closing, the delivered Deliveries in `scope`
  * whose Incident is Closed but that delivered only its opening (moment `opened` or
  * `raised`). An Incident's whole life delivered at once ("opened then closed") is
  * recorded with the moment `closed`, so it never matches. Called when the Incident
@@ -253,14 +258,20 @@ export async function closeIncident(
  */
 export async function rearmForClosing(
   db: Db | Transaction,
-  scope: SQL,
+  scope: RearmScope,
 ): Promise<CreatedDelivery[]> {
+  const inScope =
+    scope === 'all'
+      ? undefined
+      : 'incidentId' in scope
+        ? eq(deliveries.incidentId, scope.incidentId)
+        : eq(deliveries.id, scope.deliveryId);
   const rearmed = await db
     .update(deliveries)
     .set({ status: 'pending', incidentMoment: 'closed', lastError: null })
     .where(
       and(
-        scope,
+        inScope,
         isNotNull(deliveries.incidentId),
         eq(deliveries.status, 'delivered'),
         ne(deliveries.incidentMoment, 'closed'),

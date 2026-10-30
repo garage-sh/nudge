@@ -12,7 +12,7 @@ How an application reports what goes wrong on its side (a payment provider timin
 
 ## How an Incident lives
 
-One request is one **Occurrence**. nudge groups the Occurrences that share a **Fingerprint** into one Open **Incident**: a healthcheck failing every minute is one Incident with a growing counter, not one alert per minute. The Incident keeps the counter, the first and last seen times, and the full first and last report; individual Occurrences are not stored.
+One request is one **Occurrence**. nudge groups the Occurrences that share a **Fingerprint** into one Open **Incident**: a healthcheck failing every minute is one Incident with a growing counter, not one Incident per minute. The Incident keeps the counter, the first and last seen times, and the full first and last report; individual Occurrences are not stored.
 
 An Incident has a **Level**: `info`, `warning`, `error` or `critical`. The Level the sender declares is used as is. Without one, the Judge assesses it, within a bounded wait (`NUDGE_INCIDENT_JUDGE_WAIT_MS`, 10 s); failing that, the Project's default Level applies. A later Occurrence with a higher declared Level raises the Incident's Level.
 

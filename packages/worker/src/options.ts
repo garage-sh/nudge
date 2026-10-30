@@ -131,18 +131,25 @@ export interface IncidentOptions {
   readonly openingWindowMs?: number;
 }
 
-/** The Opening cap counts the openings of the last minute. */
-export const DEFAULT_OPENING_WINDOW_MS = OPENING_CAP_WINDOW_MS;
-
 /**
  * One hour of silence closes an Incident; the sweep runs every minute; the Judge gets
- * ten seconds to assess a Level.
+ * ten seconds to assess a Level; the Opening cap counts the openings of the last minute.
  */
-export const DEFAULT_INCIDENTS: IncidentOptions = {
+export const DEFAULT_INCIDENTS: Required<IncidentOptions> = {
   quietPeriodMs: DEFAULT_QUIET_PERIOD_MS,
   sweepIntervalMs: 60_000,
   judgeWaitMs: 10_000,
+  openingWindowMs: OPENING_CAP_WINDOW_MS,
 };
+
+/** The Incident options in effect: `WorkerOptions.incidents`, else `DEFAULT_INCIDENTS`. */
+export function incidentOptionsOf(options: WorkerOptions): Required<IncidentOptions> {
+  const incidents = options.incidents ?? DEFAULT_INCIDENTS;
+  return {
+    ...incidents,
+    openingWindowMs: incidents.openingWindowMs ?? DEFAULT_INCIDENTS.openingWindowMs,
+  };
+}
 
 export interface ConcurrencyOptions {
   /** Triage jobs at the same time: as many Judge requests in flight. */

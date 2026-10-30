@@ -30,10 +30,10 @@ import type { JobType, Queue } from 'bullmq';
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
   DEFAULT_CAPTURE_SWEEP,
-  DEFAULT_INCIDENTS,
-  DEFAULT_OPENING_WINDOW_MS,
   DEFAULT_SWEEP,
+  incidentOptionsOf,
   MAX_TRIAGE_SWEEP_BACKOFF_MS,
+  type IncidentOptions,
   type WorkerOptions,
 } from './options.js';
 import {
@@ -71,6 +71,7 @@ const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 @Injectable()
 export class SweepProcessor {
   private readonly logger = new Logger(SweepProcessor.name);
+  private readonly incidents: Required<IncidentOptions>;
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -80,7 +81,9 @@ export class SweepProcessor {
     private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
     @Inject(HELD_SUMMARY_QUEUE_TOKEN) private readonly heldSummaryQueue: Queue<HeldSummaryJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
-  ) {}
+  ) {
+    this.incidents = incidentOptionsOf(options);
+  }
 
   /**
    * Sends back to Triage the Feedbacks Received for longer than the delay, the ones due
@@ -183,7 +186,7 @@ export class SweepProcessor {
    * settle the Level wins, the other does nothing.
    */
   async sweepIncidentLevels(): Promise<void> {
-    const { judgeWaitMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const { judgeWaitMs } = this.incidents;
     const due = await incidentsLeftAwaitingLevel(
       this.db,
       new Date(Date.now() - judgeWaitMs),
@@ -211,10 +214,10 @@ export class SweepProcessor {
    * Deliveries left pending sends them.
    */
   async sweepQuietIncidents(): Promise<void> {
-    const { quietPeriodMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const { quietPeriodMs } = this.incidents;
     const closed = await closeQuietIncidents(this.db, quietPeriodMs, BATCH);
     for (const { id } of closed) this.logger.log(`Incident ${id} closed: Quiet period over`);
-    const missed = await rearmForClosing(this.db, sql`true`);
+    const missed = await rearmForClosing(this.db, 'all');
     for (const { id } of missed) {
       this.logger.warn(`Delivery ${id} delivered its opening without its closing: re-armed`);
     }
@@ -235,8 +238,8 @@ export class SweepProcessor {
    * (logged), never sent twice.
    */
   async sweepStorms(): Promise<void> {
-    const windowMs = this.options.incidents?.openingWindowMs ?? DEFAULT_OPENING_WINDOW_MS;
-    const ended = await endCalmStorms(this.db, windowMs, BATCH);
+    const { openingWindowMs } = this.incidents;
+    const ended = await endCalmStorms(this.db, openingWindowMs, BATCH);
     const summaries = ended.flatMap(({ id, destinationIds }) =>
       destinationIds.map((destinationId) => ({ stormId: id, destinationId })),
     );

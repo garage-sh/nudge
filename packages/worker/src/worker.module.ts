@@ -55,11 +55,11 @@ import {
 import { JudgeResolver } from './judge-resolver.js';
 import {
   DEFAULT_CAPTURE_SWEEP,
-  DEFAULT_INCIDENTS,
   DEFAULT_CONCURRENCY,
   DEFAULT_SWEEP,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
+  incidentOptionsOf,
   type OnSuspension,
   type WorkerOptions,
 } from './options.js';
@@ -220,7 +220,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: captureSweep.intervalMs },
       { name: SWEEP_CAPTURES_JOB },
     );
-    const incidents = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const incidents = incidentOptionsOf(this.options);
     await this.maintenanceQueue.upsertJobScheduler(
       SWEEP_QUIET_INCIDENTS_JOB,
       { every: incidents.sweepIntervalMs },

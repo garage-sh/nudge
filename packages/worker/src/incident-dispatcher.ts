@@ -113,7 +113,7 @@ export class IncidentDispatcher implements SubjectDispatcher {
    * sweep re-arms it.
    */
   private async closeIfClosedMeanwhile(deliveryId: string): Promise<void> {
-    const rearmed = await rearmForClosing(this.db, eq(deliveries.id, deliveryId));
+    const rearmed = await rearmForClosing(this.db, { deliveryId });
     if (rearmed.length === 0) return;
     await this.dispatchQueue.add(DISPATCH_JOB, { deliveryId }, { jobId: closingJobId(deliveryId) });
   }

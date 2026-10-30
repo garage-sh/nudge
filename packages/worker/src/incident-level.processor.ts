@@ -18,7 +18,7 @@ import { JudgeTransientError } from '@nudge/judge';
 import { LEVELS, type Level } from '@nudge/shared';
 import type { Queue } from 'bullmq';
 import { JudgeResolver } from './judge-resolver.js';
-import { DEFAULT_INCIDENTS, type WorkerOptions } from './options.js';
+import { incidentOptionsOf, type WorkerOptions } from './options.js';
 import { withTimeout } from './timeout.js';
 import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
 
@@ -27,8 +27,8 @@ import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS } from './tokens.js';
  * Dispatch `opened`. The Judge is asked one Choice among the Levels, and is waited for
  * only until the bound (`IncidentOptions.judgeWaitMs`, counted from the opening): past
  * it, with no Judge, or when the Judge fails, the Project's default Level the Incident
- * opened with applies. A Judge error never retries: a production alert is never held
- * for it. A replayed job finds the Level settled and does nothing.
+ * opened with applies. A Judge error never retries: the Dispatch of a production
+ * Incident never waits on it. A replayed job finds the Level settled and does nothing.
  */
 @Injectable()
 export class IncidentLevelProcessor {
@@ -59,7 +59,7 @@ export class IncidentLevelProcessor {
 
   /** The Judge's Level, or `null` when the default one applies. */
   private async assess(incident: IncidentAwaitingLevel): Promise<Level | null> {
-    const { judgeWaitMs } = this.options.incidents ?? DEFAULT_INCIDENTS;
+    const { judgeWaitMs } = incidentOptionsOf(this.options);
     const remainingMs = incident.firstSeenAt.getTime() + judgeWaitMs - Date.now();
     if (remainingMs <= 0) return null;
     try {

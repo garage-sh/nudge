@@ -107,6 +107,8 @@ The mark is the Severity gauge at its full level: four rising bars, in the accen
 - `.form`, `.field`, `fieldset.field` + `.check` (checkboxes as pills), `.actions` (row of buttons), `.help`, `.muted`.
 - `.alert` (error), `.warning` (caution, amber), `.empty` (empty state), `.meta` (inline metadata), `.properties` (label / value pairs).
 - `fieldset.type-picker` + `.type-option`: a choice between a few kinds of object, as radios carrying a mark (`TypeIcon`) and a name. `fieldset.segmented`: a switch between a few views of the same thing (a webhook's events).
+- `fieldset.filter-group`: one Filter of the Destination form (Feedback or Incident), under a hairline: its legend, a `.check` switch that turns it on, then its settings.
+- `fieldset.conditions-field` + `.conditions` / `.condition`: a list of rows to add or remove (an Incident Filter's context conditions), each row its fields side by side and its remove button.
 
 ### Buttons
 
