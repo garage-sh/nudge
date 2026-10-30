@@ -245,6 +245,26 @@ describe('Telegram adapter', () => {
       ).toBeLessThanOrEqual(1024);
     });
 
+    it('a photo Telegram refuses on its own (dimensions, media rights) goes as the message alone', async () => {
+      const { fetch, requests } = telegram(TELEGRAM.photoRefused, TELEGRAM.postedInSupergroup);
+
+      expect(await adapter(fetch).send(withCapture(() => Promise.resolve(png)))).toEqual({
+        status: 'delivered',
+        externalUrl: SUPERGROUP_LINK,
+      });
+
+      expect(requests.map((r) => r.url)).toEqual([`${API}/sendPhoto`, `${API}/sendMessage`]);
+    });
+
+    it('a Capture larger than sendPhoto takes goes as the message alone', async () => {
+      const { fetch, requests } = telegram(TELEGRAM.postedInSupergroup);
+      const huge = new Uint8Array(10 * 1024 * 1024 + 1);
+
+      await adapter(fetch).send(withCapture(() => Promise.resolve(huge)));
+
+      expect(requests.map((r) => r.url)).toEqual([`${API}/sendMessage`]);
+    });
+
     it('without the image in storage, sends the message alone', async () => {
       const { fetch, requests } = telegram(TELEGRAM.postedInSupergroup);
 
@@ -296,6 +316,7 @@ describe('Telegram adapter', () => {
     ['400 chat not found', 'auth', TELEGRAM.chatNotFound],
     ['400 forum topic not found', 'auth', TELEGRAM.threadNotFound],
     ['400 rejected message', 'permanent', TELEGRAM.badEntities],
+    ['400 no right to send photos', 'permanent', TELEGRAM.noPhotoRights],
     ['429 with a long retry_after', 'transient', TELEGRAM.rateLimitedLong],
     ['502 gateway', 'transient', TELEGRAM.badGateway],
   ] as const)('classifies a %s response: %s', async (_, failureClass, recording) => {

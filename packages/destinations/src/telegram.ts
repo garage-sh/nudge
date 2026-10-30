@@ -18,16 +18,16 @@ import {
   type TelegramSecrets,
 } from '@nudge/shared';
 import { readCapture, type CaptureImage } from './capture.js';
-import { escapeHtml } from './email-template.js';
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   EXCERPT_MAX,
   classifyStatus,
+  externalLink,
   httpFailure,
   networkFailure,
 } from './http.js';
 import { isSafeLink } from './markdown.js';
-import { authorIdentity, truncate } from './text.js';
+import { authorIdentity, escapeHtml, truncate } from './text.js';
 
 export interface TelegramOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -122,7 +122,7 @@ export function telegramAdapter(
         ? {}
         : { reply_parameters: { message_id: reply, allow_sending_without_reply: true } }),
     });
-    return { answer, result: delivered(answer) };
+    return { answer, result: asDeliveryResult(answer) };
   }
 
   /** Posts the Capture with the message as its caption: one message, like without one. */
@@ -133,7 +133,7 @@ export function telegramAdapter(
     form.set('parse_mode', 'HTML');
     const extension = image.contentType === 'image/png' ? 'png' : 'jpg';
     form.set('photo', new Blob([image.bytes], { type: image.contentType }), `capture.${extension}`);
-    return delivered(await request('sendPhoto', form));
+    return asDeliveryResult(await request('sendPhoto', form));
   }
 
   /** A message that no Delivery keeps the link of (alert, summary). */
@@ -146,9 +146,12 @@ export function telegramAdapter(
     async send(delivery) {
       const capture = await readCapture(delivery.feedback.capture);
       if (!capture.ok) return { status: 'failed', ...capture };
-      return capture.image
-        ? postPhoto(capture.image, feedbackHtml(delivery, CAPTION_MAX))
-        : (await post(feedbackHtml(delivery, MESSAGE_MAX))).result;
+      if (capture.image && capture.image.bytes.length <= PHOTO_MAX_BYTES) {
+        const result = await postPhoto(capture.image, feedbackHtml(delivery, CAPTION_MAX));
+        // A photo refused on its own (dimensions, media rights): the message goes without it.
+        if (result.status === 'delivered' || result.failureClass !== 'permanent') return result;
+      }
+      return (await post(feedbackHtml(delivery, MESSAGE_MAX))).result;
     },
     /** The message's link is what finds it again to reply to it on closing. */
     deliverIncident: async (delivery) => (await post(incidentHtml(delivery))).result,
@@ -200,7 +203,7 @@ export function telegramAdapter(
 }
 
 /** A posted message as a Delivery result: delivered with its link, or the failure. */
-function delivered(answer: Answer): DeliveryResult {
+function asDeliveryResult(answer: Answer): DeliveryResult {
   if (!answer.ok) {
     return { status: 'failed', failureClass: answer.failureClass, message: answer.message };
   }
@@ -212,7 +215,8 @@ interface SentMessage {
   readonly chat?: { readonly id?: unknown; readonly type?: unknown; readonly username?: unknown };
 }
 
-const USERNAME = /^[A-Za-z0-9_]{4,32}$/;
+/** A public chat's username, as it appears in its `t.me` links. */
+const USERNAME = '[A-Za-z0-9_]{4,32}';
 
 /**
  * The link of a posted message, which Telegram allows only in supergroups and
@@ -223,16 +227,20 @@ function messageLink(result: unknown): string | null {
   const { message_id: messageId, chat } = (result ?? {}) as SentMessage;
   if (!Number.isSafeInteger(messageId) || (chat?.type !== 'supergroup' && chat?.type !== 'channel'))
     return null;
-  if (typeof chat.username === 'string' && USERNAME.test(chat.username)) {
-    return `https://t.me/${chat.username}/${String(messageId)}`;
+  if (typeof chat.username === 'string' && new RegExp(`^${USERNAME}$`).test(chat.username)) {
+    return externalLink(`https://t.me/${chat.username}/${String(messageId)}`);
   }
   const id = typeof chat.id === 'number' ? String(chat.id) : '';
-  return /^-100\d+$/.test(id) ? `https://t.me/c/${id.slice(4)}/${String(messageId)}` : null;
+  return /^-100\d+$/.test(id)
+    ? externalLink(`https://t.me/c/${id.slice(4)}/${String(messageId)}`)
+    : null;
 }
 
 /** The id of the message a link of this adapter points at, or `null`. */
 function messageIdOf(link: string | null): number | null {
-  const match = link ? /^https:\/\/t\.me\/(?:c\/\d+|[A-Za-z0-9_]{4,32})\/(\d+)$/.exec(link) : null;
+  const match = link
+    ? new RegExp(`^https://t\\.me/(?:c/\\d+|${USERNAME})/(\\d+)$`).exec(link)
+    : null;
   const id = match ? Number(match[1]) : NaN;
   return Number.isSafeInteger(id) ? id : null;
 }
@@ -266,7 +274,7 @@ function retryAfter({ parameters }: ErrorBody): number | null {
  * Delivery failing.
  */
 const REJECTED_CHAT =
-  /chat not found|message thread not found|upgraded to a supergroup|not enough rights|need administrator rights|have no rights/i;
+  /chat not found|message thread not found|upgraded to a supergroup|not enough rights to send text|need administrator rights|have no rights to send a message/i;
 
 /**
  * Class and message of a Bot API refusal. 401 (token revoked), 403 (bot removed from
@@ -279,16 +287,23 @@ async function telegramFailure(
   { description }: ErrorBody,
 ): Promise<{ failureClass: FailureClass; message: string }> {
   const text = typeof description === 'string' ? description : '';
-  const failure = await httpFailure(response, (status) =>
+  const classify = (status: number): FailureClass =>
     status === 404 || (status === 400 && REJECTED_CHAT.test(text))
       ? 'auth'
-      : classifyStatus(status),
-  );
-  const redirected = response.status >= 300 && response.status < 400;
-  return text && !redirected
-    ? { ...failure, message: `HTTP ${response.status}: ${truncate(text, EXCERPT_MAX)}` }
-    : failure;
+      : classifyStatus(status);
+  // A redirect, or an answer that is not the Bot API's envelope: the shared reading.
+  if (!text || (response.status >= 300 && response.status < 400)) {
+    return httpFailure(response, classify);
+  }
+  await response.body?.cancel();
+  return {
+    failureClass: classify(response.status),
+    message: `HTTP ${response.status}: ${truncate(text, EXCERPT_MAX)}`,
+  };
 }
+
+/** Largest photo `sendPhoto` takes (https://core.telegram.org/bots/api#sendphoto). */
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 /** Message limits: 4096 characters of text, 1024 of caption, once entities are parsed. */
 const MESSAGE_MAX = 4096;

@@ -17,7 +17,7 @@ import {
   type Source,
 } from '@nudge/shared';
 import { isSafeLink } from './markdown.js';
-import { authorIdentity, firstLine, truncate } from './text.js';
+import { authorIdentity, escapeHtml, firstLine, truncate } from './text.js';
 
 /*
  * The emails nudge sends, in its own colors: the dashboard's tokens
@@ -61,16 +61,6 @@ const SOURCE_LABELS: Readonly<Record<Source, string>> = {
 
 /** Longest subject line: clients cut it well before, the rest is noise. */
 const SUBJECT_MAX = 150;
-
-/** Text from outside (the Author, a Member, a target) made inert in HTML. */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /** A header carries one line: line breaks and runs of spaces collapse. */
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();

@@ -31,7 +31,7 @@ nudge posts through a Telegram bot, with the Bot API. Nothing but the bot token,
 
 What the chat receives:
 
-- **Feedback**: its Type, Severity, Author when known, the text and a link to the Feedback in nudge. A Capture is sent with the message, as a photo whose caption is the message (a caption holds 1024 characters: a long text is cut, the dashboard has all of it).
+- **Feedback**: its Type, Severity, Author when known, the text and a link to the Feedback in nudge. A Capture is sent with the message, as a photo whose caption is the message (a caption holds 1024 characters: a long text is cut, the dashboard has all of it). A Capture Telegram refuses as a photo (over 10 MB, too tall, media not allowed in the chat) leaves the message to go alone.
 - **Incidents**: a message when one opens or its Level rises to reach this Destination, and on closing a reply to that opening message. Telegram only links to messages of supergroups and channels: in a private chat or a basic group, the Delivery has no link and the closing is a message of its own, titled "Closed · …".
 - **Alerts**, when the Destination is the Instance's Alert destination.
 

@@ -39,3 +39,13 @@ export function authorIdentity(author: FeedbackToDispatch['author']): string | n
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' ') : null;
 }
+
+/** Text from outside (the Author, a Member, a target) made inert in HTML. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

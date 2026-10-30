@@ -121,6 +121,10 @@ export const TELEGRAM = {
   chatNotFound: failure(400, 'Bad Request: chat not found'),
   /** The configured forum topic was deleted. */
   threadNotFound: failure(400, 'Bad Request: message thread not found'),
+  /** A photo too tall for `sendPhoto` (a full-page screenshot). */
+  photoRefused: failure(400, 'Bad Request: PHOTO_INVALID_DIMENSIONS'),
+  /** A group that restricts media but not text. */
+  noPhotoRights: failure(400, 'Bad Request: not enough rights to send photos to the chat'),
   /** A body this message alone gets wrong. */
   badEntities: failure(
     400,
