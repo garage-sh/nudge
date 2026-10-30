@@ -11,12 +11,15 @@ export interface DeliveryBeforeReplay {
 
 export type ReopenResult =
   | { readonly status: 'reopened'; readonly before: DeliveryBeforeReplay }
-  /** The Delivery is neither delivered nor failed: it already has a job, or it is held. */
+  /**
+   * The Delivery cannot be replayed from its status: it already has a job, it is held, or
+   * it is a delivered Incident Delivery (`REPLAYABLE_DELIVERY_STATUSES`).
+   */
   | { readonly status: 'refused'; readonly deliveryStatus: DeliveryStatus }
   | { readonly status: 'not_found' };
 
 /**
- * Reopens a delivered or failed Delivery to replay it (D9): the same Delivery goes back
+ * Reopens a replayable Delivery (a failed one, or a delivered Feedback Delivery) to replay it (D9): the same Delivery goes back
  * to pending, never a second one. The row is locked while it is read and updated: two
  * simultaneous replays reopen it only once. The link to the object already created stays
  * until the next delivery. The caller queues the Delivery.
@@ -24,18 +27,25 @@ export type ReopenResult =
 export async function reopenDelivery(db: Db, deliveryId: string): Promise<ReopenResult> {
   return db.transaction(async (tx) => {
     const [delivery] = await tx
-      .select({ status: deliveries.status, lastError: deliveries.lastError })
+      .select({
+        subject: deliveries.subject,
+        status: deliveries.status,
+        lastError: deliveries.lastError,
+      })
       .from(deliveries)
       .where(eq(deliveries.id, deliveryId))
       .for('update');
     if (!delivery) return { status: 'not_found' };
-    if (!isDeliveryReplayable(delivery.status))
+    if (!isDeliveryReplayable(delivery.subject, delivery.status))
       return { status: 'refused', deliveryStatus: delivery.status };
     await tx
       .update(deliveries)
       .set({ status: 'pending', lastError: null })
       .where(eq(deliveries.id, deliveryId));
-    return { status: 'reopened', before: delivery };
+    return {
+      status: 'reopened',
+      before: { status: delivery.status, lastError: delivery.lastError },
+    };
   });
 }
 

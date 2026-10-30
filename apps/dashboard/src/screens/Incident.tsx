@@ -91,7 +91,12 @@ export function Incident() {
                 {detail.state === 'open' ? t.incident.heldHelp : t.incident.heldClosedHelp}
               </p>
             ) : null}
-            <DeliveryList deliveries={detail.deliveries} replay={replay} afterReplay={poll} />
+            <DeliveryList
+              subject="incident"
+              deliveries={detail.deliveries}
+              replay={replay}
+              afterReplay={poll}
+            />
             {detail.state === 'open' ? (
               <Redispatch incidentId={detail.id} afterRedispatch={poll} />
             ) : null}

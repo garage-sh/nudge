@@ -9,8 +9,9 @@ export class DeliveriesController {
   constructor(private readonly deliveries: DeliveriesService) {}
 
   /**
-   * Replays a delivered or failed Delivery: 202 with the Delivery back to pending, 409
-   * `delivery_not_replayable` (with its status) if it is pending or held.
+   * Replays a failed Delivery, or a delivered Feedback Delivery: 202 with the Delivery
+   * back to pending, 409 `delivery_not_replayable` (with its status) if it is pending,
+   * held, or a delivered Incident Delivery.
    */
   @Post(':id/replay')
   @HttpCode(202)

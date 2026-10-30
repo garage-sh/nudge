@@ -125,17 +125,21 @@ export const INCIDENT_DISPATCH_MOMENTS = ['opened', 'raised', 'closed'] as const
 export type IncidentDispatchMoment = (typeof INCIDENT_DISPATCH_MOMENTS)[number];
 
 /**
- * Statuses from which a Member can replay a Delivery: finished, delivered or failed. A
- * pending Delivery already has a job running; a held Delivery waits for its Destination
- * to be active again, and the probe releases it.
+ * Statuses from which a Member can replay a Delivery, per subject. A pending Delivery
+ * already has a job running; a held Delivery waits for its Destination to be active
+ * again, and the probe releases it. A delivered Feedback Delivery replays to pass on a
+ * Verdict correction; a delivered Incident Delivery never does: replaying it would create
+ * its issue or message a second time, or send its closing twice.
  */
-export const REPLAYABLE_DELIVERY_STATUSES = [
-  'delivered',
-  'failed',
-] as const satisfies readonly DeliveryStatus[];
+export const REPLAYABLE_DELIVERY_STATUSES = {
+  feedback: ['delivered', 'failed'],
+  incident: ['failed'],
+} as const satisfies Record<DeliverySubjectKind, readonly DeliveryStatus[]>;
 
-export const isDeliveryReplayable = (status: DeliveryStatus): boolean =>
-  (REPLAYABLE_DELIVERY_STATUSES as readonly DeliveryStatus[]).includes(status);
+export const isDeliveryReplayable = (
+  subject: DeliverySubjectKind,
+  status: DeliveryStatus,
+): boolean => (REPLAYABLE_DELIVERY_STATUSES[subject] as readonly DeliveryStatus[]).includes(status);
 
 /**
  * States from which a Member can redispatch a Feedback (D22): it has already been

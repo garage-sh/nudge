@@ -201,6 +201,26 @@ describe('Routing an Incident through the Incident Filter', () => {
     expect(fake.incidents.map((d) => d.incident.id)).toEqual([opened.id]);
   });
 
+  it('a delivered Incident Delivery cannot be replayed: it would create its issue or message a second time', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'No replay' });
+    const { fake } = await pipeline.createDestination(project.id, {
+      incidentFilter: { minimumLevel: 'info', environments: [], conditions: [] },
+    });
+
+    const opened = await report(secretKey, { title: 'Mail queue stuck', level: 'error' });
+    const delivered = await waitForIncident(opened.id, allDelivered(1));
+
+    const replay = await member.post(`/api/deliveries/${delivered.deliveries[0]!.id}/replay`);
+    expect(replay).toMatchObject({
+      status: 409,
+      body: { error: 'delivery_not_replayable', status: 'delivered' },
+    });
+    expect((await read(opened.id)).deliveries).toMatchObject([
+      { status: 'delivered', attempts: 1 },
+    ]);
+    expect(fake.incidentAttempts).toHaveLength(1);
+  });
+
   it('Redispatch after a Filter change creates only the missing Deliveries', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Redispatch' });
     const team = await pipeline.createDestination(project.id, {

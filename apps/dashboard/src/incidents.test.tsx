@@ -226,12 +226,19 @@ describe('An Incident’s detail', () => {
     expect(screen.getByRole('link', { name: 'Back to Incidents' })).toBeTruthy();
   });
 
-  it('shows its Deliveries, replays a failed one, and redispatches the Open Incident', async () => {
+  it('shows its Deliveries, replays a failed one but not a delivered one, and redispatches the Open Incident', async () => {
+    const delivered: DeliveryView = {
+      ...FAILED_DELIVERY,
+      id: 'delivery-0',
+      destination: { ...FAILED_DELIVERY.destination, id: 'destination-0', name: 'Ops channel' },
+      status: 'delivered',
+      lastError: null,
+    };
     const api = fakeApi({
       ...routes(),
       'GET /api/incidents/incident-1': {
         status: 200,
-        body: { ...TIMEOUT_DETAIL, deliveries: [FAILED_DELIVERY] },
+        body: { ...TIMEOUT_DETAIL, deliveries: [delivered, FAILED_DELIVERY] },
       },
       'POST /api/deliveries/delivery-1/replay': {
         status: 202,
@@ -242,6 +249,7 @@ describe('An Incident’s detail', () => {
       const after: IncidentDetailView = {
         ...TIMEOUT_DETAIL,
         deliveries: [
+          delivered,
           FAILED_DELIVERY,
           {
             ...FAILED_DELIVERY,
@@ -261,6 +269,8 @@ describe('An Incident’s detail', () => {
     const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
     expect(within(deliveries).getByText('On-call webhook')).toBeTruthy();
     expect(within(deliveries).getByText('Last error: permanent: HTTP 422')).toBeTruthy();
+    // Replaying a delivered Incident Delivery would open its issue or message again.
+    expect(within(deliveries).getAllByRole('button', { name: 'Replay' })).toHaveLength(1);
     await userEvent.click(within(deliveries).getByRole('button', { name: 'Replay' }));
     expect(api.calls.map((c) => c.route)).toContain('POST /api/deliveries/delivery-1/replay');
 

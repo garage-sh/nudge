@@ -106,7 +106,12 @@ export function Feedback() {
             </Section>
           ) : null}
           <Section id="deliveries" title={s.deliveries}>
-            <DeliveryList deliveries={detail.deliveries} replay={replay} afterReplay={poll} />
+            <DeliveryList
+              subject="feedback"
+              deliveries={detail.deliveries}
+              replay={replay}
+              afterReplay={poll}
+            />
             {isFeedbackRedispatchable(detail.state) ? (
               <Redispatch feedbackId={detail.id} afterRedispatch={poll} />
             ) : null}

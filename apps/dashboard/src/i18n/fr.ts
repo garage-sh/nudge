@@ -99,7 +99,7 @@ export const fr: Messages = {
     feedback_not_triaged: 'Ce Retour n’est pas encore trié : il n’a pas de Verdict à corriger.',
     delivery_not_found: 'Cet Envoi n’existe plus.',
     delivery_not_replayable:
-      'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
+      'Cet Envoi est en cours, retenu par sa Destination Suspendue, ou est un Envoi d’Incident déjà livré : il ne se rejoue pas maintenant.',
     feedback_not_redispatchable:
       'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
     incident_not_redispatchable:

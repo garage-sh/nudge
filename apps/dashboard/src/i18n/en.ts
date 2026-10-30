@@ -124,7 +124,7 @@ export const en = {
     feedback_not_triaged: 'This Feedback is not triaged yet: it has no Verdict to correct.',
     delivery_not_found: 'This Delivery no longer exists.',
     delivery_not_replayable:
-      'This Delivery is in progress or held by its Suspended Destination: it cannot be replayed now.',
+      'This Delivery is in progress, held by its Suspended Destination, or an Incident Delivery already delivered: it cannot be replayed now.',
     feedback_not_redispatchable:
       'This Feedback cannot be redispatched: only a Triaged or Dispatched Feedback can.',
     incident_not_redispatchable: 'This Incident cannot be redispatched: only an Open Incident can.',
