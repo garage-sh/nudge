@@ -3,12 +3,15 @@ import {
   CAPTURE_KEY_PREFIX,
   closingJobId,
   DISPATCH_JOB,
+  HELD_SUMMARY_JOB,
+  heldSummaryJobId,
   INCIDENT_LEVEL_JOB,
   incidentLevelSweepJobId,
   sweepJobId,
   triageJobId,
   TRIAGE_JOB,
   type DispatchJob,
+  type HeldSummaryJob,
   type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
@@ -16,6 +19,7 @@ import {
   captures,
   closeQuietIncidents,
   deliveries,
+  endCalmStorms,
   feedbacks,
   incidentsLeftAwaitingLevel,
   rearmForClosing,
@@ -26,6 +30,7 @@ import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm
 import {
   DEFAULT_CAPTURE_SWEEP,
   DEFAULT_INCIDENTS,
+  DEFAULT_OPENING_WINDOW_MS,
   DEFAULT_SWEEP,
   MAX_TRIAGE_SWEEP_BACKOFF_MS,
   type WorkerOptions,
@@ -33,6 +38,7 @@ import {
 import {
   DB,
   DISPATCH_QUEUE_TOKEN,
+  HELD_SUMMARY_QUEUE_TOKEN,
   INCIDENT_LEVEL_QUEUE_TOKEN,
   OPTIONS,
   TRIAGE_QUEUE_TOKEN,
@@ -71,6 +77,7 @@ export class SweepProcessor {
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(INCIDENT_LEVEL_QUEUE_TOKEN)
     private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
+    @Inject(HELD_SUMMARY_QUEUE_TOKEN) private readonly heldSummaryQueue: Queue<HeldSummaryJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
   ) {}
 
@@ -224,6 +231,33 @@ export class SweepProcessor {
       this.logger.error(
         `Closings of quiet Incidents not queued, the sweep of pending Deliveries will send them: ${String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Ends the storms during which no Incident was Held for a whole window (their Project
+   * is back under its Opening cap), and queues one summary per Destination concerned.
+   * The storm ends before its summaries are queued: if the queueing fails, they are lost
+   * (logged), never sent twice.
+   */
+  async sweepStorms(): Promise<void> {
+    const windowMs = this.options.incidents?.openingWindowMs ?? DEFAULT_OPENING_WINDOW_MS;
+    const ended = await endCalmStorms(this.db, windowMs, BATCH);
+    const summaries = ended.flatMap(({ id, destinationIds }) =>
+      destinationIds.map((destinationId) => ({ stormId: id, destinationId })),
+    );
+    for (const { id } of ended) this.logger.log(`Incident storm ${id} over`);
+    if (summaries.length === 0) return;
+    try {
+      await this.heldSummaryQueue.addBulk(
+        summaries.map((job) => ({
+          name: HELD_SUMMARY_JOB,
+          data: job,
+          opts: { jobId: heldSummaryJobId(job) },
+        })),
+      );
+    } catch (error) {
+      this.logger.error(`Summaries of the Held Incidents not queued: ${String(error)}`);
     }
   }
 

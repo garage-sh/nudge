@@ -1,7 +1,9 @@
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
   type OutgoingIncidentDelivery,
   type OutgoingIncidentClosing,
   type FailureClass,
@@ -26,7 +28,13 @@ import {
   failureMessage,
   responseText,
 } from './http.js';
-import { alertToMarkdown, escapePunctuation, incidentToMarkdown, isSafeLink } from './markdown.js';
+import {
+  alertToMarkdown,
+  escapePunctuation,
+  heldSummaryToMarkdown,
+  incidentToMarkdown,
+  isSafeLink,
+} from './markdown.js';
 import { titleWithType, truncate } from './text.js';
 
 export interface GitHubOptions {
@@ -161,6 +169,7 @@ export function gitHubAdapter(
       if (!commented.ok) return commented.failure;
       return { status: 'delivered', externalUrl: closing.opening.externalUrl };
     },
+    summarizeHeld: (summary) => createIssue(heldSummaryIssue(summary)),
     alert: (alert) => createIssue(alertIssue(alert)),
     /**
      * "Get a repository": the token sees the repository, its issues are enabled and it
@@ -282,6 +291,15 @@ function alertIssue(alert: Alert): { title: string; body: string } {
   return {
     title: withoutMention(truncate(alertTitle, TITLE_MAX)),
     body: alertToMarkdown(alert, escapeMarkdown),
+  };
+}
+
+/** The issue of the summary of Held Incidents: written by nudge, the Project name literal. */
+function heldSummaryIssue(summary: OutgoingHeldSummary): { title: string; body: string } {
+  const { title } = presentHeldSummary(summary);
+  return {
+    title: withoutMention(truncate(title, TITLE_MAX)),
+    body: heldSummaryToMarkdown(summary, escapeMarkdown),
   };
 }
 

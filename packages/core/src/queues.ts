@@ -15,6 +15,11 @@ export const ALERTS_QUEUE = 'alerts';
  * Incident's Dispatch `opened` follows it, within a bounded wait.
  */
 export const INCIDENT_LEVEL_QUEUE = 'incident-level';
+/**
+ * The summaries of the Incidents a storm held, one per Destination concerned, sent once
+ * the Project is back under its Opening cap (retried).
+ */
+export const HELD_SUMMARY_QUEUE = 'held-summary';
 /** The worker's scheduled tasks (repeatable jobs): sweep of Feedback left Received… */
 export const MAINTENANCE_QUEUE = 'maintenance';
 export const SWEEP_RECEIVED_JOB = 'sweep-received';
@@ -29,7 +34,10 @@ export const PURGE_RETENTION_JOB = 'purge-retention';
  * between the image and its database row) and the leftovers of interrupted writes.
  */
 export const SWEEP_CAPTURES_JOB = 'sweep-captures';
-/** Sweep of the Open Incidents silent past their Quiet period: they close. */
+/**
+ * Sweep of the Open Incidents silent past their Quiet period (they close), of the lost
+ * Level assessments, and of the storms that calmed down (they end).
+ */
 export const SWEEP_QUIET_INCIDENTS_JOB = 'sweep-quiet-incidents';
 
 /** Default BullMQ key prefix; the api and the worker must share the same one. */
@@ -39,6 +47,17 @@ export const DEFAULT_QUEUE_PREFIX = 'nudge';
 export const TRIAGE_JOB = 'triage';
 export const DISPATCH_JOB = 'dispatch';
 export const INCIDENT_LEVEL_JOB = 'incident-level';
+export const HELD_SUMMARY_JOB = 'held-summary';
+
+/** Job id: `heldSummaryJobId`. The summary is composed when sent, from the database. */
+export interface HeldSummaryJob {
+  readonly stormId: string;
+  readonly destinationId: string;
+}
+
+/** One summary per storm and Destination: a storm ends only once. */
+export const heldSummaryJobId = ({ stormId, destinationId }: HeldSummaryJob): string =>
+  `held-${stormId}-${destinationId}`;
 
 /** Job id: `triageJobId` or `reviewJobId`. */
 export interface TriageJob {
@@ -119,13 +138,22 @@ export type AlertJob =
       readonly message: string;
       /** ISO 8601: tells apart two successive Suspensions of the same Destination. */
       readonly suspendedAt: string;
-    };
+    }
+  | { readonly event: 'incident_storm'; readonly stormId: string };
 
-/** One job per event: a Feedback goes In review only once, a Suspension has its date. */
+/**
+ * One job per event: a Feedback goes In review only once, a Suspension has its date, a
+ * storm its id.
+ */
 export function alertJobId(job: AlertJob): string {
-  return job.event === 'feedback_in_review'
-    ? `in-review-${job.feedbackId}`
-    : `suspension-${job.destinationId}-${Date.parse(job.suspendedAt)}`;
+  switch (job.event) {
+    case 'feedback_in_review':
+      return `in-review-${job.feedbackId}`;
+    case 'destination_suspended':
+      return `suspension-${job.destinationId}-${Date.parse(job.suspendedAt)}`;
+    case 'incident_storm':
+      return `storm-${job.stormId}`;
+  }
 }
 
 /** Job retry policy: exponential backoff with jitter. */

@@ -56,7 +56,14 @@ function WebhookPayload({ url, purpose }: { url: string; purpose: TypeFieldsProp
   // A Project's Destination receives Feedback and Incidents; the Alert destination, alerts.
   const events: readonly WebhookEventName[] =
     purpose === 'feedback'
-      ? ['feedback', 'incident.opened', 'incident.raised', 'incident.closed', 'ping']
+      ? [
+          'feedback',
+          'incident.opened',
+          'incident.raised',
+          'incident.closed',
+          'incidents.held',
+          'ping',
+        ]
       : [purpose, 'ping'];
   const [event, setEvent] = useState<WebhookEventName>(purpose);
   const example = WEBHOOK_EXAMPLES[event];
@@ -67,13 +74,19 @@ function WebhookPayload({ url, purpose }: { url: string; purpose: TypeFieldsProp
           value: example.delivery.id,
           help: p.headerHelp.delivery,
         }
-      : event === 'alert'
+      : event === 'incidents.held'
         ? {
-            name: 'X-Nudge-Alert',
-            value: WEBHOOK_EXAMPLES.alert.alert.id,
-            help: p.headerHelp.alert,
+            name: 'X-Nudge-Summary',
+            value: WEBHOOK_EXAMPLES['incidents.held'].id,
+            help: p.headerHelp.summary,
           }
-        : null;
+        : event === 'alert'
+          ? {
+              name: 'X-Nudge-Alert',
+              value: WEBHOOK_EXAMPLES.alert.alert.id,
+              help: p.headerHelp.alert,
+            }
+          : null;
   const headers = [
     { name: 'Content-Type', value: 'application/json', help: null },
     { name: 'X-Nudge-Event', value: event, help: p.headerHelp.event },

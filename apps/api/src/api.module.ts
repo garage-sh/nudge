@@ -21,10 +21,17 @@ import { IncidentsIngestionController } from './ingestion/incidents-ingestion.co
 import { IncidentsIngestionService } from './ingestion/incidents-ingestion.service.js';
 import { SecretKeyGuard } from './ingestion/secret-key.guard.js';
 import { SecretKeys } from './ingestion/secret-keys.js';
+import {
+  DEFAULT_OPENING_CAP_OPTIONS,
+  type OpeningCapOptions,
+} from './ingestion/incidents-ingestion.service.js';
+import { OPENING_CAP } from './infra/tokens.js';
 
 export interface IngestionOptions {
   /** Rate limit of the Widget path; `DEFAULT_WIDGET_LIMITS` otherwise. */
   readonly widgetLimits?: WidgetLimits;
+  /** The Instance's Opening cap of the Incidents; `DEFAULT_OPENING_CAP_OPTIONS` otherwise. */
+  readonly openingCap?: OpeningCapOptions;
 }
 
 @Module({})
@@ -36,6 +43,7 @@ export class ApiModule implements NestModule {
       controllers: [IngestionController, IncidentsIngestionController],
       providers: [
         { provide: WIDGET_LIMITS, useValue: options.widgetLimits ?? DEFAULT_WIDGET_LIMITS },
+        { provide: OPENING_CAP, useValue: options.openingCap ?? DEFAULT_OPENING_CAP_OPTIONS },
         WidgetAccess,
         IngestionService,
         IncidentsIngestionService,

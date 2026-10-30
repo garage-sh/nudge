@@ -1,7 +1,10 @@
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
+  type PresentedAlert,
   type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
   type FailureClass,
@@ -76,6 +79,7 @@ export function slackAdapter(
      * thread nor edit it. It is a message of its own, titled like the opening.
      */
     closeIncident: (closing) => publish(incidentBody(closing)),
+    summarizeHeld: (summary) => publish(heldSummaryBody(summary)),
     alert: (alert) => publish(alertBody(alert)),
     /**
      * An incoming webhook cannot be read: the probe posts it an empty message, which it
@@ -176,10 +180,30 @@ function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
  * target) go through control-character escaping, with mentions broken.
  */
 function alertBody(alert: Alert) {
-  const { title, summary, details } = presentAlert(alert);
-  const footer = [
+  return noticeBody(
+    presentAlert(alert),
     alert.isTest ? 'nudge · test alert' : 'nudge · alert',
-    ...(isSafeSlackLink(alert.dashboardUrl) ? [`<${alert.dashboardUrl}|Open in nudge>`] : []),
+    alert.dashboardUrl,
+  );
+}
+
+/** The summary of Held Incidents, as blocks like an alert: the Project name is escaped. */
+function heldSummaryBody(summary: OutgoingHeldSummary) {
+  return noticeBody(presentHeldSummary(summary), 'nudge · Incidents held', summary.dashboardUrl);
+}
+
+/**
+ * A message written by nudge (alert, summary of Held Incidents): its title and details
+ * escaped, its summary as is, a footer and the dashboard link.
+ */
+function noticeBody(
+  { title, summary, details }: PresentedAlert,
+  label: string,
+  dashboardUrl: string | null,
+) {
+  const footer = [
+    label,
+    ...(isSafeSlackLink(dashboardUrl) ? [`<${dashboardUrl}|Open in nudge>`] : []),
   ];
   return {
     text: slackText(title),

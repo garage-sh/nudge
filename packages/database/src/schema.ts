@@ -81,6 +81,11 @@ export const projects = pgTable('projects', {
    * its own; `null`: the Instance default (`NUDGE_INCIDENT_QUIET_PERIOD_MS`).
    */
   quietPeriod: integer('quiet_period'),
+  /**
+   * Incidents the Project may open per minute and still dispatch; past it, they are
+   * Held. `null`: the Instance default (`NUDGE_INCIDENT_OPENING_CAP`).
+   */
+  openingCap: integer('opening_cap'),
   ...timestamps,
 });
 
@@ -183,6 +188,11 @@ export const incidents = pgTable(
      * its Dispatch `opened` has not run yet.
      */
     awaitingLevel: boolean('awaiting_level').notNull().default(false),
+    /**
+     * Opened past its Project's Opening cap: recorded but not dispatched (no Delivery
+     * is created for it), until a Member Redispatches it, which releases it.
+     */
+    held: boolean('held').notNull().default(false),
     /** Occurrences absorbed, the first one included. */
     occurrences: integer('occurrences').notNull().default(1),
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
@@ -219,6 +229,38 @@ export const incidents = pgTable(
       .where(sql`${t.state} = 'open'`),
     // A Project's Incident list, newest opened first.
     index('incidents_project_created_at_idx').on(t.projectId, t.createdAt, t.id),
+    // The openings of a Project in the last minute, against its Opening cap.
+    index('incidents_project_first_seen_at_idx').on(t.projectId, t.firstSeenAt),
+  ],
+);
+
+/**
+ * A storm: a Project opening Incidents past its Opening cap. It starts with the first
+ * Held Incident, alerts the Members once, and ends once a whole window has gone by
+ * without a Held Incident; each Destination concerned then receives one summary of the
+ * Incidents it held. Its Held Incidents are those of the Project opened between
+ * `startedAt` and `lastHeldAt`.
+ */
+export const incidentStorms = pgTable(
+  'incident_storms',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** The Opening cap the Project went past when the storm started. */
+    cap: integer('cap').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastHeldAt: timestamp('last_held_at', { withTimezone: true }).notNull(),
+    /** `null` while the storm goes on. */
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // At most one storm going on per Project.
+    uniqueIndex('incident_storms_ongoing_uniq')
+      .on(t.projectId)
+      .where(sql`${t.endedAt} is null`),
   ],
 );
 

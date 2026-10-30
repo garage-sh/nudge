@@ -23,7 +23,18 @@ describe('Api configuration from environment variables', () => {
         perIp: { limit: 20, windowMs: 60_000 },
         perProject: { limit: 600, windowMs: 60_000 },
       },
+      openingCap: { limit: 20, windowMs: 60_000 },
     });
+  });
+
+  it('reads the Instance Opening cap of the Incidents, per minute', () => {
+    expect(apiConfigFromEnv({ ...MINIMAL, NUDGE_INCIDENT_OPENING_CAP: '50' }).openingCap).toEqual({
+      limit: 50,
+      windowMs: 60_000,
+    });
+    expect(() => apiConfigFromEnv({ ...MINIMAL, NUDGE_INCIDENT_OPENING_CAP: '0' })).toThrow(
+      /NUDGE_INCIDENT_OPENING_CAP/,
+    );
   });
 
   it('reads the port, the cookie, the Widget limits per minute', () => {

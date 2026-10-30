@@ -1,4 +1,10 @@
-import { LEVELS, QUIET_PERIOD_BOUNDS, type Level, type ProjectView } from '@nudge/shared';
+import {
+  LEVELS,
+  OPENING_CAP_BOUNDS,
+  QUIET_PERIOD_BOUNDS,
+  type Level,
+  type ProjectView,
+} from '@nudge/shared';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router';
 import {
@@ -243,19 +249,27 @@ const toMinutes = (seconds: number | null) =>
   seconds === null ? '' : String(Math.max(1, Math.round(seconds / 60)));
 
 /**
- * How the Project's Incidents are reported and closed: the default Level, the Quiet
- * period, and an example request.
+ * How the Project's Incidents are reported, closed and held: the default Level, the Quiet
+ * period, the Opening cap, and an example request.
  */
 function IncidentSettings({ project }: { project: ProjectView }) {
   const t = useT();
   const i = t.project.incidents;
   const [defaultLevel, setDefaultLevel] = useState<Level>(project.defaultLevel);
   const [quietMinutes, setQuietMinutes] = useState(toMinutes(project.quietPeriod));
+  const [openingCap, setOpeningCap] = useState(
+    project.openingCap === null ? '' : String(project.openingCap),
+  );
   const update = useUpdateProject(project.id);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const minutes = quietMinutes.trim();
-    update.mutate({ defaultLevel, quietPeriod: minutes === '' ? null : Number(minutes) * 60 });
+    const cap = openingCap.trim();
+    update.mutate({
+      defaultLevel,
+      quietPeriod: minutes === '' ? null : Number(minutes) * 60,
+      openingCap: cap === '' ? null : Number(cap),
+    });
   };
   return (
     <form
@@ -296,6 +310,23 @@ function IncidentSettings({ project }: { project: ProjectView }) {
         />
         <p className="help" id="project-quiet-period-help">
           {i.quietPeriodHelp}
+        </p>
+      </div>
+      <div className="field">
+        <label htmlFor="project-opening-cap">{i.openingCap}</label>
+        <input
+          id="project-opening-cap"
+          type="number"
+          inputMode="numeric"
+          min={OPENING_CAP_BOUNDS.min}
+          max={OPENING_CAP_BOUNDS.max}
+          step={1}
+          value={openingCap}
+          aria-describedby="project-opening-cap-help"
+          onChange={(e) => setOpeningCap(e.target.value)}
+        />
+        <p className="help" id="project-opening-cap-help">
+          {i.openingCapHelp}
         </p>
       </div>
       <ErrorMessage error={update.error} />

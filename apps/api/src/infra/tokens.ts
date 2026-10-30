@@ -5,6 +5,10 @@ export const TRIAGE_QUEUE_TOKEN = Symbol('TRIAGE_QUEUE');
 export const DISPATCH_QUEUE_TOKEN = Symbol('DISPATCH_QUEUE');
 /** Queue of the Judge's assessments of an undeclared Incident Level. */
 export const INCIDENT_LEVEL_QUEUE_TOKEN = Symbol('INCIDENT_LEVEL_QUEUE');
+/** Member alerts queue: an Incident storm starting is reported from the ingestion. */
+export const ALERTS_QUEUE_TOKEN = Symbol('ALERTS_QUEUE');
+/** `OpeningCapOptions`: the Instance's Opening cap of the Incidents. */
+export const OPENING_CAP = Symbol('OPENING_CAP');
 /** The dashboard's `SessionCookieOptions`. */
 export const SESSION_COOKIE_OPTIONS = Symbol('SESSION_COOKIE_OPTIONS');
 /** `SecretCipher` for the secrets stored in the database, using the Instance key. */

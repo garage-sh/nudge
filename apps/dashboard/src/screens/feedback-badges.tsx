@@ -110,3 +110,13 @@ export function IncidentStatePill({ state }: { state: IncidentState }) {
   const t = useT();
   return <Pill tone={state === 'open' ? 'neutral' : 'off'}>{t.labels.incidentState[state]}</Pill>;
 }
+
+/** An Incident opened past its Project's Opening cap: recorded, not dispatched. */
+export function HeldPill() {
+  const t = useT();
+  return (
+    <Pill tone="held" title={t.incidents.heldTitle}>
+      {t.incidents.held}
+    </Pill>
+  );
+}

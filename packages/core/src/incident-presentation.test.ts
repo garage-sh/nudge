@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OutgoingIncidentClosing, OutgoingIncidentDelivery } from './destination.js';
-import { presentIncident } from './incident-presentation.js';
+import { presentHeldSummary, presentIncident } from './incident-presentation.js';
 
 const OPENED: OutgoingIncidentDelivery = {
   deliveryId: 'delivery-1',
@@ -106,5 +106,37 @@ describe('The presentation of an Incident, shared by the adapters', () => {
   it('an Incident delivered once its closing came is presented closed, whatever its opening moment', () => {
     const late: OutgoingIncidentDelivery = { ...OPENED, incident: closed('resolved').incident };
     expect(presentIncident(late).summary).toBe('An Incident of Shop was resolved by its sender.');
+  });
+});
+
+describe('The summary of Held Incidents', () => {
+  const summary = (count: number) =>
+    presentHeldSummary({
+      id: 'held-storm-1-destination-1',
+      project: { id: 'project-1', name: 'Shop' },
+      held: {
+        count,
+        firstOpenedAt: new Date('2026-10-29T08:00:04.000Z'),
+        lastOpenedAt: new Date('2026-10-29T08:03:51.000Z'),
+      },
+      dashboardUrl: null,
+    });
+
+  it('counts the Held Incidents and gives their time range, the Project named only in the title and details', () => {
+    expect(summary(37)).toEqual({
+      title: 'Incidents held · Shop',
+      summary:
+        'The Project opened Incidents faster than its Opening cap: 37 Incidents were held and not sent here. They are listed in nudge, where a Member can Redispatch the ones still Open.',
+      details: [
+        { label: 'Project', value: 'Shop' },
+        { label: 'Held', value: '37' },
+        { label: 'First opened', value: '2026-10-29T08:00:04.000Z' },
+        { label: 'Last opened', value: '2026-10-29T08:03:51.000Z' },
+      ],
+    });
+  });
+
+  it('speaks of a single Held Incident in the singular', () => {
+    expect(summary(1).summary).toContain(': 1 Incident was held');
   });
 });

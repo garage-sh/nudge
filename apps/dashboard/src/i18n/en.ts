@@ -470,6 +470,9 @@ export const en = {
       quietPeriod: 'Quiet period (minutes)',
       quietPeriodHelp:
         'An Incident with no new Occurrence for this long closes on its own. Empty: the Instance default (one hour, unless NUDGE_INCIDENT_QUIET_PERIOD_MS sets another). An Occurrence can set its own with quietPeriod, in seconds.',
+      openingCap: 'Opening cap (Incidents per minute)',
+      openingCapHelp:
+        'Past this many Incidents opened in a minute, the next ones are recorded but Held: they go to no Destination. The Alert destination is warned once per storm, and each Destination concerned gets a single summary once the Project is back under its cap. Empty: the Instance default (20, unless NUDGE_INCIDENT_OPENING_CAP sets another).',
       save: 'Save Incident settings',
       example: 'Example request',
       exampleHelp:
@@ -485,9 +488,11 @@ export const en = {
       closed: 'Closed',
     } satisfies Record<IncidentState | 'all', string>,
     filters: 'Filters',
-    filter: { level: 'Level', environment: 'Environment' },
+    filter: { level: 'Level', environment: 'Environment', held: 'Dispatch' },
     anyLevel: 'All',
     anyEnvironment: 'All',
+    anyDispatch: 'All',
+    heldOnly: 'Held only',
     shown: (count: number, more: boolean) =>
       `${count} Incident${count === 1 ? '' : 's'} shown${more ? ', more to load' : ''}.`,
     noMatch: 'No Incident matches these filters.',
@@ -500,6 +505,8 @@ export const en = {
     occurrences: (count: number) => `${count} Occurrence${count === 1 ? '' : 's'}`,
     noEnvironment: 'No Environment',
     lastSeen: 'Last seen',
+    held: 'Held',
+    heldTitle: 'Opened past the Project’s Opening cap: not dispatched.',
   },
 
   incident: {
@@ -526,6 +533,11 @@ export const en = {
     noContext: 'No context.',
     noMessage: 'No message.',
     deliveries: 'Deliveries',
+    held: 'Held',
+    heldHelp:
+      'Opened while the Project went past its Opening cap: recorded, but sent to no Destination. Redispatch it if it matters; the Destinations concerned get a summary of the Held Incidents instead.',
+    heldClosedHelp:
+      'Opened while the Project went past its Opening cap: recorded, but sent to no Destination. Closed, it can no longer be Redispatched.',
     close: {
       action: 'Close Incident',
       help: 'Close it once you know the problem is over: its Destinations are told, and a new Occurrence will open a new Incident.',
@@ -629,6 +641,7 @@ export const en = {
           'incident.opened': 'Incident opened',
           'incident.raised': 'Incident raised',
           'incident.closed': 'Incident closed',
+          'incidents.held': 'Incidents held',
           alert: 'Alert',
           ping: 'Ping',
         },
@@ -641,16 +654,20 @@ export const en = {
             'An Incident whose Level rose enough to reach this Destination: it had not received it at its previous Level. Each Destination gets a single opened or raised event per Incident.',
           'incident.closed':
             'The Incident closed: resolved by its sender, closed by a Member, or silent past its Quiet period (incident.closure). It comes on the Delivery of its opening. An id you never saw is an Incident that opened and closed while this Destination was unreachable: it is delivered once.',
+          'incidents.held':
+            'The summary of a storm: the Project opened Incidents faster than its Opening cap, and those past it were held. Once it is back under its cap, a single summary (count, time range, link) comes in place of the Incidents this Destination would have received.',
           alert:
-            'An alert for the Members: a Feedback In review or a Suspended Destination. It never carries a Feedback’s text.',
+            'An alert for the Members: a Feedback In review, a Suspended Destination, or a Project opening Incidents faster than its Opening cap. It never carries a Feedback’s text.',
           ping: 'The health check, while the Destination is Suspended: answer with a 2xx to resume its Deliveries.',
         },
         request: 'Request',
         headers: 'Headers',
         body: 'Example body',
         headerHelp: {
-          event: 'feedback, incident.opened, incident.raised, incident.closed, alert or ping.',
+          event:
+            'feedback, incident.opened, incident.raised, incident.closed, incidents.held, alert or ping.',
           delivery: 'The Delivery’s stable id: ignore a retry you already processed.',
+          summary: 'The summary’s stable id: ignore a retry you already processed.',
           alert: 'The alert’s stable id: ignore a retry you already processed.',
           timestamp: 'Unix seconds at signing: reject a call older than a few minutes.',
           signature: 'HMAC-SHA256 of timestamp + "." + raw body, with the signing secret.',

@@ -44,6 +44,10 @@ export interface CaptureToDispatch {
 export const buildDashboardUrl = (base: string | null | undefined, path: string): string | null =>
   base ? `${base.replace(/\/+$/, '')}${path}` : null;
 
+/** The dashboard path of a Project's Held Incidents (the storm alert's and summary's link). */
+export const heldIncidentsPath = (projectId: string): string =>
+  `/projects/${encodeURIComponent(projectId)}/incidents?held=true`;
+
 /** What an adapter receives of a Triaged Feedback. The text is raw: each adapter encodes it for its target. */
 export interface FeedbackToDispatch {
   readonly id: string;
@@ -125,6 +129,27 @@ export interface OutgoingIncidentClosing {
   readonly opening: { readonly externalUrl: string | null };
 }
 
+/**
+ * The summary of the Incidents a storm held, for one Destination: the Project opened
+ * Incidents faster than its Opening cap, and those past it were recorded but not
+ * dispatched. Sent once the Project is back under its cap, in place of the Incidents
+ * themselves, to each Destination whose Incident Filter accepts at least one of them.
+ * No Delivery records it.
+ */
+export interface OutgoingHeldSummary {
+  /** Stable for this storm and this Destination: a receiver uses it to ignore a retry. */
+  readonly id: string;
+  readonly project: { readonly id: string; readonly name: string };
+  /** The Held Incidents this Destination's Incident Filter accepts, and when they opened. */
+  readonly held: {
+    readonly count: number;
+    readonly firstOpenedAt: Date;
+    readonly lastOpenedAt: Date;
+  };
+  /** The Project's Held Incidents in the dashboard; `null` without `NUDGE_DASHBOARD_URL` (D12). */
+  readonly dashboardUrl: string | null;
+}
+
 export type DeliveryResult =
   | { readonly status: 'delivered'; readonly externalUrl: string | null }
   | { readonly status: 'failed'; readonly failureClass: FailureClass; readonly message: string };
@@ -145,6 +170,8 @@ export interface DestinationAdapter {
    * created. The Delivery keeps its opening's `externalUrl`, whatever the result's.
    */
   closeIncident(closing: OutgoingIncidentClosing): Promise<DeliveryResult>;
+  /** Sends the summary of the Incidents a storm held: one message, issue or event. */
+  summarizeHeld(summary: OutgoingHeldSummary): Promise<DeliveryResult>;
   /**
    * Warns the Members (the Instance's Alert destination): same target, same credentials
    * and same failure classification as a Delivery.
@@ -187,6 +214,14 @@ export async function sendAlert(
   alert: Alert,
 ): Promise<DeliveryResult> {
   return catchingExceptions(() => adapter().alert(alert));
+}
+
+/** `deliver()` for the summary of Held Incidents: an exception becomes a transient failure. */
+export async function sendHeldSummary(
+  adapter: () => DestinationAdapter,
+  summary: OutgoingHeldSummary,
+): Promise<DeliveryResult> {
+  return catchingExceptions(() => adapter().summarizeHeld(summary));
 }
 
 async function catchingExceptions(call: () => Promise<DeliveryResult>): Promise<DeliveryResult> {

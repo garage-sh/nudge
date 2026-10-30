@@ -70,8 +70,9 @@ export async function createMissingDeliveries(
  * context: a single one per (Incident, Destination), existing Deliveries are never
  * touched. At `opened`, that is every accepting Destination; at `raised`, only those the
  * higher Level newly reaches, the others already have their Delivery. A Delivery to a
- * Suspended Destination is held right away. Returns only the Deliveries created by this
- * call; the caller queues the pending ones, after the commit.
+ * Suspended Destination is held right away. A Held Incident (opened past its Project's
+ * Opening cap) gets none, whatever the moment. Returns only the Deliveries created by
+ * this call; the caller queues the pending ones, after the commit.
  */
 export async function createMissingIncidentDeliveries(
   tx: Transaction,
@@ -84,10 +85,12 @@ export async function createMissingIncidentDeliveries(
       level: incidents.level,
       environment: incidents.environment,
       firstReport: incidents.firstReport,
+      held: incidents.held,
     })
     .from(incidents)
     .where(eq(incidents.id, incidentId));
   if (!incident) throw new Error(`Incident ${incidentId} to dispatch not found`);
+  if (incident.held) return [];
   const projectDestinations = await tx
     .select({
       id: destinations.id,
@@ -195,7 +198,8 @@ export type IncidentRedispatchResult =
  * locked meanwhile: no Occurrence changes its Level and it does not close in between.
  * An Incident still awaiting its Level gets none: its Dispatch `opened`, which the worker
  * runs once the Level is settled, will reach every Destination accepting it then.
- * The caller queues the returned pending Deliveries.
+ * A Held Incident is released: it is dispatched from then on like any other, and no
+ * longer counts in its storm's summary. The caller queues the returned pending Deliveries.
  */
 export async function redispatchIncident(
   db: Db,
@@ -209,6 +213,10 @@ export async function redispatchIncident(
       .for('update');
     if (!incident) return { status: 'not_found' };
     if (incident.state !== 'open') return { status: 'refused', state: incident.state };
+    await tx
+      .update(incidents)
+      .set({ held: false })
+      .where(and(eq(incidents.id, incidentId), eq(incidents.held, true)));
     if (incident.awaitingLevel) return { status: 'applied', deliveries: [] };
     return {
       status: 'applied',

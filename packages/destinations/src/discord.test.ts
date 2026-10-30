@@ -2,7 +2,7 @@ import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { discordAdapter } from './discord.js';
 import { resolveDestinationAdapter } from './index.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   DISCORD,
@@ -288,6 +288,29 @@ describe('Discord adapter', () => {
         status: 'failed',
         failureClass: 'auth',
       });
+    });
+  });
+
+  describe('summarizeHeld', () => {
+    it('posts an embed of the summary, the Project name escaped, without mentions', async () => {
+      const { fetch, requests } = discord(DISCORD.createdMessage);
+
+      expect(await adapter(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      expect(requests).toHaveLength(1);
+      const body = jsonBody(requests[0]);
+      expect(body.allowed_mentions).toEqual({ parse: [] });
+      expect(body.embeds[0]).toMatchObject({
+        title: 'Incidents held · @​everyone \\*Shop\\* \\<b\\>',
+        url: HELD_SUMMARY.dashboardUrl,
+        timestamp: '2026-10-29T08:03:51.000Z',
+        footer: { text: 'nudge · Incidents held' },
+      });
+      expect(body.embeds[0].description).toContain('37 Incidents were held');
+      expect(body.embeds[0].fields).toContainEqual({ name: 'Held', value: '37', inline: true });
     });
   });
 

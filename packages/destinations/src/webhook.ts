@@ -1,8 +1,10 @@
 import { createHmac } from 'node:crypto';
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
   type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
   type DestinationAdapter,
@@ -13,6 +15,7 @@ import {
 import {
   webhookDefinition,
   type WebhookAlertEvent,
+  type WebhookHeldSummaryEvent,
   type WebhookEventName,
   type WebhookFeedbackEvent,
   type WebhookIncidentEvent,
@@ -38,11 +41,14 @@ export interface WebhookOptions {
  *   reach this Destination, with its stable id;
  * - `incident.closed`: the closing of that Incident, on the same Delivery; also the single
  *   event of an Incident that closed before its opening could be delivered;
+ * - `incidents.held`: the summary of the Incidents a storm held, once the Project is back
+ *   under its Opening cap;
  * - `alert`: an alert for the Members, when the webhook is the Alert destination;
  * - `ping`: the `healthCheck()` probe, which the receiver answers with a 2xx.
  *
- * Headers: `X-Nudge-Event`, `X-Nudge-Delivery` or `X-Nudge-Alert` (stable id of a
- * Delivery or an alert: a receiver uses it to ignore a retried delivery),
+ * Headers: `X-Nudge-Event`, `X-Nudge-Delivery`, `X-Nudge-Summary` or `X-Nudge-Alert`
+ * (stable id of a Delivery, a summary or an alert: a receiver uses it to ignore a retried
+ * delivery),
  * `X-Nudge-Timestamp` (Unix seconds) and `X-Nudge-Signature: sha256=<hex>`,
  * HMAC-SHA256 of `<timestamp>.<raw body>` with the Destination's signing secret.
  *
@@ -64,7 +70,12 @@ export function webhookAdapter(
 
   async function post(
     event: WebhookEventName,
-    body: WebhookFeedbackEvent | WebhookIncidentEvent | WebhookAlertEvent | WebhookPingEvent,
+    body:
+      | WebhookFeedbackEvent
+      | WebhookIncidentEvent
+      | WebhookHeldSummaryEvent
+      | WebhookAlertEvent
+      | WebhookPingEvent,
     idHeaders: Readonly<Record<string, string>> = {},
   ): Promise<DeliveryResult> {
     const raw = JSON.stringify(body);
@@ -114,6 +125,9 @@ export function webhookAdapter(
     closeIncident(closing) {
       const body = incidentBody(closing);
       return post(body.event, body, { 'x-nudge-delivery': closing.deliveryId });
+    },
+    summarizeHeld(summary) {
+      return post('incidents.held', heldSummaryBody(summary), { 'x-nudge-summary': summary.id });
     },
     alert(alert) {
       return post('alert', alertBody(alert), { 'x-nudge-alert': alert.id });
@@ -203,6 +217,24 @@ function incidentBody(
   };
 }
 
+/** The structured summary of Held Incidents, and its text for whoever relays it as is. */
+function heldSummaryBody(summary: OutgoingHeldSummary): WebhookHeldSummaryEvent {
+  const { title, summary: text } = presentHeldSummary(summary);
+  return {
+    event: 'incidents.held',
+    id: summary.id,
+    project: { id: summary.project.id, name: summary.project.name },
+    title,
+    summary: text,
+    held: {
+      count: summary.held.count,
+      firstOpenedAt: summary.held.firstOpenedAt.toISOString(),
+      lastOpenedAt: summary.held.lastOpenedAt.toISOString(),
+    },
+    dashboardUrl: summary.dashboardUrl,
+  };
+}
+
 /** The structured alert, and its text (`title`, `summary`) for whoever relays it as is. */
 function alertBody(alert: Alert): WebhookAlertEvent {
   const { title, summary } = presentAlert(alert);
@@ -214,21 +246,33 @@ function alertBody(alert: Alert): WebhookAlertEvent {
     project: { id: alert.project.id, name: alert.project.name },
     dashboardUrl: alert.dashboardUrl,
   };
-  return {
-    event: 'alert',
-    isTest: alert.isTest,
-    alert:
-      alert.event === 'feedback_in_review'
-        ? { ...common, type: alert.event, feedback: { id: alert.feedback.id } }
-        : {
-            ...common,
-            type: alert.event,
-            destination: {
-              id: alert.destination.id,
-              name: alert.destination.name,
-              failureClass: alert.destination.failureClass,
-              message: alert.destination.message,
-            },
-          },
-  };
+  return { event: 'alert', isTest: alert.isTest, alert: alertDetails(alert, common) };
+}
+
+function alertDetails<Common extends object>(alert: Alert, common: Common) {
+  switch (alert.event) {
+    case 'feedback_in_review':
+      return { ...common, type: alert.event, feedback: { id: alert.feedback.id } };
+    case 'destination_suspended':
+      return {
+        ...common,
+        type: alert.event,
+        destination: {
+          id: alert.destination.id,
+          name: alert.destination.name,
+          failureClass: alert.destination.failureClass,
+          message: alert.destination.message,
+        },
+      };
+    case 'incident_storm':
+      return {
+        ...common,
+        type: alert.event,
+        storm: {
+          held: alert.storm.held,
+          cap: alert.storm.cap,
+          startedAt: alert.storm.startedAt.toISOString(),
+        },
+      };
+  }
 }

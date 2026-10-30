@@ -63,6 +63,16 @@ export const QUIET_PERIOD_BOUNDS = { min: 1, max: 30 * 24 * 60 * 60 } as const;
 /** The Instance default Quiet period, unless the Self-hoster sets another one. */
 export const DEFAULT_QUIET_PERIOD_MS = 60 * 60_000;
 
+/**
+ * The Opening cap of a Project: how many Incidents it may open per minute and still have
+ * them dispatched. Set per Project (`null`: the Instance default); past it, the Incidents
+ * opened are Held.
+ */
+export const OPENING_CAP_BOUNDS = { min: 1, max: 10_000 } as const;
+
+/** The Instance default Opening cap, unless the Self-hoster sets another one. */
+export const DEFAULT_OPENING_CAP = 20;
+
 /** `extension` is reserved for the future QA module. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];

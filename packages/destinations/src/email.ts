@@ -6,7 +6,7 @@ import type {
   OutgoingDelivery,
 } from '@nudge/core';
 import { emailDefinition } from '@nudge/shared';
-import { alertEmail, feedbackEmail, incidentEmail } from './email-template.js';
+import { alertEmail, feedbackEmail, heldSummaryEmail, incidentEmail } from './email-template.js';
 
 export interface EmailOptions {
   /** The Instance's SMTP server (`smtpMailer`). */
@@ -35,6 +35,7 @@ export function emailAdapter(
     },
     deliverIncident: (delivery) => mailer.send(incidentEmail(delivery, recipients)),
     closeIncident: (closing) => mailer.send(incidentEmail(closing, recipients)),
+    summarizeHeld: (summary) => mailer.send(heldSummaryEmail(summary, recipients)),
     alert: (alert) => mailer.send(alertEmail(alert, recipients)),
     /** Connects and authenticates to the SMTP server, without sending anything. */
     healthCheck: () => mailer.verify(),

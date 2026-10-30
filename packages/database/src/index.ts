@@ -9,4 +9,5 @@ export * from './migrations.js';
 export * from './settings.js';
 export * from './projects.js';
 export * from './schema.js';
+export * from './storms.js';
 export * from './subject.js';

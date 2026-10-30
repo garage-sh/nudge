@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  alertJobId,
   closingJobId,
   deriveFingerprint,
   DISPATCH_JOB,
   dispatchJobId,
   INCIDENT_LEVEL_JOB,
   incidentLevelJobId,
+  type AlertJob,
   type DispatchJob,
   type IncidentLevelJob,
 } from '@nudge/core';
@@ -18,9 +20,35 @@ import {
   type Db,
   type Project,
 } from '@nudge/database';
-import type { IncidentReport, ReceivedIncident, ValidatedIncident } from '@nudge/shared';
+import {
+  DEFAULT_OPENING_CAP,
+  type IncidentReport,
+  type ReceivedIncident,
+  type ValidatedIncident,
+} from '@nudge/shared';
 import type { Queue } from 'bullmq';
-import { DB, DISPATCH_QUEUE_TOKEN, INCIDENT_LEVEL_QUEUE_TOKEN } from '../infra/tokens.js';
+import {
+  ALERTS_QUEUE_TOKEN,
+  DB,
+  DISPATCH_QUEUE_TOKEN,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
+  OPENING_CAP,
+} from '../infra/tokens.js';
+
+/**
+ * The Instance's Opening cap: how many Incidents a Project without a cap of its own may
+ * open per window and still dispatch. The window is one minute; tests shorten it.
+ */
+export interface OpeningCapOptions {
+  readonly limit: number;
+  readonly windowMs: number;
+}
+
+/** 20 Incidents per minute (`NUDGE_INCIDENT_OPENING_CAP` sets another number). */
+export const DEFAULT_OPENING_CAP_OPTIONS: OpeningCapOptions = {
+  limit: DEFAULT_OPENING_CAP,
+  windowMs: 60_000,
+};
 
 /**
  * The Dispatch moment an Occurrence that is not `resolved` starts: `opened` for one that
@@ -28,7 +56,7 @@ import { DB, DISPATCH_QUEUE_TOKEN, INCIDENT_LEVEL_QUEUE_TOKEN } from '../infra/t
  * its Level (the worker runs its opening).
  */
 function dispatchMomentOf(recorded: RecordedOccurrence): 'opened' | 'raised' | null {
-  if (recorded.awaitingLevel) return null;
+  if (recorded.awaitingLevel || recorded.held) return null;
   if (recorded.opened) return 'opened';
   return recorded.raised ? 'raised' : null;
 }
@@ -47,6 +75,10 @@ const NOTHING_TO_RESOLVE: ReceivedIncident = { id: null, state: null, opened: fa
  * the Judge for its Level, within a bounded wait, then runs its Dispatch `opened`. The
  * response never waits for the Judge. Until then, a raise dispatches nothing: the
  * opening goes out at the Level the Incident has by then.
+ *
+ * An Incident opened past its Project's Opening cap is Held: recorded, never dispatched
+ * (neither opened nor raised) until a Member Redispatches it. The opening that starts a
+ * storm alerts the Members, once.
  */
 @Injectable()
 export class IncidentsIngestionService {
@@ -57,6 +89,8 @@ export class IncidentsIngestionService {
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
     @Inject(INCIDENT_LEVEL_QUEUE_TOKEN)
     private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
+    @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue<AlertJob>,
+    @Inject(OPENING_CAP) private readonly openingCap: OpeningCapOptions,
   ) {}
 
   /**
@@ -76,42 +110,65 @@ export class IncidentsIngestionService {
       resolved: occurrence.resolved ?? false,
       receivedAt: new Date().toISOString(),
     };
-    const { received, created, jobId, awaitsAssessment } = await this.db.transaction(async (tx) => {
-      const recorded = await recordOccurrence(tx, {
-        projectId: project.id,
-        fingerprint:
-          report.fingerprint ?? deriveFingerprint(project.id, report.title, report.environment),
-        level: report.level ?? project.defaultLevel,
-        report,
-      });
-      if (!recorded) {
+    const { received, created, jobId, awaitsAssessment, stormStarted } = await this.db.transaction(
+      async (tx) => {
+        const recorded = await recordOccurrence(tx, {
+          projectId: project.id,
+          fingerprint:
+            report.fingerprint ?? deriveFingerprint(project.id, report.title, report.environment),
+          level: report.level ?? project.defaultLevel,
+          report,
+          openingCap: {
+            limit: project.openingCap ?? this.openingCap.limit,
+            windowMs: this.openingCap.windowMs,
+          },
+        });
+        if (!recorded) {
+          return {
+            received: NOTHING_TO_RESOLVE,
+            created: [],
+            jobId: dispatchJobId,
+            awaitsAssessment: false,
+            stormStarted: null,
+          };
+        }
+        const awaitsAssessment = recorded.opened && recorded.awaitingLevel;
+        const { stormStarted } = recorded;
+        if (report.resolved) {
+          return {
+            received: { id: recorded.id, state: 'closed' as const, opened: recorded.opened },
+            created: (await closeIncident(tx, recorded.id, 'resolved')) ?? [],
+            jobId: closingJobId,
+            awaitsAssessment,
+            stormStarted,
+          };
+        }
+        const moment = dispatchMomentOf(recorded);
         return {
-          received: NOTHING_TO_RESOLVE,
-          created: [],
+          received: { id: recorded.id, state: 'open' as const, opened: recorded.opened },
+          created: moment ? await createMissingIncidentDeliveries(tx, recorded.id, moment) : [],
           jobId: dispatchJobId,
-          awaitsAssessment: false,
-        };
-      }
-      const awaitsAssessment = recorded.opened && recorded.awaitingLevel;
-      if (report.resolved) {
-        return {
-          received: { id: recorded.id, state: 'closed' as const, opened: recorded.opened },
-          created: (await closeIncident(tx, recorded.id, 'resolved')) ?? [],
-          jobId: closingJobId,
           awaitsAssessment,
+          stormStarted,
         };
-      }
-      const moment = dispatchMomentOf(recorded);
-      return {
-        received: { id: recorded.id, state: 'open' as const, opened: recorded.opened },
-        created: moment ? await createMissingIncidentDeliveries(tx, recorded.id, moment) : [],
-        jobId: dispatchJobId,
-        awaitsAssessment,
-      };
-    });
+      },
+    );
+    if (stormStarted) await this.alertStorm(stormStarted);
     if (awaitsAssessment && received.id) await this.assessLevel(received.id);
     await this.queue(received.id, created, jobId);
     return received;
+  }
+
+  /** The storm stands once committed: its alert, if not queued, is lost (logged). */
+  private async alertStorm(stormId: string): Promise<void> {
+    const job: AlertJob = { event: 'incident_storm', stormId };
+    try {
+      await this.alertsQueue.add(job.event, job, { jobId: alertJobId(job) });
+    } catch (error) {
+      this.logger.error(
+        `Incident storm ${stormId} started but its Member alert not queued: ${String(error)}`,
+      );
+    }
   }
 
   private async assessLevel(incidentId: string): Promise<void> {

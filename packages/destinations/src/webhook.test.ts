@@ -8,7 +8,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { OutboundRefusedError } from './outbound.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, STORM_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { webhookAdapter } from './webhook.js';
 
 const SECRET = 'test-signing-secret';
@@ -263,6 +263,38 @@ describe('Webhook adapter', () => {
     });
   });
 
+  describe('summarizeHeld', () => {
+    it('POSTs the signed summary, event "incidents.held", with its stable id', async () => {
+      const { fetch, requests } = receiver({ status: 200 });
+
+      expect(await webhook(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      const [request] = requests;
+      expect(request?.headers.get('x-nudge-event')).toBe('incidents.held');
+      expect(request?.headers.get('x-nudge-summary')).toBe(HELD_SUMMARY.id);
+      expect(request?.headers.get('x-nudge-delivery')).toBeNull();
+      expect(request?.headers.get('x-nudge-signature')).toBe(
+        expectedSignature(TIMESTAMP, request!.body),
+      );
+      expect(JSON.parse(request!.body)).toEqual({
+        event: 'incidents.held',
+        id: HELD_SUMMARY.id,
+        project: { id: HELD_SUMMARY.project.id, name: '@everyone *Shop* <b>' },
+        title: 'Incidents held · @everyone *Shop* <b>',
+        summary: expect.stringContaining('37 Incidents were held'),
+        held: {
+          count: 37,
+          firstOpenedAt: '2026-10-29T08:00:04.000Z',
+          lastOpenedAt: '2026-10-29T08:03:51.000Z',
+        },
+        dashboardUrl: HELD_SUMMARY.dashboardUrl,
+      });
+    });
+  });
+
   describe('alert (Alert destination)', () => {
     it('POSTs the signed alert, event "alert", with its stable id', async () => {
       const { fetch, requests } = receiver({ status: 200 });
@@ -310,6 +342,19 @@ describe('Webhook adapter', () => {
           message: 'HTTP 401: <!channel> @here `token` rejected',
         },
         dashboardUrl: null,
+      });
+    });
+
+    it('for an Incident storm, passes the Held count and the Opening cap', async () => {
+      const { fetch, requests } = receiver({ status: 204 });
+
+      await webhook(fetch).alert(STORM_ALERT);
+
+      expect(JSON.parse(requests[0]!.body).alert).toMatchObject({
+        type: 'incident_storm',
+        title: 'Incident storm · @everyone *Shop*',
+        storm: { held: 3, cap: 20, startedAt: '2026-10-29T08:00:04.000Z' },
+        dashboardUrl: STORM_ALERT.dashboardUrl,
       });
     });
 

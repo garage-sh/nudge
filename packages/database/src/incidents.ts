@@ -5,10 +5,23 @@ import {
   type IncidentState,
   type Level,
 } from '@nudge/shared';
-import { and, asc, eq, exists, isNotNull, lt, ne, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  gt,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
 import { createMissingIncidentDeliveries, type CreatedDelivery } from './dispatch.js';
-import { deliveries, incidents, projects } from './schema.js';
+import { deliveries, incidents, incidentStorms, projects } from './schema.js';
 
 export type IncidentRow = typeof incidents.$inferSelect;
 
@@ -19,6 +32,11 @@ export interface Occurrence {
   /** The declared Level, otherwise the Project's default Level. */
   readonly level: Level;
   readonly report: IncidentReport;
+  /**
+   * The Project's Opening cap (its own, failing that the Instance's): how many Incidents
+   * it may open per `windowMs` and still dispatch.
+   */
+  readonly openingCap: { readonly limit: number; readonly windowMs: number };
 }
 
 /** The Open Incident an Occurrence landed in, and what this Occurrence did to it. */
@@ -33,6 +51,10 @@ export interface RecordedOccurrence {
    * declared one): its Dispatch `opened` has not run, the worker runs it.
    */
   readonly awaitingLevel: boolean;
+  /** `true` when the Incident was opened past the Opening cap: it is not dispatched. */
+  readonly held: boolean;
+  /** The storm this Occurrence started, by opening the first Held Incident; else `null`. */
+  readonly stormStarted: string | null;
 }
 
 /**
@@ -52,6 +74,10 @@ export interface RecordedOccurrence {
  * An Incident opened without a declared Level opens awaiting its Level: the worker
  * settles it (`settleIncidentLevel`), then runs its Dispatch `opened`. Meanwhile, the
  * first declared Level sets the Incident's, even below the default one it opened with.
+ *
+ * An Incident opened past its Project's Opening cap is Held: it is recorded, but no
+ * Dispatch ever creates a Delivery for it (`createMissingIncidentDeliveries`), until a
+ * Member Redispatches it. The first Held opening of a storm starts it (`stormStarted`).
  */
 export async function recordOccurrence(
   tx: Transaction,
@@ -60,6 +86,7 @@ export async function recordOccurrence(
   const { report } = occurrence;
   const receivedAt = new Date(report.receivedAt);
   const declared = report.level !== null;
+  let opening: { held: boolean; stormStarted: string | null } | null = null;
   for (;;) {
     const [open] = await tx
       .select({
@@ -67,6 +94,7 @@ export async function recordOccurrence(
         level: incidents.level,
         levelOrigin: incidents.levelOrigin,
         awaitingLevel: incidents.awaitingLevel,
+        held: incidents.held,
       })
       .from(incidents)
       .where(
@@ -94,9 +122,18 @@ export async function recordOccurrence(
           updatedAt: sql`now()`,
         })
         .where(eq(incidents.id, open.id));
-      return { id: open.id, opened: false, raised, awaitingLevel: open.awaitingLevel };
+      return {
+        id: open.id,
+        opened: false,
+        raised,
+        awaitingLevel: open.awaitingLevel,
+        held: open.held,
+        stormStarted: null,
+      };
     }
     if (report.resolved) return null;
+    // Decided once: a retry after a concurrent opening finds that Incident Open.
+    opening ??= await openingPastCap(tx, occurrence.projectId, receivedAt, occurrence.openingCap);
     const [inserted] = await tx
       .insert(incidents)
       .values({
@@ -107,6 +144,7 @@ export async function recordOccurrence(
         level: occurrence.level,
         levelOrigin: declared ? 'declared' : 'default',
         awaitingLevel: !declared,
+        held: opening.held,
         firstSeenAt: receivedAt,
         lastSeenAt: receivedAt,
         firstReport: report,
@@ -116,10 +154,57 @@ export async function recordOccurrence(
       .onConflictDoNothing()
       .returning({ id: incidents.id });
     if (inserted) {
-      return { id: inserted.id, opened: true, raised: false, awaitingLevel: !declared };
+      return {
+        id: inserted.id,
+        opened: true,
+        raised: false,
+        awaitingLevel: !declared,
+        held: opening.held,
+        stormStarted: opening.stormStarted,
+      };
     }
     // Another Occurrence opened the Incident meanwhile: this one is absorbed by it.
   }
+}
+
+/**
+ * Whether an Incident opening now goes past its Project's Opening cap: the Project
+ * already opened `limit` Incidents in the last window, Held ones included. The Project's
+ * row is locked until the transaction ends, so that its openings are counted one after
+ * the other. A Held opening extends the storm going on, or starts one (returned).
+ */
+async function openingPastCap(
+  tx: Transaction,
+  projectId: string,
+  openedAt: Date,
+  { limit, windowMs }: Occurrence['openingCap'],
+): Promise<{ held: boolean; stormStarted: string | null }> {
+  await tx
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .for('no key update');
+  const [recent] = await tx
+    .select({ openings: count() })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.projectId, projectId),
+        gt(incidents.firstSeenAt, new Date(openedAt.getTime() - windowMs)),
+      ),
+    );
+  if ((recent?.openings ?? 0) < limit) return { held: false, stormStarted: null };
+  const [ongoing] = await tx
+    .update(incidentStorms)
+    .set({ lastHeldAt: openedAt })
+    .where(and(eq(incidentStorms.projectId, projectId), isNull(incidentStorms.endedAt)))
+    .returning({ id: incidentStorms.id });
+  if (ongoing) return { held: true, stormStarted: null };
+  const [started] = await tx
+    .insert(incidentStorms)
+    .values({ projectId, cap: limit, startedAt: openedAt, lastHeldAt: openedAt })
+    .returning({ id: incidentStorms.id });
+  return { held: true, stormStarted: started?.id ?? null };
 }
 
 /**
@@ -276,7 +361,8 @@ export async function readIncidentAwaitingLevel(
 /**
  * Settles the Level of an Incident awaiting it, then runs its Dispatch `opened`: the
  * Judge's Level (`judged`, origin `judge`), or with `null` the default Level it opened
- * with. A Level an Occurrence declared meanwhile wins over the Judge's. A Closed
+ * with. A Level an Occurrence declared meanwhile wins over the Judge's. A Held Incident
+ * gets its Level, and no Delivery. A Closed
  * Incident is dispatched all the same: its Deliveries go out once, in its final state
  * ("opened then closed"). Returns the Deliveries to queue after the commit, or `null` if
  * the Incident no longer awaits its Level (settled already, or deleted).

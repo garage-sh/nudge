@@ -11,6 +11,8 @@ import {
 import { outboundPolicyFromEnv, type OutboundPolicy } from '@nudge/destinations';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import type { ApiOptions, TrustProxy } from './api.js';
+import { OPENING_CAP_BOUNDS } from '@nudge/shared';
+import { DEFAULT_OPENING_CAP_OPTIONS } from './ingestion/incidents-ingestion.service.js';
 import { DEFAULT_WIDGET_LIMITS } from './ingestion/widget-access.js';
 
 /** What the environment sets for the api; `main.ts` plugs the adapters in. */
@@ -24,6 +26,7 @@ export type ApiConfig = Required<
     | 'setupToken'
     | 'trustProxy'
     | 'widgetLimits'
+    | 'openingCap'
   >
 > & {
   readonly port: number;
@@ -126,6 +129,14 @@ export function apiConfigFromEnv(
         }),
         windowMs: limits.perProject.windowMs,
       },
+    },
+    // Incidents per minute a Project without a cap of its own may open and still dispatch.
+    openingCap: {
+      limit: integerEnv(env, 'NUDGE_INCIDENT_OPENING_CAP', DEFAULT_OPENING_CAP_OPTIONS.limit, {
+        min: OPENING_CAP_BOUNDS.min,
+        max: OPENING_CAP_BOUNDS.max,
+      }),
+      windowMs: DEFAULT_OPENING_CAP_OPTIONS.windowMs,
     },
   };
 }

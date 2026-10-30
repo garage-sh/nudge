@@ -37,7 +37,13 @@ export type WebhookSecrets = Readonly<
  */
 
 export type WebhookEventName =
-  'feedback' | 'incident.opened' | 'incident.raised' | 'incident.closed' | 'alert' | 'ping';
+  | 'feedback'
+  | 'incident.opened'
+  | 'incident.raised'
+  | 'incident.closed'
+  | 'incidents.held'
+  | 'alert'
+  | 'ping';
 
 /** The events of an Incident's life, as `X-Nudge-Event` and the body's `event` name them. */
 export type WebhookIncidentEventName = Extract<WebhookEventName, `incident.${string}`>;
@@ -107,6 +113,30 @@ export interface WebhookIncidentEvent {
   };
 }
 
+/**
+ * The summary of the Incidents a storm held (`incidents.held`): the Project opened
+ * Incidents faster than its Opening cap, those past it were recorded but not dispatched.
+ * Sent once the Project is back under its cap, once per storm, to each Destination whose
+ * Incident Filter accepts at least one of them, in place of the Incidents themselves.
+ * `id` is stable: a receiver uses it to ignore a retried summary.
+ */
+export interface WebhookHeldSummaryEvent {
+  readonly event: 'incidents.held';
+  readonly id: string;
+  readonly project: { readonly id: string; readonly name: string };
+  /** The summary in plain text, for a receiver that relays it as is. */
+  readonly title: string;
+  readonly summary: string;
+  /** The Held Incidents this Destination's Incident Filter accepts, and when they opened. */
+  readonly held: {
+    readonly count: number;
+    readonly firstOpenedAt: string;
+    readonly lastOpenedAt: string;
+  };
+  /** The Project's Held Incidents in the dashboard; `null` without `NUDGE_DASHBOARD_URL`. */
+  readonly dashboardUrl: string | null;
+}
+
 interface WebhookAlertBase {
   readonly id: string;
   readonly at: string;
@@ -134,6 +164,11 @@ export interface WebhookAlertEvent {
           readonly failureClass: Exclude<FailureClass, 'permanent'>;
           readonly message: string;
         };
+      })
+    | (WebhookAlertBase & {
+        readonly type: 'incident_storm';
+        /** Incidents Held so far in this storm, and the Opening cap it went past. */
+        readonly storm: { readonly held: number; readonly cap: number; readonly startedAt: string };
       });
 }
 
@@ -148,6 +183,7 @@ export const WEBHOOK_EXAMPLES: {
   readonly 'incident.opened': WebhookIncidentEvent;
   readonly 'incident.raised': WebhookIncidentEvent;
   readonly 'incident.closed': WebhookIncidentEvent;
+  readonly 'incidents.held': WebhookHeldSummaryEvent;
   readonly alert: WebhookAlertEvent;
   readonly ping: WebhookPingEvent;
 } = {
@@ -246,6 +282,21 @@ export const WEBHOOK_EXAMPLES: {
       dashboardUrl:
         'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
     },
+  },
+  'incidents.held': {
+    event: 'incidents.held',
+    id: 'held-5b0e2c7a-4f19-4d83-9e6a-1c2b3d4e5f60-3a7d1e94-6b2c-4f08-8d5e-1c9b7a2f4e60',
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Incidents held · Shop',
+    summary:
+      'Shop opened Incidents faster than its Opening cap: 37 of them were held and not sent here. They are listed in nudge.',
+    held: {
+      count: 37,
+      firstOpenedAt: '2026-10-29T08:00:04.000Z',
+      lastOpenedAt: '2026-10-29T08:03:51.000Z',
+    },
+    dashboardUrl:
+      'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents?held=true',
   },
   alert: {
     event: 'alert',

@@ -444,6 +444,9 @@ export const fr: Messages = {
       quietPeriod: 'Période de calme (minutes)',
       quietPeriodHelp:
         'Un Incident sans nouvelle Occurrence pendant cette durée se clôt de lui-même. Vide : la valeur par défaut de l’Instance (une heure, sauf si NUDGE_INCIDENT_QUIET_PERIOD_MS en fixe une autre). Une Occurrence peut fixer la sienne avec quietPeriod, en secondes.',
+      openingCap: 'Plafond d’ouvertures (Incidents par minute)',
+      openingCapHelp:
+        'Au-delà de ce nombre d’Incidents ouverts en une minute, les suivants sont enregistrés mais Retenus : ils ne partent vers aucune Destination. La Destination des alertes est prévenue une fois par tempête, et chaque Destination concernée reçoit un seul récapitulatif une fois le Projet repassé sous son plafond. Vide : la valeur par défaut de l’Instance (20, sauf si NUDGE_INCIDENT_OPENING_CAP en fixe une autre).',
       save: 'Enregistrer les réglages des Incidents',
       example: 'Exemple de requête',
       exampleHelp:
@@ -459,9 +462,11 @@ export const fr: Messages = {
       closed: 'Clos',
     },
     filters: 'Filtres',
-    filter: { level: 'Niveau', environment: 'Environnement' },
+    filter: { level: 'Niveau', environment: 'Environnement', held: 'Dispatch' },
     anyLevel: 'Tous',
     anyEnvironment: 'Tous',
+    anyDispatch: 'Tous',
+    heldOnly: 'Retenus uniquement',
     shown: (count: number, more: boolean) =>
       `${count} Incident${s(count)} affiché${s(count)}${more ? ', d’autres à charger' : ''}.`,
     noMatch: 'Aucun Incident ne correspond à ces filtres.',
@@ -474,6 +479,8 @@ export const fr: Messages = {
     occurrences: (count: number) => `${count} Occurrence${s(count)}`,
     noEnvironment: 'Aucun Environnement',
     lastSeen: 'Vu pour la dernière fois',
+    held: 'Retenu',
+    heldTitle: 'Ouvert au-delà du Plafond d’ouvertures du Projet : non dispatché.',
   },
 
   incident: {
@@ -500,6 +507,11 @@ export const fr: Messages = {
     noContext: 'Aucun contexte.',
     noMessage: 'Aucun message.',
     deliveries: 'Envois',
+    held: 'Retenu',
+    heldHelp:
+      'Ouvert pendant que le Projet dépassait son Plafond d’ouvertures : enregistré, mais envoyé à aucune Destination. Redispatchez-le s’il compte ; les Destinations concernées reçoivent à la place un récapitulatif des Incidents retenus.',
+    heldClosedHelp:
+      'Ouvert pendant que le Projet dépassait son Plafond d’ouvertures : enregistré, mais envoyé à aucune Destination. Clos, il ne peut plus être Redispatché.',
     close: {
       action: 'Clore l’Incident',
       help: 'Clore l’Incident quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
@@ -607,6 +619,7 @@ export const fr: Messages = {
           'incident.opened': 'Incident ouvert',
           'incident.raised': 'Incident aggravé',
           'incident.closed': 'Incident clos',
+          'incidents.held': 'Incidents retenus',
           alert: 'Alerte',
           ping: 'Ping',
         },
@@ -619,17 +632,22 @@ export const fr: Messages = {
             'Un Incident dont le Niveau a assez monté pour atteindre cette Destination : elle ne l’avait pas reçu à son Niveau précédent. Chaque Destination reçoit un seul événement opened ou raised par Incident.',
           'incident.closed':
             'L’Incident est clos : résolu par son émetteur, clos par un Membre, ou silencieux au-delà de sa Période de calme (incident.closure). Il arrive sur l’Envoi de son ouverture. Un identifiant jamais vu est un Incident ouvert puis clos pendant que cette Destination était injoignable : il est envoyé une seule fois.',
+          'incidents.held':
+            'Le récapitulatif d’une tempête : le Projet a ouvert des Incidents plus vite que son Plafond d’ouvertures, et ceux au-delà ont été retenus. Une fois le Projet repassé sous son plafond, un seul récapitulatif (nombre, période, lien) arrive à la place des Incidents que cette Destination aurait reçus.',
           alert:
-            'Une alerte pour les Membres : un Retour En revue ou une Destination Suspendue. Elle ne porte jamais le texte d’un Retour.',
+            'Une alerte pour les Membres : un Retour En revue, une Destination Suspendue, ou un Projet qui ouvre des Incidents plus vite que son Plafond d’ouvertures. Elle ne porte jamais le texte d’un Retour.',
           ping: 'La vérification de santé, tant que la Destination est Suspendue : répondez par un 2xx pour reprendre ses Envois.',
         },
         request: 'Requête',
         headers: 'En-têtes',
         body: 'Exemple de corps',
         headerHelp: {
-          event: 'feedback, incident.opened, incident.raised, incident.closed, alert ou ping.',
+          event:
+            'feedback, incident.opened, incident.raised, incident.closed, incidents.held, alert ou ping.',
           delivery:
             'L’identifiant stable de l’Envoi : ignorez une nouvelle tentative déjà traitée.',
+          summary:
+            'L’identifiant stable du récapitulatif : ignorez une nouvelle tentative déjà traitée.',
           alert: 'L’identifiant stable de l’alerte : ignorez une nouvelle tentative déjà traitée.',
           timestamp:
             'Secondes Unix à la signature : refusez un appel vieux de plus de quelques minutes.',

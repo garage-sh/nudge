@@ -9,7 +9,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import { emailAdapter } from './email.js';
 import { smtpFailure, smtpMailer } from './smtp.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, STORM_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 
 const DESTINATION: ConfiguredDestination = {
@@ -112,6 +112,29 @@ describe('email adapter', () => {
       '[nudge] Destination suspended · Linear [prod](https://trap.test)',
     ]);
     expect(mailer.sent[1]!.html).toContain('HTTP 401: &lt;!channel&gt; @here `token` rejected');
+  });
+
+  it('sends the summary of Held Incidents, the Project name escaped, linking to them', async () => {
+    const mailer = recordingMailer();
+
+    await emailAdapter(DESTINATION, { mailer }).summarizeHeld(HELD_SUMMARY);
+
+    const [mail] = mailer.sent;
+    expect(mail!.to).toEqual(['support@shop.test']);
+    expect(mail!.subject).toBe('[nudge] Incidents held · @everyone *Shop* <b>');
+    expect(mail!.html).toContain('@everyone *Shop* &lt;b&gt;');
+    expect(mail!.html).not.toContain('<b>');
+    expect(mail!.html).toContain(HELD_SUMMARY.dashboardUrl!.replaceAll('&', '&amp;'));
+    expect(mail!.text).toContain('37 Incidents were held');
+  });
+
+  it('names the Incident storm alert', async () => {
+    const mailer = recordingMailer();
+
+    await emailAdapter(DESTINATION, { mailer }).alert(STORM_ALERT);
+
+    expect(mailer.sent[0]!.subject).toBe('[nudge] Incident storm · @everyone *Shop*');
+    expect(mailer.sent[0]!.text).toContain('Incident storm');
   });
 
   describe('Incidents', () => {

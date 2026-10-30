@@ -8,7 +8,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from './client.js';
 
 /** A Project's Incident filters, in the order they are written in the URL. */
-export const INCIDENT_FILTERS = ['state', 'level', 'environment'] as const;
+export const INCIDENT_FILTERS = ['state', 'level', 'environment', 'held'] as const;
 export type IncidentFilterName = (typeof INCIDENT_FILTERS)[number];
 /** Values read as is from the URL: the api validates them (400 otherwise). */
 export type IncidentFilters = Partial<Record<IncidentFilterName, string>>;

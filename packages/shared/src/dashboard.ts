@@ -8,6 +8,7 @@ import {
   SOURCES,
   FEEDBACK_TYPES,
   INCIDENT_STATES,
+  OPENING_CAP_BOUNDS,
   QUIET_PERIOD_BOUNDS,
   LEVELS,
   type AuthorTrust,
@@ -166,6 +167,14 @@ export const projectUpdateSchema = z.strictObject({
     .int()
     .min(QUIET_PERIOD_BOUNDS.min)
     .max(QUIET_PERIOD_BOUNDS.max)
+    .nullable()
+    .optional(),
+  /** Incidents the Project may open per minute and still dispatch; `null`: the Instance default. */
+  openingCap: z
+    .number()
+    .int()
+    .min(OPENING_CAP_BOUNDS.min)
+    .max(OPENING_CAP_BOUNDS.max)
     .nullable()
     .optional(),
 });
@@ -361,6 +370,11 @@ export interface ProjectView {
    * Occurrence sets its own; `null`: the Instance default.
    */
   readonly quietPeriod: number | null;
+  /**
+   * Incidents the Project may open per minute and still dispatch: past it, they are
+   * Held. `null`: the Instance default.
+   */
+  readonly openingCap: number | null;
   readonly createdAt: string;
 }
 
@@ -543,6 +557,8 @@ export const incidentFiltersSchema = z.strictObject({
   state: z.enum(INCIDENT_STATES).optional(),
   level: z.enum(LEVELS).optional(),
   environment: z.string().max(INCIDENT_LIMITS.environment).optional(),
+  /** `true`: only the Held Incidents (opened past the Opening cap, not dispatched). */
+  held: z.literal('true').optional(),
   /** The `next` of the previous page. */
   cursor: z.string().max(200).optional(),
   limit: z.coerce
@@ -574,6 +590,11 @@ export interface IncidentSummaryView {
   /** Why and when the Incident closed; `null` while it is Open. */
   readonly closeCause: IncidentCloseCause | null;
   readonly closedAt: string | null;
+  /**
+   * Opened past its Project's Opening cap: recorded, not dispatched, until a Member
+   * Redispatches it.
+   */
+  readonly held: boolean;
 }
 
 /** A page of a Project's Incidents, newest opened first. */

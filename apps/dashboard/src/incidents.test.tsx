@@ -5,7 +5,7 @@ import type {
   IncidentSummaryView,
   ProjectView,
 } from '@nudge/shared';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { SIGNED_IN, fakeApi } from './test/fake-api.js';
@@ -19,6 +19,7 @@ const SHOP: ProjectView = {
   allowedOrigins: [],
   defaultLevel: 'error',
   quietPeriod: null,
+  openingCap: null,
   createdAt: '2026-10-24T08:00:00.000Z',
 };
 
@@ -35,6 +36,7 @@ const TIMEOUT: IncidentSummaryView = {
   lastSeenAt: '2026-10-29T09:30:00.000Z',
   closeCause: null,
   closedAt: null,
+  held: false,
 };
 
 const SLOW: IncidentSummaryView = {
@@ -138,6 +140,30 @@ describe('A Project’s Incidents', () => {
     expect(screen.queryByRole('link', { name: 'Slow search page' })).toBeNull();
     expect(api.calls.map((call) => call.route)).toContain(
       'GET /api/incidents?project=project-1&state=open&level=critical&environment=production',
+    );
+  });
+
+  it('marks the Held Incidents and filters them through the API', async () => {
+    const held = { ...SLOW, held: true };
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/incidents?project=project-1': page([TIMEOUT, held]),
+      'GET /api/incidents?project=project-1&held=true': page([held]),
+    });
+    renderDashboard('/projects/project-1/incidents');
+
+    const row = (await screen.findByRole('link', { name: 'Slow search page' })).closest('li');
+    expect(within(row as HTMLElement).getByText('Held')).toBeTruthy();
+    const other = screen.getByRole('link', { name: 'Payment provider timed out' }).closest('li');
+    expect(within(other as HTMLElement).queryByText('Held')).toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText('Dispatch'), 'true');
+
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Payment provider timed out' })).toBeNull(),
+    );
+    expect(api.calls.map((call) => call.route)).toContain(
+      'GET /api/incidents?project=project-1&held=true',
     );
   });
 
@@ -258,6 +284,41 @@ describe('An Incident’s detail', () => {
     expect(within(deliveries).queryByRole('button', { name: 'Redispatch' })).toBeNull();
   });
 
+  it('says a Held Incident went to no Destination, and offers its Redispatch while it is Open', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: { ...TIMEOUT_DETAIL, held: true } },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
+    expect(within(deliveries).getByText(/past its Opening cap/)).toBeTruthy();
+    expect(within(deliveries).getByRole('button', { name: 'Redispatch' })).toBeTruthy();
+    const properties = within(screen.getByRole('region', { name: 'Incident' }));
+    expect(properties.getByText('Held')).toBeTruthy();
+  });
+
+  it('offers no Redispatch for a Held Incident that is Closed', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': {
+        status: 200,
+        body: {
+          ...TIMEOUT_DETAIL,
+          held: true,
+          state: 'closed',
+          closeCause: 'resolved',
+          closedAt: '2026-10-29T10:00:00.000Z',
+        },
+      },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
+    expect(within(deliveries).getByText(/can no longer be Redispatched/)).toBeTruthy();
+    expect(within(deliveries).queryByRole('button', { name: 'Redispatch' })).toBeNull();
+  });
+
   it('a Member closes the Open Incident after confirming, and sees why it closed', async () => {
     const closed: IncidentDetailView = {
       ...TIMEOUT_DETAIL,
@@ -344,8 +405,32 @@ describe('A Project’s Incident settings', () => {
 
     const patches = api.calls.filter((call) => call.route === 'PATCH /api/projects/project-1');
     expect(patches.map((call) => call.body)).toEqual([
-      { defaultLevel: 'error', quietPeriod: 600 },
-      { defaultLevel: 'error', quietPeriod: null },
+      { defaultLevel: 'error', quietPeriod: 600, openingCap: null },
+      { defaultLevel: 'error', quietPeriod: null, openingCap: null },
+    ]);
+  });
+
+  it('sets the Opening cap, and empties it back to the Instance default', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/projects/project-1': { status: 200, body: { ...SHOP, openingCap: 50 } },
+      'PATCH /api/projects/project-1': { status: 200, body: { ...SHOP, openingCap: 5 } },
+    });
+    renderDashboard('/projects/project-1');
+
+    const field = await screen.findByLabelText('Opening cap (Incidents per minute)');
+    expect((field as HTMLInputElement).value).toBe('50');
+    await userEvent.clear(field);
+    await userEvent.type(field, '5');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    await userEvent.clear(field);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+
+    const patches = api.calls.filter((call) => call.route === 'PATCH /api/projects/project-1');
+    expect(patches.map((call) => call.body)).toEqual([
+      { defaultLevel: 'error', quietPeriod: null, openingCap: 5 },
+      { defaultLevel: 'error', quietPeriod: null, openingCap: null },
     ]);
   });
 
@@ -363,6 +448,7 @@ describe('A Project’s Incident settings', () => {
     expect(api.calls.find((call) => call.route === 'PATCH /api/projects/project-1')?.body).toEqual({
       defaultLevel: 'warning',
       quietPeriod: null,
+      openingCap: null,
     });
     const example = screen.getByLabelText('Example request').textContent ?? '';
     expect(example).toContain('/v1/incidents');

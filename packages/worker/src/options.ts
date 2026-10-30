@@ -124,7 +124,15 @@ export interface IncidentOptions {
    * the Judge's Level; past it, the Project's default Level applies.
    */
   readonly judgeWaitMs: number;
+  /**
+   * The window the Opening cap counts a Project's openings in (one minute; tests shorten
+   * it, like the api's): a storm ends once a whole window goes by without a Held Incident.
+   */
+  readonly openingWindowMs?: number;
 }
+
+/** The Opening cap counts the openings of the last minute. */
+export const DEFAULT_OPENING_WINDOW_MS = 60_000;
 
 /**
  * One hour of silence closes an Incident; the sweep runs every minute; the Judge gets

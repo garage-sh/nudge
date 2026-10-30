@@ -3,6 +3,7 @@ import type {
   FailureClass,
   DestinationAdapter,
   OutgoingDelivery,
+  OutgoingHeldSummary,
   OutgoingIncidentClosing,
   OutgoingIncidentDelivery,
   DeliveryResult,
@@ -30,6 +31,8 @@ export class FakeDestination implements DestinationAdapter {
   readonly closings: OutgoingIncidentClosing[] = [];
   /** Every call to `closeIncident`, delivered or not. */
   readonly closingAttempts: OutgoingIncidentClosing[] = [];
+  /** The delivered summaries of Held Incidents, in order. */
+  readonly heldSummaries: OutgoingHeldSummary[] = [];
   /** The delivered alerts, in order (the Instance's Alert destination). */
   readonly alerts: Alert[] = [];
   /** Every call to `alert`, delivered or not. */
@@ -115,6 +118,14 @@ export class FakeDestination implements DestinationAdapter {
     };
     if (result instanceof Error) throw result;
     if (result.status === 'delivered') this.closings.push(closing);
+    return result;
+  }
+
+  /** Answers from the same script as `send`. */
+  async summarizeHeld(summary: OutgoingHeldSummary): Promise<DeliveryResult> {
+    const result = this.scriptedSends.shift() ?? { status: 'delivered', externalUrl: null };
+    if (result instanceof Error) throw result;
+    if (result.status === 'delivered') this.heldSummaries.push(summary);
     return result;
   }
 

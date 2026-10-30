@@ -1,7 +1,10 @@
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
+  type PresentedAlert,
   type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
   type FailureClass,
@@ -164,6 +167,11 @@ export function discordAdapter(
       }
       return post(body);
     },
+    /** No Delivery keeps the message link: the guild is not read for the summary. */
+    async summarizeHeld(summary) {
+      const execution = await execute(heldSummaryBody(summary));
+      return execution.ok ? { status: 'delivered', externalUrl: null } : execution.failure;
+    },
     /** The message link is kept nowhere: the guild is not read for the alert. */
     async alert(alert) {
       const execution = await execute(alertBody(alert));
@@ -275,22 +283,42 @@ function discordBody({ isTest, project, feedback }: OutgoingDelivery) {
  * by a Member) and the refusal (worded by the target) are escaped like the Project name.
  */
 function alertBody(alert: Alert) {
-  const { title, summary, details } = presentAlert(alert);
+  return noticeBody(presentAlert(alert), {
+    footer: alert.isTest ? 'nudge · test alert' : 'nudge · alert',
+    dashboardUrl: alert.dashboardUrl,
+    at: alert.at,
+  });
+}
+
+/** The summary of Held Incidents, as one embed like an alert, timed at the last opening. */
+function heldSummaryBody(summary: OutgoingHeldSummary) {
+  return noticeBody(presentHeldSummary(summary), {
+    footer: 'nudge · Incidents held',
+    dashboardUrl: summary.dashboardUrl,
+    at: summary.held.lastOpenedAt,
+  });
+}
+
+/** A message written by nudge (alert, summary of Held Incidents) as one embed. */
+function noticeBody(
+  { title, summary, details }: PresentedAlert,
+  { footer, dashboardUrl, at }: { footer: string; dashboardUrl: string | null; at: Date },
+) {
   return {
     allowed_mentions: { parse: [] },
     embeds: [
       {
         title: truncate(escapeMarkdown(title), TITLE_MAX),
-        ...(isSafeLink(alert.dashboardUrl) ? { url: alert.dashboardUrl } : {}),
+        ...(isSafeLink(dashboardUrl) ? { url: dashboardUrl } : {}),
         description: summary,
-        timestamp: alert.at.toISOString(),
+        timestamp: at.toISOString(),
         color: ALERT_COLOR,
         fields: details.map(({ label, value, long }) => ({
           name: label,
           value: truncate(escapeMarkdown(value), FIELD_MAX),
           inline: !long,
         })),
-        footer: { text: alert.isTest ? 'nudge · test alert' : 'nudge · alert' },
+        footer: { text: footer },
       },
     ],
   };

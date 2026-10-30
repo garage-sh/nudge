@@ -1,8 +1,10 @@
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type Alert,
   type MailMessage,
+  type OutgoingHeldSummary,
   type OutgoingDelivery,
   type OutgoingIncidentClosing,
   type OutgoingIncidentDelivery,
@@ -180,7 +182,7 @@ export function feedbackEmail(delivery: OutgoingDelivery, to: readonly string[])
 export function alertEmail(alert: Alert, to: readonly string[]): MailMessage {
   const { title, summary, details } = presentAlert(alert);
   const content: EmailContent = {
-    eyebrow: alert.event === 'feedback_in_review' ? 'Review needed' : 'Destination suspended',
+    eyebrow: ALERT_EYEBROWS[alert.event],
     title,
     pills: [],
     notice: alert.isTest ? 'Test · a sample alert, sent to check the Alert destination.' : null,
@@ -196,6 +198,32 @@ export function alertEmail(alert: Alert, to: readonly string[]): MailMessage {
     footer:
       'You receive this email because this address receives the alerts of a nudge Instance (its Alert destination).',
     stripe: alert.event === 'feedback_in_review' ? COLORS.review : COLORS.held,
+  };
+  return { to, subject: subject(title), html: render(content), text: plainText(content) };
+}
+
+const ALERT_EYEBROWS: Readonly<Record<Alert['event'], string>> = {
+  feedback_in_review: 'Review needed',
+  destination_suspended: 'Destination suspended',
+  incident_storm: 'Incident storm',
+};
+
+/** The summary of the Incidents a storm held, to an email Destination's recipients. */
+export function heldSummaryEmail(summary: OutgoingHeldSummary, to: readonly string[]): MailMessage {
+  const { title, summary: intro, details } = presentHeldSummary(summary);
+  const content: EmailContent = {
+    eyebrow: 'Incidents held',
+    title,
+    pills: [],
+    notice: null,
+    intro,
+    quote: null,
+    details: details.map(({ label, value, long }) => ({ label, value, code: long ?? false })),
+    action: isSafeLink(summary.dashboardUrl)
+      ? { label: 'View the Held Incidents', url: summary.dashboardUrl }
+      : null,
+    footer: `You receive this email because this address is a recipient of an email Destination of the ${summary.project.name} project in nudge.`,
+    stripe: COLORS.held,
   };
   return { to, subject: subject(title), html: render(content), text: plainText(content) };
 }

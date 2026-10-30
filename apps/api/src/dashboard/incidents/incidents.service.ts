@@ -75,6 +75,7 @@ export class IncidentsService {
     if (filters.state) conditions.push(eq(incidents.state, filters.state));
     if (filters.level) conditions.push(eq(incidents.level, filters.level));
     if (filters.environment) conditions.push(eq(incidents.environment, filters.environment));
+    if (filters.held) conditions.push(eq(incidents.held, true));
     if (filters.cursor) {
       conditions.push(after(incidents.createdAt, incidents.id, decodeCursor(filters.cursor)));
     }
@@ -147,6 +148,7 @@ const toSummary = (incident: IncidentRow, project: ProjectRefView): IncidentSumm
   lastSeenAt: incident.lastSeenAt.toISOString(),
   closeCause: incident.closeCause,
   closedAt: incident.closedAt?.toISOString() ?? null,
+  held: incident.held,
 });
 
 export const incidentNotFound = () =>

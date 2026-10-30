@@ -18,7 +18,7 @@ import {
   Properties,
 } from '../layout/ui.js';
 import { DeliveryList } from './DeliveryList.js';
-import { IncidentStatePill, LevelPill } from './feedback-badges.js';
+import { HeldPill, IncidentStatePill, LevelPill } from './feedback-badges.js';
 
 /** How long the detail is read often after an action, while the worker sends the Deliveries. */
 const POLL_AFTER_ACTION_MS = 15_000;
@@ -68,6 +68,7 @@ export function Incident() {
           <span className="meta">
             <LevelPill level={detail.level} />
             <IncidentStatePill state={detail.state} />
+            {detail.held ? <HeldPill /> : null}
             <span>{detail.environment ?? t.incidents.noEnvironment}</span>
             <span>{t.incidents.occurrences(detail.occurrences)}</span>
           </span>
@@ -84,6 +85,11 @@ export function Incident() {
             <Report id="last" title={t.incident.lastReport} report={detail.lastReport} />
           )}
           <Section id="deliveries" title={t.incident.deliveries}>
+            {detail.held ? (
+              <p className="help">
+                {detail.state === 'open' ? t.incident.heldHelp : t.incident.heldClosedHelp}
+              </p>
+            ) : null}
             <DeliveryList deliveries={detail.deliveries} replay={replay} afterReplay={poll} />
             {detail.state === 'open' ? (
               <Redispatch incidentId={detail.id} afterRedispatch={poll} />
@@ -94,7 +100,13 @@ export function Incident() {
           <Section id="properties" title={t.incident.properties}>
             <Properties
               rows={[
-                [t.incident.state, <IncidentStatePill key="state" state={detail.state} />],
+                [
+                  t.incident.state,
+                  <span key="state" className="meta">
+                    <IncidentStatePill state={detail.state} />
+                    {detail.held ? <HeldPill /> : null}
+                  </span>,
+                ],
                 [t.incident.level, <LevelPill key="level" level={detail.level} />],
                 [t.incident.levelOrigin, t.labels.levelOrigin[detail.levelOrigin]],
                 [t.incident.environment, detail.environment ?? t.incidents.noEnvironment],

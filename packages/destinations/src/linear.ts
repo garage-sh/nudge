@@ -1,5 +1,6 @@
 import {
   presentAlert,
+  presentHeldSummary,
   presentIncident,
   type FailureClass,
   type DestinationAdapter,
@@ -23,7 +24,13 @@ import {
   errorMessage,
   externalLink,
 } from './http.js';
-import { alertToMarkdown, escapePunctuation, incidentToMarkdown, isSafeLink } from './markdown.js';
+import {
+  alertToMarkdown,
+  escapePunctuation,
+  heldSummaryToMarkdown,
+  incidentToMarkdown,
+  isSafeLink,
+} from './markdown.js';
 import { titleWithType, truncate } from './text.js';
 
 export interface LinearOptions {
@@ -349,6 +356,18 @@ export function linearAdapter(
         return permanentFailure('Linear did not comment the closing (success: false)');
       }
       return { status: 'delivered', externalUrl: closing.opening.externalUrl };
+    },
+    /** An issue in the configured team, without labels, like an Incident's. */
+    async summarizeHeld(summary) {
+      const target = await resolve([]);
+      if (!target.ok) return failed(target);
+      const { title } = presentHeldSummary(summary);
+      return createIssue({
+        teamId: target.data.teamId,
+        title: truncate(title, TITLE_MAX),
+        description: heldSummaryToMarkdown(summary, escapedText),
+        labelIds: [],
+      });
     },
     /** An issue in the configured team, without labels: the labels are the Feedback's. */
     async alert(alert) {

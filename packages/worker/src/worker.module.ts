@@ -17,6 +17,7 @@ import {
   PURGE_RETENTION_JOB,
   PROBE_SUSPENDED_JOB,
   DISPATCH_QUEUE,
+  HELD_SUMMARY_QUEUE,
   INCIDENT_LEVEL_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
@@ -24,6 +25,7 @@ import {
   alertJobId,
   type AlertJob,
   type DispatchJob,
+  type HeldSummaryJob,
   type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
@@ -33,6 +35,7 @@ import { Redis } from 'ioredis';
 import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
 import { FeedbackDispatcher } from './feedback-dispatcher.js';
+import { HeldSummaryService } from './held-summary.service.js';
 import { IncidentDispatcher } from './incident-dispatcher.js';
 import { IncidentLevelProcessor } from './incident-level.processor.js';
 import { PurgeProcessor } from './purge.processor.js';
@@ -44,6 +47,7 @@ import {
   SECRET_CIPHER,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
+  HELD_SUMMARY_QUEUE_TOKEN,
   INCIDENT_LEVEL_QUEUE_TOKEN,
   TRIAGE_QUEUE_TOKEN,
   ON_SUSPENSION,
@@ -100,6 +104,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(INCIDENT_LEVEL_QUEUE_TOKEN) private readonly incidentLevelQueue: Queue,
     @Inject(MAINTENANCE_QUEUE_TOKEN) private readonly maintenanceQueue: Queue,
     @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue,
+    @Inject(HELD_SUMMARY_QUEUE_TOKEN) private readonly heldSummaryQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
     private readonly incidentLevel: IncidentLevelProcessor,
@@ -107,6 +112,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly purge: PurgeProcessor,
     private readonly suspension: SuspensionService,
     private readonly alerts: AlertsService,
+    private readonly heldSummaries: HeldSummaryService,
   ) {}
 
   static forRoot(options: WorkerOptions): DynamicModule {
@@ -157,6 +163,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           jobOptions(options.retryPolicy),
         ),
         queueProvider(ALERTS_QUEUE_TOKEN, ALERTS_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(
+          HELD_SUMMARY_QUEUE_TOKEN,
+          HELD_SUMMARY_QUEUE,
+          prefix,
+          jobOptions(options.retryPolicy),
+        ),
         queueProvider(MAINTENANCE_QUEUE_TOKEN, MAINTENANCE_QUEUE, prefix, {
           removeOnComplete: 100,
           removeOnFail: 1000,
@@ -171,6 +183,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         PurgeProcessor,
         SuspensionService,
         AlertsService,
+        HeldSummaryService,
       ],
     };
   }
@@ -243,6 +256,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           }),
         { connection: this.redis, prefix },
       ),
+      new Worker<HeldSummaryJob>(
+        HELD_SUMMARY_QUEUE,
+        (job) => this.heldSummaries.send(job.data, { lastAttempt: isLastAttempt(job) }),
+        { connection: this.redis, prefix },
+      ),
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
@@ -256,6 +274,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
             await Promise.allSettled([
               this.sweep.sweepQuietIncidents(),
               this.sweep.sweepIncidentLevels(),
+              this.sweep.sweepStorms(),
             ]).then(rethrowFirstRejection);
           }
         },
@@ -272,6 +291,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       this.incidentLevelQueue.close(),
       this.maintenanceQueue.close(),
       this.alertsQueue.close(),
+      this.heldSummaryQueue.close(),
     ]);
     await this.redis.quit();
     await this.connection.close();

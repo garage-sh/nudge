@@ -15,7 +15,7 @@ import {
 import { useProject } from '../api/projects.js';
 import { useI18n, useT } from '../i18n/index.js';
 import { EmptyState, ErrorMessage, Loading } from '../layout/ui.js';
-import { IncidentStatePill, LevelPill } from './feedback-badges.js';
+import { HeldPill, IncidentStatePill, LevelPill } from './feedback-badges.js';
 import { ProjectHeader, ProjectNotFound, INCIDENT_SETTINGS_ANCHOR } from './Project.js';
 
 /** The list's views: a shortcut to the state filter. */
@@ -50,7 +50,7 @@ export function Incidents() {
     setParams(next, { replace: true });
   };
   const rows = incidents.data?.pages.flatMap((page) => page.incidents) ?? [];
-  const filtered = Boolean(filters.level || filters.environment);
+  const filtered = Boolean(filters.level || filters.environment || filters.held);
   const search = params.toString() ? `?${params.toString()}` : '';
   const base = `/projects/${encodeURIComponent(projectId)}`;
 
@@ -187,6 +187,11 @@ function Filters({
       all: t.incidents.anyEnvironment,
       options: environments.map((value) => ({ value, label: value })),
     },
+    {
+      name: 'held',
+      all: t.incidents.anyDispatch,
+      options: [{ value: 'true', label: t.incidents.heldOnly }],
+    },
   ];
   return (
     <div className="filters" role="group" aria-label={t.incidents.filters}>
@@ -227,6 +232,7 @@ function IncidentRow({ incident, to }: { incident: IncidentSummaryView; to: stri
       <span className="occurrences">{t.incidents.occurrences(incident.occurrences)}</span>
       <span className="states">
         <IncidentStatePill state={incident.state} />
+        {incident.held ? <HeldPill /> : null}
         {incident.closeCause ? (
           <span className="close-cause muted">{t.labels.closeCause[incident.closeCause]}</span>
         ) : null}

@@ -3,7 +3,7 @@ import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { linearAdapter } from './linear.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   API_KEY,
@@ -438,6 +438,31 @@ describe('Linear adapter', () => {
         status: 'failed',
         failureClass: 'auth',
       });
+    });
+  });
+
+  describe('summarizeHeld', () => {
+    const md = new MarkdownIt({ html: true });
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
+
+    it('creates an issue for the summary in the team, without labels, the Project name literal', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+
+      expect(await adapter(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      const input = creationInput(requests[1]);
+      expect(input.teamId).toBe(TEAM_ID);
+      expect(input.labelIds).toEqual([]);
+      expect(input.title).toBe('Incidents held · @everyone *Shop* <b>');
+      expect(input.description).toContain('37 Incidents were held');
+      const types = tokens(input.description).map((j) => j.type);
+      expect(types).not.toContain('html_inline');
+      const links = tokens(input.description).filter((j) => j.type === 'link_open');
+      expect(links.map((j) => j.attrGet('href'))).toEqual([HELD_SUMMARY.dashboardUrl]);
     });
   });
 

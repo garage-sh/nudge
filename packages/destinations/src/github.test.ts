@@ -3,7 +3,7 @@ import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { gitHubAdapter } from './github.js';
 import { resolveDestinationAdapter } from './index.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   GITHUB,
@@ -250,6 +250,30 @@ describe('GitHub Issues adapter', () => {
         status: 'failed',
         failureClass: 'auth',
       });
+    });
+  });
+
+  describe('summarizeHeld', () => {
+    const md = new MarkdownIt({ html: true });
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
+
+    it('creates an issue for the summary, the Project name literal and without mention', async () => {
+      const { fetch, requests } = github(GITHUB.issueCreated);
+
+      expect(await adapter(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      expect(requests[0]?.url).toBe(`${REPOSITORY_API}/issues`);
+      const { title, body } = jsonBody(requests[0]);
+      expect(title).toBe('Incidents held · @​everyone *Shop* <b>');
+      expect(body).toContain('37 Incidents were held');
+      const types = tokens(body).map((t) => t.type);
+      expect(types).not.toContain('html_inline');
+      const links = tokens(body).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([HELD_SUMMARY.dashboardUrl]);
     });
   });
 

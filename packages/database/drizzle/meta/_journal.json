@@ -64,6 +64,13 @@
       "when": 1793316805069,
       "tag": "0008_incident_awaiting_level",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793317813086,
+      "tag": "0009_incident_opening_cap",
+      "breakpoints": true
     }
   ]
 }

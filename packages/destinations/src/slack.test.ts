@@ -2,7 +2,7 @@ import type { ConfiguredDestination, OutgoingDelivery } from '@nudge/core';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { slackAdapter } from './slack.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
 import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   TEAM_ID,
@@ -240,6 +240,26 @@ describe('Slack adapter', () => {
         status: 'failed',
         failureClass: 'auth',
       });
+    });
+  });
+
+  describe('summarizeHeld', () => {
+    it('posts the summary as blocks like an alert, the Project name neutralized, with the link', async () => {
+      const { fetch, requests } = slack(SLACK.ok);
+
+      expect(await adapter(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: null,
+      });
+
+      const body = jsonBody(requests[0]);
+      expect(body.text).toBe('Incidents held · @​everyone *Shop* &lt;b&gt;');
+      const raw = texts(body).map((t) => t.text);
+      expect(raw.join('\n')).toContain('37 Incidents were held');
+      expect(raw).toContainEqual('*Held*\n37');
+      expect(raw).toContainEqual('*First opened*\n2026-10-29T08:00:04.000Z');
+      expect(raw.join('\n')).toContain(`<${HELD_SUMMARY.dashboardUrl}|Open in nudge>`);
+      expect(raw.join('\n')).toContain('nudge · Incidents held');
     });
   });
 

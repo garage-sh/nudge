@@ -2,7 +2,13 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from '@nudge/api';
+import {
+  createApi,
+  deriveSetupToken,
+  type OpeningCapOptions,
+  type WidgetLimits,
+  type TrustProxy,
+} from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -116,6 +122,11 @@ export interface PipelineOptions {
   readonly concurrency?: ConcurrencyOptions;
   /** Instance default Quiet period and its sweep; the worker's (1 h, every minute) otherwise. */
   readonly incidents?: IncidentOptions;
+  /**
+   * The api's Instance Opening cap and its window; the api's (20 per minute) otherwise.
+   * Pass the same window to `incidents.openingWindowMs`, which ends the storms.
+   */
+  readonly openingCap?: OpeningCapOptions;
 }
 
 export interface Pipeline {
@@ -346,6 +357,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     resolveDestinationAdapter,
     mailer,
     ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
+    ...(options.openingCap ? { openingCap: options.openingCap } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
     ...(options.setupToken ? { setupToken: options.setupToken } : {}),
   });

@@ -1,6 +1,10 @@
 import { LEVEL_LABELS, type IncidentCloseCause } from '@nudge/shared';
 import type { PresentedAlert } from './alert.js';
-import type { OutgoingIncidentClosing, OutgoingIncidentDelivery } from './destination.js';
+import type {
+  OutgoingHeldSummary,
+  OutgoingIncidentClosing,
+  OutgoingIncidentDelivery,
+} from './destination.js';
 
 /**
  * An Incident put into words, shared by the adapters that write a message: the same
@@ -62,3 +66,22 @@ const CLOSED_SUMMARIES: Readonly<Record<IncidentCloseCause, (project: string) =>
   quiet_period: (project) =>
     `An Incident of ${project} closed: its Quiet period went by without a new Occurrence.`,
 };
+
+/**
+ * The text of the summary of the Incidents a storm held, identical for every target. It
+ * carries no text of the sender: only counts and times; the Project name (typed by a
+ * Member) is in the title and the details only, which each adapter encodes.
+ */
+export function presentHeldSummary({ project, held }: OutgoingHeldSummary): PresentedIncident {
+  const incidents = held.count === 1 ? '1 Incident was' : `${held.count} Incidents were`;
+  return {
+    title: `Incidents held · ${project.name}`,
+    summary: `The Project opened Incidents faster than its Opening cap: ${incidents} held and not sent here. They are listed in nudge, where a Member can Redispatch the ones still Open.`,
+    details: [
+      { label: 'Project', value: project.name },
+      { label: 'Held', value: String(held.count) },
+      { label: 'First opened', value: held.firstOpenedAt.toISOString() },
+      { label: 'Last opened', value: held.lastOpenedAt.toISOString() },
+    ],
+  };
+}
