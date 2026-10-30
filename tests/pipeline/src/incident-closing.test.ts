@@ -1,8 +1,9 @@
-import type {
-  IncidentDetailView,
-  IncidentPage,
-  ProjectView,
-  ReceivedIncident,
+import {
+  QUIET_PERIOD_BOUNDS,
+  type IncidentDetailView,
+  type IncidentPage,
+  type ProjectView,
+  type ReceivedIncident,
 } from '@nudge/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
@@ -186,6 +187,23 @@ describe('Closing an Incident', () => {
     expect(await waitForIncident(opened.id, closedAndDelivered)).toMatchObject({
       closeCause: 'quiet_period',
     });
+  });
+
+  it('the longest Quiet period allowed keeps its Incident Open without stopping the sweep', async () => {
+    const { secretKey: longKey } = await pipeline.createProject({ name: 'Longest quiet' });
+    const { project, secretKey } = await pipeline.createProject({ name: 'Short quiet' });
+    await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+
+    const longest = await report(longKey, {
+      title: 'Monthly job failed',
+      quietPeriod: QUIET_PERIOD_BOUNDS.max,
+    });
+    const short = await report(secretKey, { title: 'Healthcheck failed', quietPeriod: 1 });
+
+    expect(await waitForIncident(short.id, closedAndDelivered)).toMatchObject({
+      closeCause: 'quiet_period',
+    });
+    expect((await read(longest.id)).state).toBe('open');
   });
 
   it('an Occurrence after closing opens a new Incident, notified as opened', async () => {

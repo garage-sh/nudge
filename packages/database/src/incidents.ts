@@ -329,10 +329,15 @@ export async function closeQuietIncidents(
   defaultQuietPeriodMs: number,
   limit: number,
 ): Promise<QuietIncident[]> {
-  const quietPeriodMs = sql`coalesce(${incidents.quietPeriod} * 1000, ${projects.quietPeriod} * 1000, ${defaultQuietPeriodMs})`;
+  // As intervals: a Quiet period in milliseconds overflows an integer past about 24 days.
+  const quietPeriod = sql`coalesce(
+    ${incidents.quietPeriod} * interval '1 second',
+    ${projects.quietPeriod} * interval '1 second',
+    ${defaultQuietPeriodMs}::bigint * interval '1 millisecond'
+  )`;
   const silent = and(
     eq(incidents.state, 'open'),
-    sql`${incidents.lastSeenAt} + ${quietPeriodMs} * interval '1 millisecond' <= now()`,
+    sql`${incidents.lastSeenAt} + ${quietPeriod} <= now()`,
   );
   const due = await db
     .select({ id: incidents.id })
