@@ -1,6 +1,6 @@
 # nudge
 
-Open-source, self-hosted tool that collects feedback from the users of several applications, triages it, then dispatches it to the team's tools.
+Open-source, self-hosted tool that collects two signals from several applications: Feedback, what their users say, and Incidents, what their servers report going wrong. It triages the Feedback, groups the Incidents, then dispatches both to the team's tools.
 
 ## Language
 

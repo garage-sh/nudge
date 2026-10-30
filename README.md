@@ -9,18 +9,28 @@
 [![Images](https://github.com/garage-sh/nudge/actions/workflows/images.yml/badge.svg)](https://github.com/garage-sh/nudge/pkgs/container/nudge)
 [![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
+nudge is the place where your applications' signals meet your team. It listens to two of them, for every application you run:
+
+- **Feedback**: what your users say. A bug they hit, a feature they miss, an opinion, a question.
+- **Incidents**: what your applications report going wrong. A payment provider timing out, a queue backing up, a nightly job failing.
+
+Both reach one self-hosted Instance, which makes sense of them and sends each one where the team already works: an issue in Linear or GitHub, a message in Slack, Discord or Telegram, an email, a signed webhook. Each Project chooses what goes where, so a blocking bug and a critical outage reach the people on call while a suggestion lands in the backlog. nudge is open-source (AGPL-3.0) and runs on your own servers: you decide where your users' words and your production failures go.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/flow-dark.svg" />
-  <img src="docs/assets/flow.svg" alt="Feedback from several Projects reaches nudge, which triages it and dispatches it to Linear, GitHub Issues, Slack, Discord and webhooks" width="100%" />
+  <img src="docs/assets/flow.svg" alt="Feedback from users and Incidents from servers, sent by several applications, reach nudge, which triages the Feedback, groups the Incidents, and dispatches both to Linear, GitHub Issues, Slack, Discord, email and webhooks" width="100%" />
 </picture>
 
-nudge collects feedback from the users of several applications, triages it and sends it where the team works. It is open-source (AGPL-3.0) and self-hosted.
+### What it does
 
-- **Collect** from every application: an embeddable Widget (with optional, consent-based screenshots), a server SDK, or a plain HTTP API.
-- **Triage** each Feedback with a Judge, a System One decision model (TypeSafe, OpenRouter or your own server): Type, Severity, Junk and Manipulation attempts.
-- **Dispatch** it to the Project's Destinations whose Filter accepts it: Linear, GitHub Issues, Slack, Discord, Telegram, email, signed webhooks.
-- **Route Incidents** reported by the applications' servers: repeated Occurrences grouped into one Incident, closed when the problem calms down.
-- **Follow** everything from a dashboard, in English or French.
+|                                 | Feedback                                                                                                                                                      | Incidents                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Who speaks**                  | The users of your application                                                                                                                                 | Your application's servers                                                                                                                                                                                     |
+| **How it arrives**              | An embeddable Widget (with optional, consent-based screenshots), the server SDK, or the HTTP API                                                              | The server SDK (`sendIncident`) or the HTTP API                                                                                                                                                                |
+| **How nudge makes sense of it** | A Judge, a System One decision model (TypeSafe, OpenRouter or your own server), resolves its Type and Severity, and sets aside Junk and Manipulation attempts | Repeated Occurrences are grouped into one Incident, whose Level the sender declares or the Judge assesses; it closes when the sender says it is resolved or when it stays quiet, and its Destinations are told |
+| **Where a Member steps in**     | Approve or reject a Feedback held In review, reinstate one set aside as Junk, correct a Verdict, redispatch                                                   | Close an Incident, redispatch it                                                                                                                                                                               |
+
+Both share the same **Destinations**: each carries a Feedback Filter and an Incident Filter, so one Slack channel can take every Critical Incident and every Blocking bug, and nothing else. A dashboard, in English or French, shows everything: the Inbox to triage Feedback, each Project's Incidents, the routing of each Project, and every Delivery with its status.
 
 ## Quick start
 

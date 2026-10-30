@@ -1,7 +1,7 @@
 {
   "name": "nudge",
   "private": true,
-  "description": "Collects, triages and dispatches user feedback from several projects. Open-source and self-hosted.",
+  "description": "Collects user Feedback and application Incidents from several projects, triages and dispatches them. Open-source and self-hosted.",
   "license": "AGPL-3.0-only",
   "homepage": "https://github.com/garage-sh/nudge#readme",
   "repository": {
