@@ -186,7 +186,12 @@ export async function redispatchFeedback(db: Db, feedbackId: string): Promise<Re
 }
 
 export type IncidentRedispatchResult =
-  | { readonly status: 'applied'; readonly deliveries: readonly CreatedDelivery[] }
+  | {
+      readonly status: 'applied';
+      readonly deliveries: readonly CreatedDelivery[];
+      /** `true` when the Incident was Held and this Redispatch released it. */
+      readonly released: boolean;
+    }
   /** The Incident is Closed: nothing changed. */
   | { readonly status: 'refused'; readonly state: IncidentState }
   | { readonly status: 'not_found' };
@@ -207,37 +212,51 @@ export async function redispatchIncident(
 ): Promise<IncidentRedispatchResult> {
   return db.transaction(async (tx) => {
     const [incident] = await tx
-      .select({ state: incidents.state, awaitingLevel: incidents.awaitingLevel })
+      .select({
+        state: incidents.state,
+        awaitingLevel: incidents.awaitingLevel,
+        held: incidents.held,
+      })
       .from(incidents)
       .where(eq(incidents.id, incidentId))
       .for('update');
     if (!incident) return { status: 'not_found' };
     if (incident.state !== 'open') return { status: 'refused', state: incident.state };
-    await tx
-      .update(incidents)
-      .set({ held: false })
-      .where(and(eq(incidents.id, incidentId), eq(incidents.held, true)));
-    if (incident.awaitingLevel) return { status: 'applied', deliveries: [] };
+    const released = incident.held;
+    if (released) {
+      await tx.update(incidents).set({ held: false }).where(eq(incidents.id, incidentId));
+    }
+    if (incident.awaitingLevel) return { status: 'applied', deliveries: [], released };
     return {
       status: 'applied',
       deliveries: await createMissingIncidentDeliveries(tx, incidentId, 'opened'),
+      released,
     };
   });
 }
 
 /**
- * Removes Deliveries just created and still pending, whose queueing failed: without a
- * job, nothing would send them. Used to undo an Incident's Redispatch, so the Member can
- * retry.
+ * Undoes an Incident's Redispatch whose queueing failed: removes the created Deliveries
+ * still pending (without a job, nothing would send them), and makes Held again the
+ * Incident it released (`released`). The Member can then retry.
  */
-export async function deletePendingDeliveries(
+export async function undoIncidentRedispatch(
   db: Db,
+  incidentId: string,
   deliveryIds: readonly string[],
+  released: boolean,
 ): Promise<void> {
-  if (deliveryIds.length === 0) return;
-  await db
-    .delete(deliveries)
-    .where(and(inArray(deliveries.id, [...deliveryIds]), eq(deliveries.status, 'pending')));
+  if (deliveryIds.length === 0 && !released) return;
+  await db.transaction(async (tx) => {
+    if (deliveryIds.length > 0) {
+      await tx
+        .delete(deliveries)
+        .where(and(inArray(deliveries.id, [...deliveryIds]), eq(deliveries.status, 'pending')));
+    }
+    if (released) {
+      await tx.update(incidents).set({ held: true }).where(eq(incidents.id, incidentId));
+    }
+  });
 }
 
 /**

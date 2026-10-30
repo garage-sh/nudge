@@ -1,4 +1,4 @@
-import type { Alert, IncidentStormAlert } from '@nudge/core';
+import { DISPATCH_QUEUE, type Alert, type IncidentStormAlert } from '@nudge/core';
 import type {
   IncidentDetailView,
   IncidentPage,
@@ -220,6 +220,26 @@ describe('The Opening cap and Held Incidents', () => {
     // Released, it is no longer Held, and the summary counts only the one still Held.
     await vi.waitFor(() => expect(team.fake.heldSummaries).toHaveLength(1), { timeout: 5000 });
     expect(team.fake.heldSummaries[0]).toMatchObject({ held: { count: 1 } });
+  });
+
+  it('a Redispatch of a Held Incident whose queueing fails leaves it Held, without a Delivery', async () => {
+    const { project, secretKey } = await projectWithCap('Redispatch undone', 1);
+    const team = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    await report(secretKey, { title: 'Noise', level: 'info' });
+    const held = await report(secretKey, { title: 'Ledger out of sync', level: 'critical' });
+    expect(await read(held.id)).toMatchObject({ held: true, deliveries: [] });
+
+    const repair = await pipeline.breakEnqueue(DISPATCH_QUEUE);
+    try {
+      const redispatch = await member.post(`/api/incidents/${held.id}/redispatch`);
+      expect(redispatch.status).toBe(500);
+    } finally {
+      await repair();
+    }
+
+    expect(await read(held.id)).toMatchObject({ held: true, deliveries: [] });
+    expect(await heldIds(project.id)).toEqual([held.id]);
+    expect(team.fake.incidentAttempts.map((d) => d.incident.id)).not.toContain(held.id);
   });
 
   it('a Project without a cap of its own follows the Instance default', async () => {

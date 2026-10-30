@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DISPATCH_JOB, dispatchJobId, type DispatchJob } from '@nudge/core';
 import {
-  deletePendingDeliveries,
   redispatchFeedback,
   redispatchIncident,
+  undoIncidentRedispatch,
   undoRedispatch,
   type CreatedDelivery,
   type Db,
@@ -36,12 +36,17 @@ export class RedispatchService {
     return result;
   }
 
-  /** At the Incident's current Level; undone, like a Feedback's, if the queueing fails. */
+  /**
+   * At the Incident's current Level; undone, like a Feedback's, if the queueing fails: a
+   * Held Incident it released is Held again.
+   */
   async redispatchIncident(incidentId: string): Promise<IncidentRedispatchResult> {
     if (!isUuid(incidentId)) return { status: 'not_found' };
     const result = await redispatchIncident(this.db, incidentId);
     if (result.status !== 'applied') return result;
-    await this.queue(result.deliveries, (ids) => deletePendingDeliveries(this.db, ids));
+    await this.queue(result.deliveries, (ids) =>
+      undoIncidentRedispatch(this.db, incidentId, ids, result.released),
+    );
     return result;
   }
 
