@@ -4,9 +4,8 @@ import {
   presentIncident,
   type Alert,
   type OutgoingHeldSummary,
-  type PresentedAlert,
-  type OutgoingIncidentClosing,
-  type OutgoingIncidentDelivery,
+  type PresentedMessage,
+  type OutgoingIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -301,7 +300,7 @@ function heldSummaryBody(summary: OutgoingHeldSummary) {
 
 /** A message written by nudge (alert, summary of Held Incidents) as one embed. */
 function noticeBody(
-  { title, summary, details }: PresentedAlert,
+  { title, summary, details }: PresentedMessage,
   { footer, dashboardUrl, at }: { footer: string; dashboardUrl: string | null; at: Date },
 ) {
   return {
@@ -328,7 +327,7 @@ function noticeBody(
  * An Incident as one embed: the text of the sender escaped like the Project name, the
  * long details (message, context) at full width.
  */
-function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
+function incidentBody(delivery: OutgoingIncident) {
   const { title, summary, details } = presentIncident(delivery);
   const { incident } = delivery;
   return {

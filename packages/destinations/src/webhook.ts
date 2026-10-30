@@ -5,8 +5,7 @@ import {
   presentIncident,
   type Alert,
   type OutgoingHeldSummary,
-  type OutgoingIncidentClosing,
-  type OutgoingIncidentDelivery,
+  type OutgoingIncident,
   type DestinationAdapter,
   type ConfiguredDestination,
   type OutgoingDelivery,
@@ -182,9 +181,7 @@ function feedbackBody(
  * The structured Incident, and its text (`title`, `summary`) for whoever relays it as is.
  * A Closed Incident is always `incident.closed`: its closing, or its single delivery.
  */
-function incidentBody(
-  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
-): WebhookIncidentEvent {
+function incidentBody(delivery: OutgoingIncident): WebhookIncidentEvent {
   const { deliveryId, project, moment, incident } = delivery;
   const { title, summary } = presentIncident(delivery);
   const { closure } = incident;

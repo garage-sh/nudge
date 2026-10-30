@@ -2,13 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createApi,
-  deriveSetupToken,
-  type OpeningCapOptions,
-  type WidgetLimits,
-  type TrustProxy,
-} from '@nudge/api';
+import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from '@nudge/api';
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
@@ -39,6 +33,7 @@ import {
   type DestinationRow,
   type Project,
   type LoadedFeedback,
+  type OpeningCap,
 } from '@nudge/database';
 import type { JudgeConfig } from '@nudge/judge';
 import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
@@ -127,7 +122,7 @@ export interface PipelineOptions {
    * The api's Instance Opening cap and its window; the api's (20 per minute) otherwise.
    * Pass the same window to `incidents.openingWindowMs`, which ends the storms.
    */
-  readonly openingCap?: OpeningCapOptions;
+  readonly openingCap?: OpeningCap;
 }
 
 export interface Pipeline {

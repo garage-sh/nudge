@@ -4,9 +4,8 @@ import {
   presentIncident,
   type Alert,
   type OutgoingHeldSummary,
-  type PresentedAlert,
-  type OutgoingIncidentClosing,
-  type OutgoingIncidentDelivery,
+  type PresentedMessage,
+  type OutgoingIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -197,7 +196,7 @@ function heldSummaryBody(summary: OutgoingHeldSummary) {
  * escaped, its summary as is, a footer and the dashboard link.
  */
 function noticeBody(
-  { title, summary, details }: PresentedAlert,
+  { title, summary, details }: PresentedMessage,
   label: string,
   dashboardUrl: string | null,
 ) {
@@ -226,7 +225,7 @@ function noticeBody(
  * long ones (message, context) in code blocks. Every text of the sender goes through
  * the same encoding as the Author's text of a Feedback.
  */
-function incidentBody(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
+function incidentBody(delivery: OutgoingIncident) {
   const { title, summary, details } = presentIncident(delivery);
   const short = details.filter((detail) => !detail.long);
   const long = details.filter((detail) => detail.long);

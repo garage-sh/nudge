@@ -1,27 +1,14 @@
 import { LEVEL_LABELS, type IncidentCloseCause } from '@nudge/shared';
-import type { PresentedAlert } from './alert.js';
-import type {
-  OutgoingHeldSummary,
-  OutgoingIncidentClosing,
-  OutgoingIncidentDelivery,
-} from './destination.js';
-
-/**
- * An Incident put into words, shared by the adapters that write a message: the same
- * shape as a Member alert's (`PresentedAlert`). The title, the message, the Environment
- * and the context come from the sender: external text, encoded by each adapter.
- */
-export type PresentedIncident = PresentedAlert;
+import type { OutgoingHeldSummary, OutgoingIncident } from './destination.js';
+import type { PresentedMessage } from './presentation.js';
 
 /**
  * The text of an Incident Delivery, identical for every target: each adapter only
- * encodes it (escaping, mentions, length limits).
+ * encodes it (escaping, mentions, length limits). The title, the message, the
+ * Environment and the context come from the sender: external text, encoded by each
+ * adapter.
  */
-export function presentIncident({
-  project,
-  moment,
-  incident,
-}: OutgoingIncidentDelivery | OutgoingIncidentClosing): PresentedIncident {
+export function presentIncident({ project, moment, incident }: OutgoingIncident): PresentedMessage {
   const level = LEVEL_LABELS[incident.level];
   const where = incident.environment ? ` (${incident.environment})` : '';
   const context = Object.entries(incident.context);
@@ -72,7 +59,7 @@ const CLOSED_SUMMARIES: Readonly<Record<IncidentCloseCause, (project: string) =>
  * carries no text of the sender: only counts and times; the Project name (typed by a
  * Member) is in the title and the details only, which each adapter encodes.
  */
-export function presentHeldSummary({ project, held }: OutgoingHeldSummary): PresentedIncident {
+export function presentHeldSummary({ project, held }: OutgoingHeldSummary): PresentedMessage {
   const incidents = held.count === 1 ? '1 Incident was' : `${held.count} Incidents were`;
   return {
     title: `Incidents held · ${project.name}`,

@@ -4,8 +4,7 @@ import {
   presentIncident,
   type Alert,
   type OutgoingHeldSummary,
-  type OutgoingIncidentDelivery,
-  type OutgoingIncidentClosing,
+  type OutgoingIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -304,7 +303,7 @@ function heldSummaryIssue(summary: OutgoingHeldSummary): { title: string; body: 
 }
 
 /** The issue of an Incident: its plain-text title without mentions, its escaped body. */
-function incidentIssue(delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing) {
+function incidentIssue(delivery: OutgoingIncident) {
   const { title: incidentTitle } = presentIncident(delivery);
   return {
     title: withoutMention(truncate(incidentTitle, TITLE_MAX)),

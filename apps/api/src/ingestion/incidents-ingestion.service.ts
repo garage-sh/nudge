@@ -38,13 +38,10 @@ import {
 } from '../infra/tokens.js';
 
 /**
- * The Instance's Opening cap: how many Incidents a Project without a cap of its own may
- * open per window and still dispatch. The window is one minute; tests shorten it.
+ * The Instance's Opening cap, for a Project without a cap of its own: 20 Incidents per
+ * minute (`NUDGE_INCIDENT_OPENING_CAP` sets another number). Tests shorten the window.
  */
-export type OpeningCapOptions = OpeningCap;
-
-/** 20 Incidents per minute (`NUDGE_INCIDENT_OPENING_CAP` sets another number). */
-export const DEFAULT_OPENING_CAP_OPTIONS: OpeningCapOptions = {
+export const DEFAULT_OPENING_CAP_OPTIONS: OpeningCap = {
   limit: DEFAULT_OPENING_CAP,
   windowMs: OPENING_CAP_WINDOW_MS,
 };
@@ -89,7 +86,7 @@ export class IncidentsIngestionService {
     @Inject(INCIDENT_LEVEL_QUEUE_TOKEN)
     private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
     @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue<AlertJob>,
-    @Inject(OPENING_CAP) private readonly openingCap: OpeningCapOptions,
+    @Inject(OPENING_CAP) private readonly openingCap: OpeningCap,
   ) {}
 
   /**

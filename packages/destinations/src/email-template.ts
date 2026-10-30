@@ -6,8 +6,7 @@ import {
   type MailMessage,
   type OutgoingHeldSummary,
   type OutgoingDelivery,
-  type OutgoingIncidentClosing,
-  type OutgoingIncidentDelivery,
+  type OutgoingIncident,
 } from '@nudge/core';
 import {
   FEEDBACK_TYPE_LABELS,
@@ -243,10 +242,7 @@ const LEVEL_COLORS: Readonly<Record<Level, string>> = {
  * opening's Message-ID: mail clients thread them. An Incident that closed before its
  * opening went out is a single mail, in its final state.
  */
-export function incidentEmail(
-  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
-  to: readonly string[],
-): MailMessage {
+export function incidentEmail(delivery: OutgoingIncident, to: readonly string[]): MailMessage {
   const { deliveryId, project, incident } = delivery;
   const { title, summary, details } = presentIncident(delivery);
   const closing = delivery.moment === 'closed';

@@ -129,6 +129,9 @@ export interface OutgoingIncidentClosing {
   readonly opening: { readonly externalUrl: string | null };
 }
 
+/** An Incident Delivery going out: its opening (or raise), or its closing. */
+export type OutgoingIncident = OutgoingIncidentDelivery | OutgoingIncidentClosing;
+
 /**
  * The summary of the Incidents a storm held, for one Destination: the Project opened
  * Incidents faster than its Opening cap, and those past it were recorded but not

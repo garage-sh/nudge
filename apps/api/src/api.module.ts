@@ -5,6 +5,7 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
+import type { OpeningCap } from '@nudge/database';
 import { DashboardModule, type DashboardOptions } from './dashboard/dashboard.module.js';
 import { InfraModule, type InfraOptions } from './infra/infra.module.js';
 import {
@@ -21,17 +22,14 @@ import { IncidentsIngestionController } from './ingestion/incidents-ingestion.co
 import { IncidentsIngestionService } from './ingestion/incidents-ingestion.service.js';
 import { SecretKeyGuard } from './ingestion/secret-key.guard.js';
 import { SecretKeys } from './ingestion/secret-keys.js';
-import {
-  DEFAULT_OPENING_CAP_OPTIONS,
-  type OpeningCapOptions,
-} from './ingestion/incidents-ingestion.service.js';
+import { DEFAULT_OPENING_CAP_OPTIONS } from './ingestion/incidents-ingestion.service.js';
 import { OPENING_CAP } from './infra/tokens.js';
 
 export interface IngestionOptions {
   /** Rate limit of the Widget path; `DEFAULT_WIDGET_LIMITS` otherwise. */
   readonly widgetLimits?: WidgetLimits;
   /** The Instance's Opening cap of the Incidents; `DEFAULT_OPENING_CAP_OPTIONS` otherwise. */
-  readonly openingCap?: OpeningCapOptions;
+  readonly openingCap?: OpeningCap;
 }
 
 @Module({})

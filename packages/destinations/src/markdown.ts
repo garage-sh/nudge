@@ -4,8 +4,7 @@ import {
   presentIncident,
   type Alert,
   type OutgoingHeldSummary,
-  type OutgoingIncidentClosing,
-  type OutgoingIncidentDelivery,
+  type OutgoingIncident,
 } from '@nudge/core';
 
 /**
@@ -38,7 +37,7 @@ export function alertToMarkdown(alert: Alert, escape: (text: string) => string):
  * values carry the sender's and the Members' text: both go through `escape`.
  */
 export function incidentToMarkdown(
-  delivery: OutgoingIncidentDelivery | OutgoingIncidentClosing,
+  delivery: OutgoingIncident,
   escape: (text: string) => string,
 ): string {
   const { summary, details } = presentIncident(delivery);
