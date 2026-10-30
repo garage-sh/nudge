@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { ConfiguredDestination, Filter, IncidentFilter, SecretCipher } from '@nudge/core';
+import type {
+  ConfiguredDestination,
+  Filter,
+  IncidentFilter,
+  IncidentToFilter,
+  SecretCipher,
+} from '@nudge/core';
 import { FILTER_ALL } from '@nudge/shared';
 import type { Db } from './client.js';
-import { destinations } from './schema.js';
+import { destinations, type incidents } from './schema.js';
 
 export type DestinationRow = typeof destinations.$inferSelect;
 export type DestinationSecrets = Readonly<Record<string, string>>;
@@ -60,6 +66,18 @@ export const incidentFilterOf = (
         conditions: destination.incidentFilterConditions,
       }
     : null;
+
+/**
+ * What an Incident Filter reads of an Incident: its Level and Environment now, and the
+ * context of its first report. Dispatch and the summaries of Held Incidents route alike.
+ */
+export const incidentToFilter = (
+  incident: Pick<typeof incidents.$inferSelect, 'level' | 'environment' | 'firstReport'>,
+): IncidentToFilter => ({
+  level: incident.level,
+  environment: incident.environment,
+  context: incident.firstReport.context,
+});
 
 /**
  * The columns of a Destination's Feedback Filter. Turned off (`null`), the Filter keeps

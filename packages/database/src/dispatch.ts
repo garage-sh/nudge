@@ -9,7 +9,7 @@ import {
 } from '@nudge/shared';
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db, Transaction } from './client.js';
-import { filterOf, incidentFilterOf } from './destinations.js';
+import { filterOf, incidentFilterOf, incidentToFilter } from './destinations.js';
 import { destinations, deliveries, feedbacks, incidents, verdicts } from './schema.js';
 import {
   deliveriesOf,
@@ -103,11 +103,7 @@ export async function createMissingIncidentDeliveries(
     .from(destinations)
     .where(eq(destinations.projectId, incident.projectId));
   const targets = projectDestinations.filter((d) =>
-    incidentFilterAccepts(incidentFilterOf(d), {
-      level: incident.level,
-      environment: incident.environment,
-      context: incident.firstReport.context,
-    }),
+    incidentFilterAccepts(incidentFilterOf(d), incidentToFilter(incident)),
   );
   return insertDeliveries(tx, incidentSubject(incidentId), targets, moment);
 }

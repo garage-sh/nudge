@@ -1,7 +1,7 @@
 import { incidentFilterAccepts } from '@nudge/core';
 import { and, asc, count, eq, gte, isNull, lt, lte, type SQL } from 'drizzle-orm';
 import type { Db } from './client.js';
-import { incidentFilterOf, type DestinationRow } from './destinations.js';
+import { incidentFilterOf, incidentToFilter, type DestinationRow } from './destinations.js';
 import { destinations, incidents, incidentStorms, projects } from './schema.js';
 
 /*
@@ -173,13 +173,7 @@ function heldOf(db: Db, storm: StormRow) {
 /** The Held Incidents the Destination's Incident Filter accepts, as Dispatch would route them. */
 function accepted(destination: DestinationRow, held: readonly HeldIncident[]): HeldIncident[] {
   const filter = incidentFilterOf(destination);
-  return held.filter((incident) =>
-    incidentFilterAccepts(filter, {
-      level: incident.level,
-      environment: incident.environment,
-      context: incident.firstReport.context,
-    }),
-  );
+  return held.filter((incident) => incidentFilterAccepts(filter, incidentToFilter(incident)));
 }
 
 /**
