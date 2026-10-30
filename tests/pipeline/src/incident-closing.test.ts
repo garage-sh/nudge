@@ -97,6 +97,29 @@ describe('Closing an Incident', () => {
     ]);
   });
 
+  it('a resolved Occurrence counts but never changes the Level, even when it declares a higher one', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Resolved higher' });
+    const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    const occurrence = { title: 'Replica lagging' };
+
+    const opened = await report(secretKey, { ...occurrence, level: 'warning' });
+    await waitForIncident(opened.id, delivered);
+    await report(secretKey, { ...occurrence, level: 'critical', resolved: true });
+
+    const incident = await waitForIncident(
+      opened.id,
+      (i) => closedAndDelivered(i) && fake.closings.length === 1,
+    );
+    expect(incident).toMatchObject({
+      state: 'closed',
+      level: 'warning',
+      levelOrigin: 'declared',
+      occurrences: 2,
+    });
+    expect(fake.incidentAttempts).toHaveLength(1);
+    expect(fake.closings).toMatchObject([{ incident: { level: 'warning' } }]);
+  });
+
   it('a resolved Occurrence that matches no Open Incident records and dispatches nothing', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Nothing to resolve' });
     const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });

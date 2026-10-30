@@ -74,7 +74,7 @@ export interface RecordedOccurrence {
  * second insert wait for the first, then the second Occurrence is absorbed.
  *
  * A `resolved` Occurrence is absorbed like any other (the caller then closes the
- * Incident), but never opens one: with no Open Incident to match, nothing is recorded and
+ * Incident), but never changes its Level and never opens one: with no Open Incident to match, nothing is recorded and
  * `null` is returned. Every Occurrence sets the Incident's Quiet period override to its
  * own (`null` when it sets none).
  *
@@ -117,7 +117,9 @@ export async function recordOccurrence(
       // While the Incident awaits its Level, the default one it holds is a placeholder:
       // the first declared Level replaces it, whatever its rank, and wins over the Judge's.
       const placeholder = open.awaitingLevel && open.levelOrigin !== 'declared';
-      const raised = declared && (higher || placeholder);
+      // A resolved Occurrence counts, but never changes the Level (D24): not even the
+      // placeholder of an Incident awaiting its Level, which the Judge then settles.
+      const raised = declared && !report.resolved && (higher || placeholder);
       await tx
         .update(incidents)
         .set({

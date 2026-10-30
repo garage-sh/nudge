@@ -231,6 +231,30 @@ describe('The Level of an Incident assessed by the Judge', () => {
     expect(fake.closingAttempts).toHaveLength(0);
   });
 
+  it('a resolved Occurrence declaring a Level while the Judge assesses leaves the Level to the Judge', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Resolved with a Level' });
+    const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    pipeline.judge.script({ level: 'warning' });
+    const release = pipeline.judge.hold();
+    let opened: ReceivedIncident & { readonly id: string };
+    try {
+      opened = await report(secretKey, { title: 'Search reindex stalled' });
+      await report(secretKey, {
+        title: 'Search reindex stalled',
+        level: 'critical',
+        resolved: true,
+      });
+    } finally {
+      release();
+    }
+
+    const incident = await waitForIncident(opened.id, (i) => i.state === 'closed' && delivered(i));
+    expect(incident).toMatchObject({ level: 'warning', levelOrigin: 'judge', occurrences: 2 });
+    expect(fake.incidentAttempts).toMatchObject([
+      { moment: 'opened', incident: { id: opened.id, level: 'warning', state: 'closed' } },
+    ]);
+  });
+
   it('an Incident whose assessment could not be queued is still assessed, then dispatched', async () => {
     const { project, secretKey } = await pipeline.createProject({ name: 'Lost assessment' });
     const { fake } = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });

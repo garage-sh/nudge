@@ -78,7 +78,7 @@ The fields, their bounds and the error codes are described in [`docs/api/openapi
 | `message`     | The detail of what went wrong.                                                                                                                                                   |
 | `context`     | What whoever reads the Incident needs to act: version, host, service, trace link. Flat scalar values. Destinations can route on it; it never changes the Fingerprint.            |
 | `quietPeriod` | For a report with its own rhythm: seconds the Incident stays Open without a new Occurrence. The last Occurrence's value counts; without one, the Project's Quiet period applies. |
-| `resolved`    | `true` when the application sees the recovery (a healthcheck passing again). It closes the Open Incident with the same Fingerprint, and opens none.                              |
+| `resolved`    | `true` when the application sees the recovery (a healthcheck passing again). It closes the Open Incident with the same Fingerprint, and opens none. Its `level` changes nothing. |
 
 Title, message and context reach chat channels, issues and emails: keep secrets and personal data out of them.
 
