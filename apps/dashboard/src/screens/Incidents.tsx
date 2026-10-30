@@ -4,6 +4,7 @@ import {
   type IncidentState,
   type IncidentSummaryView,
 } from '@nudge/shared';
+import { ListFilter, SearchX, Siren } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client.js';
 import {
@@ -60,10 +61,13 @@ export function Incidents() {
   return (
     <section>
       <ProjectHeader project={project.data} />
-      <Views projectId={projectId} state={filters.state} params={params} />
-      <Filters projectId={projectId} filters={filters} filter={filter} />
+      <div className="toolbar">
+        <Views projectId={projectId} state={filters.state} params={params} />
+        <Filters projectId={projectId} filters={filters} filter={filter} />
+      </div>
       {refused ? (
         <EmptyState
+          icon={SearchX}
           title={t.incidents.invalidFilters}
           action={
             <button
@@ -89,6 +93,7 @@ export function Incidents() {
       {incidents.isSuccess && rows.length === 0 ? (
         filtered || filters.state ? (
           <EmptyState
+            icon={SearchX}
             title={
               !filtered && (filters.state === 'open' || filters.state === 'closed')
                 ? t.incidents.noneInView[filters.state]
@@ -104,6 +109,7 @@ export function Incidents() {
           />
         ) : (
           <EmptyState
+            icon={Siren}
             title={t.incidents.emptyTitle}
             action={
               <Link to={`${base}#${INCIDENT_SETTINGS_ANCHOR}`}>{t.incidents.emptyAction}</Link>
@@ -215,6 +221,7 @@ function Filters({
   ];
   return (
     <div className="filters" role="group" aria-label={t.incidents.filters}>
+      <ListFilter className="icon" aria-hidden="true" />
       {selects.map(({ name, all, options }) => (
         <div key={name} className="filter" data-active={Boolean(filters[name])}>
           <label htmlFor={`incident-filter-${name}`}>{t.incidents.filter[name]}</label>

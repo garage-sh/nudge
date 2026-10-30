@@ -13,6 +13,7 @@ import {
   type FeedbackType,
   type VerdictView,
 } from '@nudge/shared';
+import { ChevronDown, ChevronRight, ChevronUp, X } from 'lucide-react';
 import { useContext, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import {
@@ -159,27 +160,57 @@ function Trail({
   const state: ListState = { list };
   return (
     <nav className="trail" aria-label={t.feedback.trail}>
-      <Link to={toList} className="back-link">
-        {inPane ? t.common.close : t.feedback.backToInbox}
-      </Link>
+      {inPane ? null : (
+        <span className="crumbs">
+          <Link to={toList} className="crumb">
+            {t.layout.inbox}
+          </Link>
+          <ChevronRight className="crumb-separator" aria-hidden="true" />
+          <span className="crumb-current">{t.feedback.crumb}</span>
+        </span>
+      )}
       {position >= 0 && list ? (
         <span className="prev-next">
           <span className="muted">{t.feedback.position(position + 1, list.ids.length)}</span>
           {previous ? (
-            <Link to={`/feedbacks/${previous}${search}`} state={state}>
-              {t.feedback.previous}
+            <Link
+              to={`/feedbacks/${previous}${search}`}
+              state={state}
+              className="icon-button"
+              title={t.feedback.previous}
+            >
+              <ChevronUp className="icon" aria-hidden="true" />
+              <span className="visually-hidden">{t.feedback.previous}</span>
             </Link>
           ) : (
-            <span aria-disabled="true">{t.feedback.previous}</span>
+            <span className="icon-button" aria-disabled="true" title={t.feedback.previous}>
+              <ChevronUp className="icon" aria-hidden="true" />
+              <span className="visually-hidden">{t.feedback.previous}</span>
+            </span>
           )}
           {next ? (
-            <Link to={`/feedbacks/${next}${search}`} state={state}>
-              {t.feedback.next}
+            <Link
+              to={`/feedbacks/${next}${search}`}
+              state={state}
+              className="icon-button"
+              title={t.feedback.next}
+            >
+              <ChevronDown className="icon" aria-hidden="true" />
+              <span className="visually-hidden">{t.feedback.next}</span>
             </Link>
           ) : (
-            <span aria-disabled="true">{t.feedback.next}</span>
+            <span className="icon-button" aria-disabled="true" title={t.feedback.next}>
+              <ChevronDown className="icon" aria-hidden="true" />
+              <span className="visually-hidden">{t.feedback.next}</span>
+            </span>
           )}
         </span>
+      ) : null}
+      {inPane ? (
+        <Link to={toList} className="icon-button" title={t.common.close}>
+          <X className="icon" aria-hidden="true" />
+          <span className="visually-hidden">{t.common.close}</span>
+        </Link>
       ) : null}
     </nav>
   );

@@ -73,6 +73,9 @@ function MemberList() {
         {members.data.map((member) => (
           <li key={member.id}>
             <span className="member-email">
+              <span className="avatar" aria-hidden="true">
+                {member.email.slice(0, 1)}
+              </span>
               {member.email}
               {member.id === me?.id ? <span className="muted">{t.members.you}</span> : null}
             </span>

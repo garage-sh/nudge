@@ -1,17 +1,21 @@
 import type { ProjectActivityView } from '@nudge/shared';
-import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { ChevronsUpDown, LogOut, Menu, Plus } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useProjects, useProjectsActivity } from '../api/projects.js';
 import { useSession, useSignOut } from '../api/session.js';
 import { useT } from '../i18n/index.js';
 import { Alerts } from './Alerts.js';
 import { LocaleSelect } from './LocaleSelect.js';
-import { INSTANCE_NAVIGATION, MAIN_NAVIGATION } from './navigation.js';
+import { ProjectAvatar } from '../screens/feedback-badges.js';
+import type { NewProjectState } from '../screens/Projects.js';
+import { INSTANCE_NAVIGATION, MAIN_NAVIGATION, type NavigationEntry } from './navigation.js';
 import { useDocumentTitle } from './ui.js';
 
 /**
- * Frame of the signed-in screens: sidebar (navigation, Projects, alerts, signed-in
- * Member) and content. Below 860 px, the sidebar becomes a drawer.
+ * Frame of the signed-in screens: sidebar (navigation, alerts, Projects, signed-in
+ * Member) and the sheet, which scrolls on its own. Below 860 px, the sidebar becomes a
+ * drawer.
  */
 export function Layout() {
   const t = useT();
@@ -37,17 +41,18 @@ export function Layout() {
   return (
     <div className="frame">
       <header className="mobile-bar">
-        <Brand />
         <button
           ref={menu}
           type="button"
-          className="secondary"
+          className="icon-button"
+          aria-label={t.layout.menu}
           aria-expanded={open}
           aria-controls="sidebar"
           onClick={() => setOpen((o) => !o)}
         >
-          {t.layout.menu}
+          <Menu className="icon" aria-hidden="true" />
         </button>
+        <Brand />
       </header>
       {open ? (
         <button
@@ -62,22 +67,20 @@ export function Layout() {
         />
       ) : null}
       <aside ref={sidebar} id="sidebar" className="sidebar" data-open={open}>
-        <Brand />
+        <div className="sidebar-head">
+          <Brand />
+        </div>
         <nav className="nav" aria-label={t.layout.mainNavigation}>
-          {MAIN_NAVIGATION.map(({ path, label }) => (
-            <NavLink key={path} to={path}>
-              {t.layout[label]}
-            </NavLink>
+          {MAIN_NAVIGATION.map((entry) => (
+            <NavigationLink key={entry.path} entry={entry} />
           ))}
         </nav>
-        <ProjectsNavigation />
         <Alerts />
+        <ProjectsNavigation />
         <div className="sidebar-footer">
           <nav className="nav" aria-label={t.layout.instanceNavigation}>
-            {INSTANCE_NAVIGATION.map(({ path, label }) => (
-              <NavLink key={path} to={path}>
-                {t.layout[label]}
-              </NavLink>
+            {INSTANCE_NAVIGATION.map((entry) => (
+              <NavigationLink key={entry.path} entry={entry} />
             ))}
           </nav>
           <Account />
@@ -91,6 +94,16 @@ export function Layout() {
   );
 }
 
+function NavigationLink({ entry: { path, label, icon: Icon } }: { entry: NavigationEntry }) {
+  const t = useT();
+  return (
+    <NavLink to={path}>
+      <Icon className="icon" aria-hidden="true" />
+      {t.layout[label]}
+    </NavLink>
+  );
+}
+
 /** The Projects, one click away: each Project's page leads to its Destinations. */
 function ProjectsNavigation() {
   const t = useT();
@@ -98,25 +111,39 @@ function ProjectsNavigation() {
   const activity = useProjectsActivity();
   const { pathname } = useLocation();
   return (
-    <nav className="nav" aria-label={t.layout.projects}>
-      <NavLink to="/projects" end className="nav-title">
-        {t.layout.projects}
-      </NavLink>
-      {(projects.data ?? []).map((project) => {
-        const base = `/projects/${encodeURIComponent(project.id)}`;
-        const current = pathname === base || pathname.startsWith(`${base}/`);
-        return (
-          <NavLink
-            key={project.id}
-            to={`${base}/destinations`}
-            className={current ? 'active' : undefined}
-            aria-current={current ? 'page' : undefined}
-          >
-            <span className="nav-label">{project.name}</span>
-            <ProjectCount activity={activity.data?.get(project.id)} />
-          </NavLink>
-        );
-      })}
+    <nav className="nav-section" aria-label={t.layout.projects}>
+      <div className="nav-heading">
+        <NavLink to="/projects" end>
+          {t.layout.projects}
+        </NavLink>
+        <Link
+          to="/projects"
+          state={{ adding: true } satisfies NewProjectState}
+          className="icon-button"
+          aria-label={t.projects.new}
+          title={t.projects.new}
+        >
+          <Plus className="icon" aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="nav">
+        {(projects.data ?? []).map((project) => {
+          const base = `/projects/${encodeURIComponent(project.id)}`;
+          const current = pathname === base || pathname.startsWith(`${base}/`);
+          return (
+            <NavLink
+              key={project.id}
+              to={`${base}/destinations`}
+              className={current ? 'active' : undefined}
+              aria-current={current ? 'page' : undefined}
+            >
+              <ProjectAvatar project={project} />
+              <span className="nav-label">{project.name}</span>
+              <ProjectCount activity={activity.data?.get(project.id)} />
+            </NavLink>
+          );
+        })}
+      </div>
     </nav>
   );
 }
@@ -142,21 +169,70 @@ function ProjectCount({ activity }: { activity: ProjectActivityView | undefined 
   );
 }
 
+/**
+ * The signed-in Member: their email, which opens their menu (language, sign out).
+ * Escape or a click elsewhere closes it, and focus returns to the button.
+ */
 function Account() {
   const t = useT();
   const { data: member } = useSession();
   const signOut = useSignOut();
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: MouseEvent) => {
+      if (!container.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Escape closes the menu, not the drawer around it.
+      e.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    };
+    const menu = container.current;
+    document.addEventListener('mousedown', outside);
+    menu?.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      menu?.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  const email = member?.email ?? '';
   return (
-    <div className="account">
-      <span>{member?.email}</span>
-      <LocaleSelect />
+    <div className="account" ref={container}>
+      {open ? (
+        <div id={menuId} className="menu" role="group" aria-label={t.layout.accountMenu}>
+          <p className="menu-label">{email}</p>
+          <LocaleSelect />
+          <hr className="menu-separator" />
+          <button
+            type="button"
+            className="menu-item"
+            disabled={signOut.isPending}
+            onClick={() => signOut.mutate()}
+          >
+            <LogOut className="icon" aria-hidden="true" />
+            {t.layout.signOut}
+          </button>
+        </div>
+      ) : null}
       <button
+        ref={button}
         type="button"
-        className="secondary"
-        disabled={signOut.isPending}
-        onClick={() => signOut.mutate()}
+        className="account-button"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((o) => !o)}
       >
-        {t.layout.signOut}
+        <span className="avatar" aria-hidden="true">
+          {email.slice(0, 1)}
+        </span>
+        <span className="account-email">{email}</span>
+        <ChevronsUpDown className="icon" aria-hidden="true" />
       </button>
     </div>
   );

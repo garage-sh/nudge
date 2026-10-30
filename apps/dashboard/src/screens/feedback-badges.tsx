@@ -120,3 +120,30 @@ export function HeldPill() {
     </Pill>
   );
 }
+
+/** The number of Project hues (`--hue-0` to `--hue-7` in styles.css). */
+const PROJECT_HUES = 8;
+
+/**
+ * A Project's mark: the initial of its name on a hue drawn from its id, so a Project
+ * keeps its color whatever its name or position. Decorative: the name is always beside it.
+ */
+export function ProjectAvatar({
+  project,
+  large = false,
+}: {
+  project: { readonly id: string; readonly name: string };
+  large?: boolean;
+}) {
+  let hash = 0;
+  for (const char of project.id) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return (
+    <span
+      className={large ? 'project-avatar large' : 'project-avatar'}
+      data-hue={Math.abs(hash) % PROJECT_HUES}
+      aria-hidden="true"
+    >
+      {Array.from(project.name.trim())[0] ?? '·'}
+    </span>
+  );
+}

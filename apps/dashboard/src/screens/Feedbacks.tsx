@@ -5,6 +5,7 @@ import {
   type FeedbackState,
   type FeedbackSummaryView,
 } from '@nudge/shared';
+import { Inbox as InboxIcon, ListFilter, SearchX } from 'lucide-react';
 import { createContext, useEffect, useRef } from 'react';
 import { Link, Outlet, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useAlerts } from '../api/alerts.js';
@@ -18,7 +19,7 @@ import { useProjects } from '../api/projects.js';
 import { useI18n, useT, type Messages } from '../i18n/index.js';
 import type { Format } from '../i18n/format.js';
 import { EmptyState, ErrorMessage, Loading, PageHeader, useMediaQuery } from '../layout/ui.js';
-import { SeverityGauge, StatePill, UncertainBadge } from './feedback-badges.js';
+import { ProjectAvatar, SeverityGauge, StatePill, UncertainBadge } from './feedback-badges.js';
 
 /** The navigation state a Feedback opened from the list receives: the list, for Previous / Next. */
 export interface ListState {
@@ -104,8 +105,10 @@ function Inbox({ open }: { open: string | undefined }) {
 
   const feedbackList = (
     <>
-      <Views state={filters.state} params={params} />
-      <Filters filters={filters} filter={filter} />
+      <div className="toolbar">
+        <Views state={filters.state} params={params} />
+        <Filters filters={filters} filter={filter} />
+      </div>
       {feedbacks.isFetchNextPageError ? null : (
         <ErrorMessage error={feedbacks.error} onRetry={() => void feedbacks.refetch()} />
       )}
@@ -120,6 +123,7 @@ function Inbox({ open }: { open: string | undefined }) {
       {feedbacks.isSuccess && rows.length === 0 ? (
         filtersOutsideView.length > 0 || filters.state ? (
           <EmptyState
+            icon={SearchX}
             title={t.inbox.noMatch}
             action={
               filtersOutsideView.length > 0 ? (
@@ -130,14 +134,21 @@ function Inbox({ open }: { open: string | undefined }) {
             }
           />
         ) : (
-          <EmptyState title={t.inbox.emptyTitle}>{t.inbox.emptyHelp}</EmptyState>
+          <EmptyState icon={InboxIcon} title={t.inbox.emptyTitle}>
+            {t.inbox.emptyHelp}
+          </EmptyState>
         )
       ) : null}
       {rows.length > 0 ? (
         <div className="feedback-list">
           {groupByDay(rows, format).map(({ day, feedbacks: ofTheDay }) => (
             <section key={day} aria-label={day}>
-              <h2 className="day-group">{day}</h2>
+              <h2 className="day-group">
+                {day}
+                <span className="day-count" aria-hidden="true">
+                  {ofTheDay.length}
+                </span>
+              </h2>
               <ul className="feedback-rows">
                 {ofTheDay.map((feedback) => (
                   <FeedbackRow
@@ -275,6 +286,7 @@ function Filters({
   ];
   return (
     <div className="filters" role="group" aria-label={t.inbox.filters}>
+      <ListFilter className="icon" aria-hidden="true" />
       {selects.map(({ name, all, options: choices }) => (
         <div key={name} className="filter" data-active={Boolean(filters[name])}>
           <label htmlFor={`filter-${name}`}>{t.inbox.filter[name]}</label>
@@ -334,7 +346,10 @@ function FeedbackRow({
           {feedback.preview}
         </Link>
       </p>
-      <span className="project">{feedback.project.name}</span>
+      <span className="project">
+        <ProjectAvatar project={feedback.project} />
+        <span>{feedback.project.name}</span>
+      </span>
       <span className="states">
         {verdict?.uncertain ? <UncertainBadge /> : null}
         <StatePill state={feedback.state} />

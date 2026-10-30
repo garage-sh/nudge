@@ -119,7 +119,7 @@ describe('Dashboard session', () => {
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
   });
 
-  it('signs out', async () => {
+  it('signs out from the account menu', async () => {
     const api = fakeApi({
       'GET /api/session': SIGNED_IN,
       'GET /api/setup': { status: 200, body: { required: false } },
@@ -128,7 +128,8 @@ describe('Dashboard session', () => {
     });
     renderDashboard('/projects');
 
-    await userEvent.click(await screen.findByRole('button', { name: /sign out/i }));
+    await userEvent.click(await screen.findByRole('button', { name: MEMBER.email }));
+    await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
 
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
     expect(api.calls.map((c) => c.route)).toContain('DELETE /api/session');

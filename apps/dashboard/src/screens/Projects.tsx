@@ -1,16 +1,29 @@
 import type { ProjectActivityView } from '@nudge/shared';
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useState, type FormEvent } from 'react';
+import { FolderKanban, Plus } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useCreateProject, useProjects, useProjectsActivity } from '../api/projects.js';
 import { useT } from '../i18n/index.js';
 import { EmptyState, ErrorMessage, Field, Loading, PageHeader, Pill } from '../layout/ui.js';
+import { ProjectAvatar } from './feedback-badges.js';
 import type { SecretKeyState } from './Project.js';
+
+/** Navigation state: open the creation form (the sidebar's "New Project"). */
+export interface NewProjectState {
+  readonly adding?: boolean;
+}
 
 export function Projects() {
   const t = useT();
   const projects = useProjects();
   const activity = useProjectsActivity();
-  const [adding, setAdding] = useState(false);
+  const location = useLocation();
+  const asked = Boolean((location.state as NewProjectState | null)?.adding);
+  const [adding, setAdding] = useState(asked);
+  // Asked again from the sidebar while the list is shown.
+  useEffect(() => {
+    if (asked) setAdding(true);
+  }, [asked, location.key]);
   const none = projects.data?.length === 0;
   // Without a Project, creating one is the only thing to do: the form is open.
   const formOpen = adding || none;
@@ -22,6 +35,7 @@ export function Projects() {
         actions={
           formOpen || !projects.data ? null : (
             <button type="button" onClick={() => setAdding(true)}>
+              <Plus className="icon" aria-hidden="true" />
               {t.projects.new}
             </button>
           )
@@ -29,12 +43,17 @@ export function Projects() {
       />
       {projects.isPending ? <Loading /> : null}
       <ErrorMessage error={projects.error} onRetry={() => void projects.refetch()} />
-      {none ? <EmptyState title={t.projects.emptyTitle}>{t.projects.emptyHelp}</EmptyState> : null}
+      {none ? (
+        <EmptyState icon={FolderKanban} title={t.projects.emptyTitle}>
+          {t.projects.emptyHelp}
+        </EmptyState>
+      ) : null}
       {formOpen ? <NewProject onCancel={none ? undefined : () => setAdding(false)} /> : null}
       {projects.data && projects.data.length > 0 ? (
         <ul className="list projects" aria-label={t.projects.list}>
           {projects.data.map((project) => (
             <li key={project.id} className="linked-row">
+              <ProjectAvatar project={project} large />
               <div>
                 <Link to={`/projects/${project.id}/destinations`} className="project-link row-link">
                   {project.name}
