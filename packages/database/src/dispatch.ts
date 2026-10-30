@@ -236,9 +236,11 @@ export async function redispatchIncident(
 }
 
 /**
- * Undoes an Incident's Redispatch whose queueing failed: removes the created Deliveries
- * still pending (without a job, nothing would send them), and makes Held again the
- * Incident it released (`released`). The Member can then retry.
+ * Undoes an Incident's Redispatch whose queueing failed: removes the given Deliveries it
+ * created, still pending (without a job, nothing would send them) or held for a Suspended
+ * Destination, and makes Held again the Incident it released (`released`). The caller
+ * passes the held ones only with `released`: a Held Incident must have no Delivery left
+ * to go out once its Destination is reachable again. The Member can then retry.
  */
 export async function undoIncidentRedispatch(
   db: Db,
@@ -251,7 +253,12 @@ export async function undoIncidentRedispatch(
     if (deliveryIds.length > 0) {
       await tx
         .delete(deliveries)
-        .where(and(inArray(deliveries.id, [...deliveryIds]), eq(deliveries.status, 'pending')));
+        .where(
+          and(
+            inArray(deliveries.id, [...deliveryIds]),
+            inArray(deliveries.status, ['pending', 'held']),
+          ),
+        );
     }
     if (released) {
       await tx.update(incidents).set({ held: true }).where(eq(incidents.id, incidentId));

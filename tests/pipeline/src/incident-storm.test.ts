@@ -292,6 +292,9 @@ describe('The Opening cap and Held Incidents', () => {
   it('a Redispatch of a Held Incident whose queueing fails leaves it Held, without a Delivery', async () => {
     const { project, secretKey } = await projectWithCap('Redispatch undone', 1);
     const team = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    // Its Delivery is created held, not queued: it must not be left to go out on release.
+    const suspended = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    await pipeline.suspend(suspended.destination.id);
     await report(secretKey, { title: 'Noise', level: 'info' });
     const held = await report(secretKey, { title: 'Ledger out of sync', level: 'critical' });
     expect(await read(held.id)).toMatchObject({ held: true, deliveries: [] });

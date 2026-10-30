@@ -44,8 +44,16 @@ export class RedispatchService {
     if (!isUuid(incidentId)) return { status: 'not_found' };
     const result = await redispatchIncident(this.db, incidentId);
     if (result.status !== 'applied') return result;
-    await this.queue(result.deliveries, (ids) =>
-      undoIncidentRedispatch(this.db, incidentId, ids, result.released),
+    // A released Incident Held again keeps none of its Deliveries, not even those held
+    // for a Suspended Destination: they would go out once it is reachable again.
+    const created = result.deliveries.map(({ id }) => id);
+    await this.queue(result.deliveries, (pending) =>
+      undoIncidentRedispatch(
+        this.db,
+        incidentId,
+        result.released ? created : pending,
+        result.released,
+      ),
     );
     return result;
   }
