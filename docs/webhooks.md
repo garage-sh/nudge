@@ -4,12 +4,12 @@ A webhook Destination receives a JSON `POST` per event. Its signing secret is ge
 
 ## Headers
 
-| Header                                                   | Content                                                                                                                                                             |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `X-Nudge-Event`                                          | `feedback`, `incident.opened`, `incident.raised`, `incident.closed`, `incidents.held`, `alert` (when the webhook is the Alert destination) or `ping` (health probe) |
-| `X-Nudge-Delivery` / `X-Nudge-Summary` / `X-Nudge-Alert` | stable id of the Delivery, the summary of Held Incidents or the alert: use it to ignore a retried delivery                                                          |
-| `X-Nudge-Timestamp`                                      | Unix time, in seconds                                                                                                                                               |
-| `X-Nudge-Signature`                                      | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret                                                                                     |
+| Header                                                   | Content                                                                                                                                                                                         |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Nudge-Event`                                          | `feedback`, `incident.opened`, `incident.raised`, `incident.closed`, `incidents.held`, `alert` (when the webhook is the Alert destination) or `ping` (health probe)                             |
+| `X-Nudge-Delivery` / `X-Nudge-Summary` / `X-Nudge-Alert` | stable id of the Delivery, the summary of Held Incidents or the alert: with `X-Nudge-Event`, use it to ignore a retried delivery (an Incident's Delivery carries its opening, then its closing) |
+| `X-Nudge-Timestamp`                                      | Unix time, in seconds                                                                                                                                                                           |
+| `X-Nudge-Signature`                                      | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret                                                                                                                 |
 
 ## Payload
 
@@ -45,7 +45,7 @@ A Destination whose Incident Filter is on receives the Incidents it accepts (see
 
 - `incident.opened`: the Incident opened and this Destination's Incident Filter accepts it, or a Member redispatched it to this Destination;
 - `incident.raised`: an Occurrence raised the Incident's Level, and this Destination, not reached yet, accepts the Incident at its new Level (usually because of the higher Level; also when its Incident Filter was turned on since the opening). A Destination already reached receives nothing new;
-- `incident.closed`: the Incident closed, sent on the same Delivery (same `X-Nudge-Delivery`) to every Destination that received its opening. `incident.closure` says why and when: `cause` is `resolved` (its sender reported it over), `member` (a Member closed it in the dashboard) or `quiet_period` (no new Occurrence for its Quiet period), and `closedAt`. A Closed Incident never reopens: a later Occurrence opens a new Incident, with a new id.
+- `incident.closed`: the Incident closed, sent on the same Delivery (same `X-Nudge-Delivery`) to every Destination that received its opening: deduplicate on `X-Nudge-Delivery` and `X-Nudge-Event` together, or you drop the closing. `incident.closure` says why and when: `cause` is `resolved` (its sender reported it over), `member` (a Member closed it in the dashboard) or `quiet_period` (no new Occurrence for its Quiet period), and `closedAt`. A Closed Incident never reopens: a later Occurrence opens a new Incident, with a new id.
 
 An Incident that opened and closed while this Destination was Suspended, or whose opening failed and is replayed after it closed, is delivered **once**, in its final state, as `incident.closed`: an `incident.closed` whose id you never saw is such an Incident.
 
