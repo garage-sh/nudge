@@ -92,7 +92,7 @@ The webhook events and their payloads are in [Webhooks](webhooks.md).
 
 ## Storms
 
-The **Opening cap** bounds how many Incidents a Project may open per minute and still dispatch (20 by default). Past it, Incidents are recorded but **Held**: they go to no Destination. The Alert destination is warned once per Storm (`incident_storm`), and once the Project has gone a full minute without a Held opening, each Destination whose Incident Filter accepts at least one Held Incident receives a single summary instead. A Member can Redispatch a Held Incident that is still Open.
+The **Opening cap** bounds how many Incidents a Project may open per minute and still dispatch (20 by default). Past it, Incidents are recorded but **Held**: they go to no Destination, and one opened without a Level keeps the Project's default Level instead of going to the Judge. The Alert destination is warned once per Storm (`incident_storm`), and once the Project has gone a full minute without a Held opening, each Destination whose Incident Filter accepts at least one Held Incident receives a single summary instead. A Member can Redispatch a Held Incident that is still Open.
 
 A Storm usually means titles that vary without a Fingerprint: fix the integration rather than raise the cap.
 

@@ -30,6 +30,7 @@ import {
   incidents,
   runMigrations,
   undoReview,
+  type Db,
   type DestinationRow,
   type Project,
   type LoadedFeedback,
@@ -141,6 +142,8 @@ export interface Pipeline {
   readonly suspensions: readonly Suspension[];
   /** The Instance's SMTP server: the emails sent, by the email Destinations and the api. */
   readonly mailer: FakeMailer;
+  /** The pipeline's database, for a test that orders transactions of the data layer itself. */
+  readonly db: Db;
   /** The Project is created directly in the database (seed); its keys are returned in clear. */
   createProject(data: {
     name: string;
@@ -396,6 +399,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     fakeAlert: fakeFor(ALERT_DESTINATION_ID),
     suspensions,
     mailer,
+    db,
     createProject: (data) => createProject(db, data),
     async createDestination(projectId, data = {}) {
       const destination = await createDestination(db, cipher, {

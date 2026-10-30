@@ -1,4 +1,5 @@
 import { DISPATCH_QUEUE, type Alert, type IncidentStormAlert } from '@nudge/core';
+import { incidentStorms, recordOccurrence } from '@nudge/database';
 import type {
   IncidentDetailView,
   IncidentPage,
@@ -6,6 +7,7 @@ import type {
   ProjectView,
   ReceivedIncident,
 } from '@nudge/shared';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startPipeline, type DashboardClient, type Pipeline } from './harness/index.js';
 
@@ -74,6 +76,15 @@ describe('The Opening cap and Held Incidents', () => {
       (alert: Alert): alert is IncidentStormAlert =>
         alert.event === 'incident_storm' && alert.project.id === projectId,
     );
+
+  /** How many sessions of the pipeline's database wait for a lock. */
+  const waitingForALock = async () => {
+    const { rows } = await pipeline.db.execute<{ waiting: number }>(
+      sql`select count(*)::int as waiting from pg_stat_activity
+          where datname = current_database() and wait_event_type = 'Lock'`,
+    );
+    return rows[0]?.waiting ?? 0;
+  };
 
   const heldIds = async (projectId: string) => {
     const response = await member.get<IncidentPage>(
@@ -177,18 +188,74 @@ describe('The Opening cap and Held Incidents', () => {
     expect(team.fake.heldSummaries[1]).toMatchObject({ held: { count: 1 } });
   });
 
-  it('an Incident opened past the cap without a declared Level is Held too, once its Level is settled', async () => {
+  it('an Incident opened past the cap without a declared Level is Held with the default Level, without asking the Judge', async () => {
     const { project, secretKey } = await projectWithCap('Undeclared', 1);
     const team = await pipeline.createDestination(project.id, { incidentFilter: anyLevel });
+    const judged = pipeline.judge.requests.length;
 
     const dispatched = await report(secretKey, { title: 'Disk full' });
     const held = await report(secretKey, { title: 'Disk full again' });
+    expect(await read(held.id)).toMatchObject({ level: 'error', levelOrigin: 'default' });
 
     await vi.waitFor(() => expect(team.fake.incidents).toHaveLength(1), { timeout: 5000 });
     expect(team.fake.incidents[0]?.incident.id).toBe(dispatched.id);
     await vi.waitFor(() => expect(team.fake.heldSummaries).toHaveLength(1), { timeout: 5000 });
     expect(team.fake.incidentAttempts).toHaveLength(1);
     expect(await read(held.id)).toMatchObject({ held: true, deliveries: [] });
+    expect(pipeline.judge.requests).toHaveLength(judged + 1);
+  });
+
+  it('an opening absorbed after all by a concurrent opening of its Fingerprint leaves no storm behind', async () => {
+    const { project, secretKey } = await projectWithCap('Same Fingerprint', 1);
+    const occurrence = {
+      projectId: project.id,
+      fingerprint: 'burst',
+      level: 'error',
+      openingCap: { limit: 1, windowMs: WINDOW_MS },
+      report: {
+        title: 'Burst',
+        message: null,
+        level: 'error',
+        environment: null,
+        fingerprint: 'burst',
+        context: {},
+        quietPeriod: null,
+        resolved: false,
+        receivedAt: new Date().toISOString(),
+      },
+    } as const;
+
+    // The first opening holds the Project's lock until it commits. The second finds no
+    // Open Incident, waits for that lock, then counts the first opening: past the cap,
+    // it would be Held, but its insert conflicts and it is absorbed.
+    let firstRecorded!: () => void;
+    let commitFirst!: () => void;
+    const recordedFirst = new Promise<void>((resolve) => (firstRecorded = resolve));
+    const committing = new Promise<void>((resolve) => (commitFirst = resolve));
+    const first = pipeline.db.transaction(async (tx) => {
+      const recorded = await recordOccurrence(tx, occurrence);
+      firstRecorded();
+      await committing;
+      return recorded;
+    });
+    await recordedFirst;
+    const second = pipeline.db.transaction((tx) => recordOccurrence(tx, occurrence));
+    await vi.waitFor(async () => expect(await waitingForALock()).toBe(1), { timeout: 5000 });
+    commitFirst();
+
+    const [opened, absorbed] = await Promise.all([first, second]);
+    expect(opened).toMatchObject({ opened: true, held: false });
+    expect(absorbed).toMatchObject({ id: opened!.id, opened: false, startedStormId: null });
+    expect(
+      await pipeline.db
+        .select()
+        .from(incidentStorms)
+        .where(eq(incidentStorms.projectId, project.id)),
+    ).toEqual([]);
+
+    // The real storm that follows starts its own, and alerts the Members.
+    await report(secretKey, { title: 'Another', level: 'error' });
+    await vi.waitFor(() => expect(stormAlerts(project.id)).toHaveLength(1), { timeout: 5000 });
   });
 
   it('a Member Redispatches a Held Incident that is still Open; a Closed one is not offered', async () => {
