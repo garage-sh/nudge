@@ -481,6 +481,34 @@ describe('A Project’s Incident settings', () => {
     ]);
   });
 
+  it('keeps a Quiet period that is no whole number of minutes when the field is left alone, and says a refused value under its field', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/projects/project-1': { status: 200, body: { ...SHOP, quietPeriod: 30 } },
+      'PATCH /api/projects/project-1': (body) => ({
+        status: 200,
+        body: { ...SHOP, ...(body as object) },
+      }),
+    });
+    renderDashboard('/projects/project-1');
+
+    const cap = await screen.findByLabelText('Opening cap (Incidents per minute)');
+    await userEvent.type(cap, '0');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+    expect(api.calls.some((call) => call.route === 'PATCH /api/projects/project-1')).toBe(false);
+    expect(cap.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(cap);
+
+    await userEvent.clear(cap);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Incident settings' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(api.calls.find((call) => call.route === 'PATCH /api/projects/project-1')?.body).toEqual({
+      defaultLevel: 'error',
+      quietPeriod: 30,
+      openingCap: null,
+    });
+  });
+
   it('sets the Opening cap, and empties it back to the Instance default', async () => {
     const api = fakeApi({
       ...routes(),

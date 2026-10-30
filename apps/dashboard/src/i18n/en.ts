@@ -569,7 +569,7 @@ export const en = {
     incidentEnvironments: (environments: string) => `in ${environments}`,
     incidentConditions: (count: number) =>
       `${count} context ${count === 1 ? 'condition' : 'conditions'}`,
-    emptyTitle: 'No Destination: Triaged Feedback goes nowhere.',
+    emptyTitle: 'No Destination: Triaged Feedback and Incidents go nowhere.',
     emptyHelp:
       'Add one below: a GitHub repository, a Linear team, a Slack, Discord or Telegram channel, or your own webhook.',
     copySecretNow: (name: string) =>

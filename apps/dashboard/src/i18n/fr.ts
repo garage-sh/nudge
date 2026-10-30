@@ -542,7 +542,7 @@ export const fr: Messages = {
     incidentLevelOrMore: (level) => `Incidents : ${level} ou plus`,
     incidentEnvironments: (environments) => `en ${environments}`,
     incidentConditions: (count) => `${count} condition${s(count)} de contexte`,
-    emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
+    emptyTitle: 'Aucune Destination : les Retours Triés et les Incidents ne partent nulle part.',
     emptyHelp:
       'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack, Discord ou Telegram, ou votre propre webhook.',
     copySecretNow: (name) =>

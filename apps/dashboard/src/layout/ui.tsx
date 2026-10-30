@@ -235,7 +235,11 @@ export function Field({
           e.preventDefault();
           const field = e.currentTarget;
           setError(validityMessage(field, t));
-          if (field.form?.querySelector(':invalid') === field) field.focus();
+          // A fieldset holding an invalid field is :invalid too: only fields are compared.
+          const first = field.form?.querySelector(
+            'input:invalid, select:invalid, textarea:invalid',
+          );
+          if (first === field) field.focus();
           onInvalid?.(e);
         }}
         onChange={(e) => {

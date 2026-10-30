@@ -666,6 +666,28 @@ describe('A Project’s Destinations', () => {
     });
   });
 
+  it('refuses a context condition half filled under its field, and focuses a row when added', async () => {
+    const api = fakeApi(baseRoutes());
+    renderDashboard('/projects/project-1/destinations');
+
+    const receiver = await card('Internal receiver');
+    await userEvent.click(receiver.getByRole('button', { name: 'Edit' }));
+    const form = within(screen.getByRole('form', { name: 'Edit Internal receiver' }));
+    await userEvent.click(form.getByLabelText('Receive Incidents'));
+    await userEvent.click(form.getByRole('button', { name: 'Add a condition' }));
+    expect(document.activeElement).toBe(form.getByLabelText('Context key'));
+    await userEvent.type(form.getByLabelText('Context key'), 'service');
+    await userEvent.click(form.getByRole('button', { name: 'Save' }));
+
+    const values = form.getByLabelText('Is one of');
+    expect(values.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(values);
+    expect(api.calls.some((c) => c.route === 'PATCH /api/destinations/destination-1')).toBe(false);
+
+    await userEvent.click(form.getByRole('button', { name: /^Remove/ }));
+    expect(document.activeElement).toBe(form.getByRole('button', { name: 'Add a condition' }));
+  });
+
   it('shows the incident events a webhook receives', async () => {
     fakeApi(baseRoutes([]));
     renderDashboard('/projects/project-1/destinations');

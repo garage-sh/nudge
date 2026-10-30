@@ -14,7 +14,7 @@ import {
   type DestinationType,
   type FeedbackType,
 } from '@nudge/shared';
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useT } from '../../i18n/index.js';
 import { ErrorMessage, Field, PanelHeader } from '../../layout/ui.js';
 import { DESTINATION_FORMS, TypeIcon } from './types/index.js';
@@ -224,6 +224,9 @@ export function DestinationForm({
   );
 }
 
+/** A value with at least one character other than a space or a comma. */
+const NOT_BLANK = '.*[^\\s,].*';
+
 /** The Incident Filter as the form edits it: lists typed as comma-separated text. */
 interface IncidentFilterDraft {
   readonly on: boolean;
@@ -277,6 +280,14 @@ function IncidentFilterFields({
   const t = useT();
   const f = t.destinations.form;
   const set = (fields: Partial<IncidentFilterDraft>) => onChange({ ...draft, ...fields });
+  // A row added takes focus on its key; a row removed hands it to "Add a condition".
+  const [focusKey, setFocusKey] = useState<number | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusKey === null) return;
+    document.getElementById(`${idPrefix}-key-${focusKey}`)?.focus();
+    setFocusKey(null);
+  }, [focusKey, idPrefix]);
   const setCondition = (
     index: number,
     fields: Partial<IncidentFilterDraft['conditions'][number]>,
@@ -309,19 +320,14 @@ function IncidentFilterFields({
               ))}
             </select>
           </div>
-          <div className="field">
-            <label htmlFor={`${idPrefix}-environments`}>{f.environments}</label>
-            <input
-              id={`${idPrefix}-environments`}
-              value={draft.environments}
-              placeholder={f.environmentsPlaceholder}
-              aria-describedby={`${idPrefix}-environments-help`}
-              onChange={(e) => set({ environments: e.target.value })}
-            />
-            <p className="help" id={`${idPrefix}-environments-help`}>
-              {f.environmentsHelp}
-            </p>
-          </div>
+          <Field
+            id={`${idPrefix}-environments`}
+            label={f.environments}
+            value={draft.environments}
+            placeholder={f.environmentsPlaceholder}
+            help={f.environmentsHelp}
+            onChange={(e) => set({ environments: e.target.value })}
+          />
           <fieldset className="field conditions-field">
             <legend>{f.conditions}</legend>
             <p className="help">{f.conditionsHelp}</p>
@@ -329,32 +335,34 @@ function IncidentFilterFields({
             <ul className="conditions">
               {draft.conditions.map((condition, index) => (
                 <li key={index} className="condition">
-                  <div className="field">
-                    <label htmlFor={`${idPrefix}-key-${index}`}>{f.conditionKey}</label>
-                    <input
-                      id={`${idPrefix}-key-${index}`}
-                      value={condition.key}
-                      placeholder={f.conditionKeyPlaceholder}
-                      onChange={(e) => setCondition(index, { key: e.target.value })}
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`${idPrefix}-values-${index}`}>{f.conditionValues}</label>
-                    <input
-                      id={`${idPrefix}-values-${index}`}
-                      value={condition.values}
-                      placeholder={f.conditionValuesPlaceholder}
-                      aria-describedby={`${idPrefix}-values-help`}
-                      onChange={(e) => setCondition(index, { values: e.target.value })}
-                    />
-                  </div>
+                  {/* A row left empty is no condition; a row half filled is refused here. */}
+                  <Field
+                    id={`${idPrefix}-key-${index}`}
+                    label={f.conditionKey}
+                    value={condition.key}
+                    placeholder={f.conditionKeyPlaceholder}
+                    required={condition.values.trim() !== ''}
+                    pattern={NOT_BLANK}
+                    onChange={(e) => setCondition(index, { key: e.target.value })}
+                  />
+                  <Field
+                    id={`${idPrefix}-values-${index}`}
+                    label={f.conditionValues}
+                    value={condition.values}
+                    placeholder={f.conditionValuesPlaceholder}
+                    required={condition.key.trim() !== ''}
+                    pattern={NOT_BLANK}
+                    aria-describedby={`${idPrefix}-values-help`}
+                    onChange={(e) => setCondition(index, { values: e.target.value })}
+                  />
                   <button
                     type="button"
                     className="ghost"
                     aria-label={f.removeConditionLabel(condition.key || f.conditionKey)}
-                    onClick={() =>
-                      set({ conditions: draft.conditions.filter((_, other) => other !== index) })
-                    }
+                    onClick={() => {
+                      set({ conditions: draft.conditions.filter((_, other) => other !== index) });
+                      addButton.current?.focus();
+                    }}
                   >
                     {f.removeCondition}
                   </button>
@@ -368,9 +376,13 @@ function IncidentFilterFields({
             ) : null}
             <div className="actions">
               <button
+                ref={addButton}
                 type="button"
                 className="secondary"
-                onClick={() => set({ conditions: [...draft.conditions, { key: '', values: '' }] })}
+                onClick={() => {
+                  set({ conditions: [...draft.conditions, { key: '', values: '' }] });
+                  setFocusKey(draft.conditions.length);
+                }}
               >
                 {f.addCondition}
               </button>

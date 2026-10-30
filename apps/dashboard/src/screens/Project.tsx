@@ -267,7 +267,14 @@ function IncidentSettings({ project }: { project: ProjectView }) {
     const cap = openingCap.trim();
     update.mutate({
       defaultLevel,
-      quietPeriod: minutes === '' ? null : Number(minutes) * 60,
+      // Untouched, a period that is no whole number of minutes (set through the api) is
+      // kept as is rather than rounded to what the field shows.
+      quietPeriod:
+        minutes === toMinutes(project.quietPeriod)
+          ? project.quietPeriod
+          : minutes === ''
+            ? null
+            : Number(minutes) * 60,
       openingCap: cap === '' ? null : Number(cap),
     });
   };
@@ -295,40 +302,30 @@ function IncidentSettings({ project }: { project: ProjectView }) {
         </select>
         <p className="help">{i.defaultLevelHelp}</p>
       </div>
-      <div className="field">
-        <label htmlFor="project-quiet-period">{i.quietPeriod}</label>
-        <input
-          id="project-quiet-period"
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={QUIET_PERIOD_BOUNDS.max / 60}
-          step={1}
-          value={quietMinutes}
-          aria-describedby="project-quiet-period-help"
-          onChange={(e) => setQuietMinutes(e.target.value)}
-        />
-        <p className="help" id="project-quiet-period-help">
-          {i.quietPeriodHelp}
-        </p>
-      </div>
-      <div className="field">
-        <label htmlFor="project-opening-cap">{i.openingCap}</label>
-        <input
-          id="project-opening-cap"
-          type="number"
-          inputMode="numeric"
-          min={OPENING_CAP_BOUNDS.min}
-          max={OPENING_CAP_BOUNDS.max}
-          step={1}
-          value={openingCap}
-          aria-describedby="project-opening-cap-help"
-          onChange={(e) => setOpeningCap(e.target.value)}
-        />
-        <p className="help" id="project-opening-cap-help">
-          {i.openingCapHelp}
-        </p>
-      </div>
+      <Field
+        id="project-quiet-period"
+        label={i.quietPeriod}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={QUIET_PERIOD_BOUNDS.max / 60}
+        step={1}
+        value={quietMinutes}
+        help={i.quietPeriodHelp}
+        onChange={(e) => setQuietMinutes(e.target.value)}
+      />
+      <Field
+        id="project-opening-cap"
+        label={i.openingCap}
+        type="number"
+        inputMode="numeric"
+        min={OPENING_CAP_BOUNDS.min}
+        max={OPENING_CAP_BOUNDS.max}
+        step={1}
+        value={openingCap}
+        help={i.openingCapHelp}
+        onChange={(e) => setOpeningCap(e.target.value)}
+      />
       <ErrorMessage error={update.error} />
       <div className="actions">
         <button type="submit" disabled={update.isPending}>
