@@ -37,7 +37,7 @@ export class ProjectsController {
     return this.projects.read(id);
   }
 
-  /** Name, Project description, allowed origins. */
+  /** Name, Project description, allowed origins, default Level. */
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: unknown): Promise<ProjectView> {
     return this.projects.update(id, parseBody(projectUpdateSchema, body));

@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { ConfiguredDestination, Filter, SecretCipher } from '@nudge/core';
+import type {
+  ConfiguredDestination,
+  Filter,
+  IncidentFilter,
+  IncidentToFilter,
+  SecretCipher,
+} from '@nudge/core';
 import { FILTER_ALL } from '@nudge/shared';
 import type { Db } from './client.js';
-import { destinations } from './schema.js';
+import { destinations, type incidents } from './schema.js';
 
 export type DestinationRow = typeof destinations.$inferSelect;
 export type DestinationSecrets = Readonly<Record<string, string>>;
@@ -35,12 +41,70 @@ export function decryptDestinationSecrets(
   ) as DestinationSecrets;
 }
 
+/** The Destination's Feedback Filter; `null`: off. */
 export const filterOf = (
-  destination: Pick<DestinationRow, 'filterTypes' | 'filterMinimumSeverity'>,
-): Filter => ({
-  types: destination.filterTypes,
-  minimumSeverity: destination.filterMinimumSeverity,
+  destination: Pick<DestinationRow, 'filterEnabled' | 'filterTypes' | 'filterMinimumSeverity'>,
+): Filter | null =>
+  destination.filterEnabled
+    ? { types: destination.filterTypes, minimumSeverity: destination.filterMinimumSeverity }
+    : null;
+
+/** The Destination's Incident Filter; `null`: off. */
+export const incidentFilterOf = (
+  destination: Pick<
+    DestinationRow,
+    | 'incidentFilterEnabled'
+    | 'incidentFilterMinimumLevel'
+    | 'incidentFilterEnvironments'
+    | 'incidentFilterConditions'
+  >,
+): IncidentFilter | null =>
+  destination.incidentFilterEnabled
+    ? {
+        minimumLevel: destination.incidentFilterMinimumLevel,
+        environments: destination.incidentFilterEnvironments,
+        conditions: destination.incidentFilterConditions,
+      }
+    : null;
+
+/**
+ * What an Incident Filter reads of an Incident: its Level and Environment now, and the
+ * context of its first report. Dispatch and the summaries of Held Incidents route alike.
+ */
+export const incidentToFilter = (
+  incident: Pick<typeof incidents.$inferSelect, 'level' | 'environment' | 'firstReport'>,
+): IncidentToFilter => ({
+  level: incident.level,
+  environment: incident.environment,
+  context: incident.firstReport.context,
 });
+
+/**
+ * The columns of a Destination's Feedback Filter. Turned off (`null`), the Filter keeps
+ * its last Types and Severity: they come back if it is turned on again unchanged.
+ */
+export const filterColumns = (filter: Filter | null) =>
+  filter
+    ? {
+        filterEnabled: true,
+        filterTypes: [...filter.types],
+        filterMinimumSeverity: filter.minimumSeverity,
+      }
+    : { filterEnabled: false };
+
+/** The columns of a Destination's Incident Filter; turned off, it keeps its last settings. */
+export const incidentFilterColumns = (filter: IncidentFilter | null) =>
+  filter
+    ? {
+        incidentFilterEnabled: true,
+        incidentFilterMinimumLevel: filter.minimumLevel,
+        incidentFilterEnvironments: [...filter.environments],
+        incidentFilterConditions: filter.conditions.map(({ key, values }) => ({
+          key,
+          values: [...values],
+        })),
+      }
+    : { incidentFilterEnabled: false };
 
 /** A Destination read from the database, secrets decrypted, as a `DestinationAdapterResolver` receives it. */
 export function toConfiguredDestination(
@@ -67,12 +131,15 @@ export async function createDestination(
     type: string;
     config?: Record<string, unknown>;
     secrets?: DestinationSecrets;
-    filter?: Filter;
+    /** `null`: off. Absent: every Triaged Feedback. */
+    filter?: Filter | null;
+    /** `null` or absent: off. */
+    incidentFilter?: IncidentFilter | null;
   },
 ): Promise<DestinationRow> {
   // The id is drawn before the insert: it is part of the encryption context.
   const id = randomUUID();
-  const filter = data.filter ?? FILTER_ALL;
+  const filter = data.filter === undefined ? FILTER_ALL : data.filter;
   const [destination] = await db
     .insert(destinations)
     .values({
@@ -82,8 +149,8 @@ export async function createDestination(
       type: data.type,
       config: data.config ?? {},
       encryptedSecrets: encryptDestinationSecrets(cipher, id, data.secrets ?? {}),
-      filterTypes: [...filter.types],
-      filterMinimumSeverity: filter.minimumSeverity,
+      ...filterColumns(filter),
+      ...incidentFilterColumns(data.incidentFilter ?? null),
     })
     .returning();
   if (!destination) throw new Error('Destination not created');

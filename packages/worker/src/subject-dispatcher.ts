@@ -1,0 +1,39 @@
+import type { DeliveryResult, DestinationAdapter } from '@nudge/core';
+import type { DeliverySubject, deliveries } from '@nudge/database';
+
+/** Columns a subject may record on its Delivery as it becomes delivered. */
+export type DeliveredAs = Partial<Pick<typeof deliveries.$inferInsert, 'incidentMoment'>>;
+
+/**
+ * What a Delivery's subject makes of it, before any outgoing call. A `reason` never names
+ * the Delivery: the caller logs it after the Delivery's id, and records it as the error.
+ */
+export type PreparedDelivery =
+  /** Nothing to send and nothing to record: the inconsistency is logged. */
+  | { readonly status: 'ignored'; readonly reason: string }
+  /** The subject may not be delivered (any more): the Delivery fails for good. */
+  | { readonly status: 'not_dispatchable'; readonly reason: string }
+  | {
+      readonly status: 'ready';
+      /** Sends the subject through the Destination's adapter. */
+      send(adapter: DestinationAdapter): Promise<DeliveryResult>;
+      /**
+       * After `send`: a failure came from nudge and not from the target (D25), such as
+       * an unreadable Capture; it is retried but does not count toward Suspension.
+       */
+      failedInternally(): boolean;
+      /** Recorded on the Delivery in the same update that makes it delivered. */
+      readonly deliveredAs?: DeliveredAs;
+      /** After a delivery recorded as such: what the subject does next, if anything. */
+      delivered?(): Promise<void>;
+    };
+
+/**
+ * The part of Dispatch that depends on what a Delivery delivers: reading the subject,
+ * deciding whether it may go out, and the adapter operation that sends it. Everything
+ * else (claim, hold and release while Suspended, outcome, replay) is the same for every
+ * subject and lives in `DispatchProcessor` and `SuspensionService`.
+ */
+export interface SubjectDispatcher {
+  prepare(deliveryId: string, subject: DeliverySubject): Promise<PreparedDelivery>;
+}

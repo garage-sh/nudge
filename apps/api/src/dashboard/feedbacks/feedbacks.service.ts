@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -32,56 +31,10 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DB, CAPTURE_STORAGE } from '../../infra/tokens.js';
 import { isUuid } from '../../validation.js';
+import { after, decodeCursor, encodeCursor, instantColumn } from '../cursor.js';
 import { DELIVERY_DESTINATION_COLUMNS, toDeliveryView } from './delivery-view.js';
 
 type FeedbackFilters = z.output<typeof feedbackFiltersSchema>;
-
-/**
- * Position of a Feedback in the inbox: its creation instant to the microsecond (a JS
- * `Date` stops at the millisecond and would skip Feedbacks) and its id, which breaks
- * ties between Feedbacks created at the same instant.
- */
-interface Position {
-  readonly instant: string;
-  readonly id: string;
-}
-
-const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-
-/** An existing instant (no 13th month): Postgres would refuse it with a 500, not a 400. */
-const isInstant = (value: string): boolean => {
-  if (!INSTANT.test(value)) return false;
-  const milliseconds = `${value.slice(0, 23)}Z`;
-  const date = new Date(milliseconds);
-  return !Number.isNaN(date.getTime()) && date.toISOString() === milliseconds;
-};
-
-const encodeCursor = (position: Position): string =>
-  Buffer.from(JSON.stringify([position.instant, position.id])).toString('base64url');
-
-function decodeCursor(cursor: string): Position {
-  try {
-    const value: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (Array.isArray(value) && value.length === 2) {
-      const [instant, id] = value as unknown[];
-      if (
-        typeof instant === 'string' &&
-        isInstant(instant) &&
-        typeof id === 'string' &&
-        isUuid(id)
-      ) {
-        return { instant, id };
-      }
-    }
-  } catch {
-    // Returned as a 400 below.
-  }
-  const refusal: ApiErrorBody = {
-    error: 'invalid_request',
-    details: [{ path: 'cursor', message: 'Invalid cursor' }],
-  };
-  throw new BadRequestException(refusal);
-}
 
 /** Feedbacks of all Projects, as a Member reads them (no roles in v1). */
 @Injectable()
@@ -105,10 +58,7 @@ export class FeedbacksService {
       conditions.push(eq(verdicts.uncertain, filters.uncertain));
     }
     if (filters.cursor) {
-      const after = decodeCursor(filters.cursor);
-      conditions.push(
-        sql`(${feedbacks.createdAt}, ${feedbacks.id}) < (${after.instant}::timestamptz, ${after.id}::uuid)`,
-      );
+      conditions.push(after(feedbacks.createdAt, feedbacks.id, decodeCursor(filters.cursor)));
     }
 
     const rows = await this.db
@@ -121,7 +71,7 @@ export class FeedbacksService {
         preview: sql<string>`left(${feedbacks.text}, ${sql.raw(String(DASHBOARD_LIMITS.feedbackPreview))})`,
         declaredType: feedbacks.declaredType,
         createdAt: feedbacks.createdAt,
-        instant: sql<string>`to_char(${feedbacks.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        instant: instantColumn(feedbacks.createdAt),
         verdictId: verdicts.id,
         resolvedType: verdicts.resolvedType,
         severity: verdicts.severity,

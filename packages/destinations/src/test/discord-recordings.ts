@@ -80,6 +80,32 @@ export const DISCORD = {
       application_id: null,
     },
   },
+  /**
+   * Edit Webhook Message: "Returns a message object on success". The created message,
+   * edited.
+   */
+  editedMessage: {
+    provenance: 'reconstructed',
+    source: `${WEBHOOK}#edit-webhook-message`,
+    status: 200,
+    body: {
+      id: MESSAGE_ID,
+      type: 0,
+      content: '',
+      channel_id: CHANNEL_ID,
+      embeds: [{ type: 'rich', title: 'Closed · Error · Payment timed out' }],
+      timestamp: '2026-10-24T09:30:00.299000+00:00',
+      edited_timestamp: '2026-10-24T09:31:00.512000+00:00',
+      webhook_id: WEBHOOK_ID,
+    },
+  },
+  /** 404 "Unknown message" (JSON code 10008): the message was deleted from the channel. */
+  unknownMessage: {
+    provenance: 'reconstructed',
+    source: CODES,
+    status: 404,
+    body: { message: 'Unknown Message', code: 10008 },
+  },
   /** 401 "Invalid webhook token provided" (JSON code 50027). */
   invalidToken: {
     provenance: 'reconstructed',

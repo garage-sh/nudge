@@ -3,8 +3,12 @@ export const DB = Symbol('DB');
 export const DESTINATION_ADAPTER_RESOLVER = Symbol('DESTINATION_ADAPTER_RESOLVER');
 export const DISPATCH_QUEUE_TOKEN = Symbol('DISPATCH_QUEUE');
 export const TRIAGE_QUEUE_TOKEN = Symbol('TRIAGE_QUEUE');
+/** Queue of the Judge's assessments of an undeclared Incident Level. */
+export const INCIDENT_LEVEL_QUEUE_TOKEN = Symbol('INCIDENT_LEVEL_QUEUE');
 /** Queue of the Member alerts (`AlertsService`). */
 export const ALERTS_QUEUE_TOKEN = Symbol('ALERTS_QUEUE');
+/** Queue of the summaries of Held Incidents (`HeldSummaryService`). */
+export const HELD_SUMMARY_QUEUE_TOKEN = Symbol('HELD_SUMMARY_QUEUE');
 export const OPTIONS = Symbol('OPTIONS');
 /** `SecretCipher` for the secrets stored in the database, using the Instance key. */
 export const SECRET_CIPHER = Symbol('SECRET_CIPHER');

@@ -5,6 +5,7 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
+import type { OpeningCap } from '@nudge/database';
 import { DashboardModule, type DashboardOptions } from './dashboard/dashboard.module.js';
 import { InfraModule, type InfraOptions } from './infra/infra.module.js';
 import {
@@ -17,10 +18,18 @@ import { ProjectKeyGuard } from './ingestion/project-key.guard.js';
 import { CorsIngestionMiddleware } from './ingestion/cors-ingestion.middleware.js';
 import { IngestionController } from './ingestion/ingestion.controller.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
+import { IncidentsIngestionController } from './ingestion/incidents-ingestion.controller.js';
+import { IncidentsIngestionService } from './ingestion/incidents-ingestion.service.js';
+import { SecretKeyGuard } from './ingestion/secret-key.guard.js';
+import { SecretKeys } from './ingestion/secret-keys.js';
+import { DEFAULT_OPENING_CAP_OPTIONS } from './ingestion/incidents-ingestion.service.js';
+import { OPENING_CAP } from './infra/tokens.js';
 
 export interface IngestionOptions {
   /** Rate limit of the Widget path; `DEFAULT_WIDGET_LIMITS` otherwise. */
   readonly widgetLimits?: WidgetLimits;
+  /** The Instance's Opening cap of the Incidents; `DEFAULT_OPENING_CAP_OPTIONS` otherwise. */
+  readonly openingCap?: OpeningCap;
 }
 
 @Module({})
@@ -29,12 +38,16 @@ export class ApiModule implements NestModule {
     return {
       module: ApiModule,
       imports: [InfraModule.forRoot(options), DashboardModule.forRoot(options)],
-      controllers: [IngestionController],
+      controllers: [IngestionController, IncidentsIngestionController],
       providers: [
         { provide: WIDGET_LIMITS, useValue: options.widgetLimits ?? DEFAULT_WIDGET_LIMITS },
+        { provide: OPENING_CAP, useValue: options.openingCap ?? DEFAULT_OPENING_CAP_OPTIONS },
         WidgetAccess,
         IngestionService,
+        IncidentsIngestionService,
+        SecretKeys,
         ProjectKeyGuard,
+        SecretKeyGuard,
       ],
     };
   }

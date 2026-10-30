@@ -1,6 +1,10 @@
 import {
   presentAlert,
+  presentHeldSummary,
+  presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
+  type OutgoingIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -23,7 +27,13 @@ import {
   failureMessage,
   responseText,
 } from './http.js';
-import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
+import {
+  alertToMarkdown,
+  escapePunctuation,
+  heldSummaryToMarkdown,
+  incidentToMarkdown,
+  isSafeLink,
+} from './markdown.js';
 import { titleWithType, truncate } from './text.js';
 
 export interface GitHubOptions {
@@ -69,28 +79,96 @@ export function gitHubAdapter(
       },
     });
 
-  /** "Create an issue": delivered with its link, or the classified failure. */
-  async function createIssue(issue: { title: string; body: string }): Promise<DeliveryResult> {
+  /** A JSON call to the repository: the response's body, or the classified failure. */
+  async function write(
+    path: string,
+    method: 'POST' | 'PATCH',
+    payload: unknown,
+    classify: (response: Response) => Promise<Refusal> = gitHubFailure,
+  ): Promise<{ ok: true; body: unknown } | { ok: false; failure: DeliveryResult }> {
     let response: Response;
     try {
-      response = await call(`${endpoint}/issues`, {
-        method: 'POST',
+      response = await call(`${endpoint}${path}`, {
+        method,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(issue),
+        body: JSON.stringify(payload),
       });
     } catch (error) {
-      return { status: 'failed', failureClass: 'transient', message: errorMessage(error) };
+      return {
+        ok: false,
+        failure: { status: 'failed', failureClass: 'transient', message: errorMessage(error) },
+      };
     }
-    if (!response.ok) return { status: 'failed', ...(await gitHubFailure(response)) };
-    const created = (await response.json().catch(() => ({}))) as { html_url?: unknown };
-    return {
-      status: 'delivered',
-      externalUrl: externalLink(created.html_url),
-    };
+    if (!response.ok) {
+      return { ok: false, failure: { status: 'failed', ...(await classify(response)) } };
+    }
+    return { ok: true, body: await response.json().catch(() => ({})) };
   }
+
+  /** "Create an issue": delivered with its link, or the classified failure. */
+  async function createIssue(issue: { title: string; body: string }): Promise<DeliveryResult> {
+    const created = await write('/issues', 'POST', issue);
+    if (!created.ok) return created.failure;
+    const { html_url } = created.body as { html_url?: unknown };
+    return { status: 'delivered', externalUrl: externalLink(html_url) };
+  }
+
+  /** "Update an issue" to closed, as completed: closing a closed issue changes nothing. */
+  const closeIssue = (number: number) =>
+    write(
+      `/issues/${number}`,
+      'PATCH',
+      { state: 'closed', state_reason: 'completed' },
+      closingFailure,
+    );
+
+  /** The number of an issue of the configured repository a link points at, or `null`. */
+  const issueNumberOf = (link: string | null): number | null => {
+    const match = link
+      ? /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)$/.exec(link)
+      : null;
+    if (!match) return null;
+    const [, owner, name, number] = match;
+    const same = (a: string | undefined, b: string) => a?.toLowerCase() === b.toLowerCase();
+    return same(owner, repository.owner) && same(name, repository.name) ? Number(number) : null;
+  };
 
   return {
     send: (delivery) => createIssue({ title: title(delivery), body: body(delivery) }),
+    /**
+     * The issue's link is what finds it again to close it. "Opened then closed": the
+     * issue is created, then closed at once (creation cannot set the state). If that
+     * closing fails, the issue exists and says it is Closed: the Delivery is delivered
+     * rather than failed, which a replay would answer with a second issue.
+     */
+    async deliverIncident(delivery) {
+      const created = await createIssue(incidentIssue(delivery));
+      const number = created.status === 'delivered' ? issueNumberOf(created.externalUrl) : null;
+      if (delivery.incident.closure && number !== null) await closeIssue(number);
+      return created;
+    },
+    /**
+     * Closes the issue the opening created, then comments the closing on it: a retry
+     * after a failed comment closes it again harmlessly. Never creates a second issue.
+     */
+    async closeIncident(closing) {
+      const number = issueNumberOf(closing.opening.externalUrl);
+      if (number === null) {
+        return {
+          status: 'failed',
+          failureClass: 'permanent',
+          message: `The opening kept no link to an issue of ${config.repository}: nothing to close`,
+        };
+      }
+      const closed = await closeIssue(number);
+      if (!closed.ok) return closed.failure;
+      const commented = await write(`/issues/${number}/comments`, 'POST', {
+        body: truncate(incidentToMarkdown(closing, escapeMarkdown), BODY_MAX),
+      });
+      if (!commented.ok) return commented.failure;
+      return { status: 'delivered', externalUrl: closing.opening.externalUrl };
+    },
+    summarizeHeld: (summary) => createIssue(heldSummaryIssue(summary)),
     alert: (alert) => createIssue(alertIssue(alert)),
     /**
      * "Get a repository": the token sees the repository, its issues are enabled and it
@@ -138,9 +216,9 @@ export function gitHubAdapter(
  *   transferred) reject the Destination: every Delivery would fail (D21);
  * - 400 and 422 (validation, content deemed spam) target this issue.
  */
-async function gitHubFailure(
-  response: Response,
-): Promise<{ failureClass: FailureClass; message: string }> {
+type Refusal = { failureClass: FailureClass; message: string };
+
+async function gitHubFailure(response: Response): Promise<Refusal> {
   if (response.status >= 300 && response.status < 400) {
     await response.body?.cancel();
     return {
@@ -154,6 +232,22 @@ async function gitHubFailure(
   return httpFailure(response, (status) =>
     status === 404 || status === 410 ? 'auth' : classifyStatus(status),
   );
+}
+
+/**
+ * Class of a refused closing: the issue itself, deleted (410) or transferred to another
+ * repository (3xx), is gone for this Delivery only — the Destination still works, so
+ * it is permanent rather than Suspending it. Everything else as `gitHubFailure`.
+ */
+async function closingFailure(response: Response): Promise<Refusal> {
+  if (response.status === 410 || (response.status >= 300 && response.status < 400)) {
+    await response.body?.cancel();
+    return {
+      failureClass: 'permanent',
+      message: `HTTP ${response.status}: the issue was deleted or transferred, nothing to close`,
+    };
+  }
+  return gitHubFailure(response);
 }
 
 async function isRateLimited(response: Response): Promise<boolean> {
@@ -196,6 +290,24 @@ function alertIssue(alert: Alert): { title: string; body: string } {
   return {
     title: withoutMention(truncate(alertTitle, TITLE_MAX)),
     body: alertToMarkdown(alert, escapeMarkdown),
+  };
+}
+
+/** The issue of the summary of Held Incidents: written by nudge, the Project name literal. */
+function heldSummaryIssue(summary: OutgoingHeldSummary): { title: string; body: string } {
+  const { title } = presentHeldSummary(summary);
+  return {
+    title: withoutMention(truncate(title, TITLE_MAX)),
+    body: heldSummaryToMarkdown(summary, escapeMarkdown),
+  };
+}
+
+/** The issue of an Incident: its plain-text title without mentions, its escaped body. */
+function incidentIssue(delivery: OutgoingIncident) {
+  const { title: incidentTitle } = presentIncident(delivery);
+  return {
+    title: withoutMention(truncate(incidentTitle, TITLE_MAX)),
+    body: truncate(incidentToMarkdown(delivery, escapeMarkdown), BODY_MAX),
   };
 }
 

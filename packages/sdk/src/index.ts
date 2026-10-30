@@ -1,6 +1,7 @@
 /**
  * JS client for nudge's public API, for a backend (server, mobile app through its
- * server, support tool): it posts Feedback with the Project's **secret key**.
+ * server, support tool): it posts Feedback and reports Incidents with the Project's
+ * **secret key**.
  * Feedback sent this way has the `api` Source, and the Author provided is **attested**:
  * the Instance trusts the identity passed along, unlike the one the Widget declares
  * from the browser. The secret key must therefore never leave the server.
@@ -14,7 +15,9 @@ import type {
   PUBLIC_KEY_PREFIX as INSTANCE_PUBLIC_KEY_PREFIX,
   SECRET_KEY_PREFIX as INSTANCE_SECRET_KEY_PREFIX,
   FeedbackInput,
+  IncidentInput,
   ReceivedFeedback,
+  ReceivedIncident,
 } from '@nudge/shared';
 
 export type {
@@ -24,6 +27,11 @@ export type {
   FeedbackInput,
   ReceivedFeedback,
   FeedbackType,
+  IncidentContext,
+  IncidentInput,
+  IncidentState,
+  Level,
+  ReceivedIncident,
 } from '@nudge/shared';
 
 // Key prefixes copied rather than imported (no runtime dependency); the compiler
@@ -51,11 +59,18 @@ export interface CallOptions {
 export interface NudgeClient {
   /** Posts a piece of Feedback; resolves once the Instance has stored it (it then awaits Triage). */
   sendFeedback(feedback: FeedbackInput, options?: CallOptions): Promise<ReceivedFeedback>;
+  /**
+   * Reports one Occurrence of an Incident; resolves with the Incident it landed in, and
+   * whether it opened it (`id: null` when a `resolved` Occurrence matched no Open
+   * Incident). Meant to be fire-and-forget: pass a `signal` with a short
+   * timeout so reporting never slows the application down.
+   */
+  sendIncident(occurrence: IncidentInput, options?: CallOptions): Promise<ReceivedIncident>;
 }
 
 /**
- * Rejection by the Instance: HTTP `status`, the API's stable error `code` and, for
- * rejected Feedback, the detail of the fields.
+ * Rejection by the Instance: HTTP `status`, the API's stable error `code` and, for a
+ * rejected body, the detail of the fields.
  */
 export class NudgeError extends Error {
   override readonly name = 'NudgeError';
@@ -65,7 +80,7 @@ export class NudgeError extends Error {
     readonly code: string | null,
     readonly details: ApiErrorBody['details'] = [],
   ) {
-    super(`nudge rejected the feedback (HTTP ${status}${code ? `, ${code}` : ''})`);
+    super(`nudge rejected the request (HTTP ${status}${code ? `, ${code}` : ''})`);
   }
 }
 
@@ -73,21 +88,25 @@ export function createClient(options: ClientOptions): NudgeClient {
   checkUrl(options.url);
   checkKey(options.secretKey);
   const fetcher = options.fetch ?? globalThis.fetch;
-  const endpoint = `${options.url.replace(/\/+$/, '')}/v1/feedbacks`;
+  const base = options.url.replace(/\/+$/, '');
+  const post = async <T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> => {
+    const response = await fetcher(`${base}${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${options.secretKey}`,
+      },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) throw await errorFrom(response);
+    return (await response.json()) as T;
+  };
   return {
-    async sendFeedback(feedback, { signal } = {}) {
-      const response = await fetcher(endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${options.secretKey}`,
-        },
-        body: JSON.stringify(feedback),
-        ...(signal ? { signal } : {}),
-      });
-      if (!response.ok) throw await errorFrom(response);
-      return (await response.json()) as ReceivedFeedback;
-    },
+    sendFeedback: (feedback, { signal } = {}) =>
+      post<ReceivedFeedback>('/v1/feedbacks', feedback, signal),
+    sendIncident: (occurrence, { signal } = {}) =>
+      post<ReceivedIncident>('/v1/incidents', occurrence, signal),
   };
 }
 

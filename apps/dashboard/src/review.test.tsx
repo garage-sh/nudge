@@ -247,11 +247,13 @@ describe('Replay of a Delivery', () => {
       HTMLElement,
     ];
     expect(within(delivered).getByRole('link', { name: /NUD-1/ })).toBeTruthy();
-    expect(within(delivered).getByRole('button', { name: 'Replay' })).toBeTruthy();
-    expect(within(pending).queryByRole('button', { name: 'Replay' })).toBeNull();
-    expect(within(held).queryByRole('button', { name: 'Replay' })).toBeNull();
+    expect(
+      within(delivered).getByRole('button', { name: /^Replay the Delivery to / }),
+    ).toBeTruthy();
+    expect(within(pending).queryByRole('button', { name: /^Replay the Delivery to / })).toBeNull();
+    expect(within(held).queryByRole('button', { name: /^Replay the Delivery to / })).toBeNull();
     expect(failed.textContent).toMatch(/HTTP 422/);
-    await userEvent.click(within(failed).getByRole('button', { name: 'Replay' }));
+    await userEvent.click(within(failed).getByRole('button', { name: /^Replay the Delivery to / }));
 
     expect(api.calls.map((c) => c.route)).toContain('POST /api/deliveries/delivery-2/replay');
     expect(await within(deliveries).findByText('Pending')).toBeTruthy();
@@ -270,7 +272,9 @@ describe('Replay of a Delivery', () => {
     renderDashboard('/feedbacks/feedback-1');
 
     const deliveries = await screen.findByRole('region', { name: 'Deliveries' });
-    await userEvent.click(within(deliveries).getByRole('button', { name: 'Replay' }));
+    await userEvent.click(
+      within(deliveries).getByRole('button', { name: /^Replay the Delivery to / }),
+    );
 
     expect((await within(deliveries).findByRole('alert')).textContent).toMatch(
       /cannot be replayed now/,

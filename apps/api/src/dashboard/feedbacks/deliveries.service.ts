@@ -17,8 +17,8 @@ export class DeliveriesService {
   ) {}
 
   /**
-   * Replays a delivered or failed Delivery: the same Delivery goes back to pending and
-   * leaves with the current Verdict. Its job has a replay-specific id, the `<deliveryId>`
+   * Replays a failed Delivery, or a delivered Feedback Delivery: the same Delivery goes
+   * back to pending and leaves with the current Verdict or Incident. Its job has a replay-specific id, the `<deliveryId>`
    * id being taken by the first attempt's job. If the queueing fails, the reopening is
    * undone so that the Member can try again.
    */

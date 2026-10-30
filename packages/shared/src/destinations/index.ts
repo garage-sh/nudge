@@ -2,17 +2,22 @@ import { z } from 'zod';
 import {
   SEVERITIES,
   FEEDBACK_TYPES,
+  LEVELS,
   type FailureClass,
+  type Level,
   type DestinationState,
   type Severity,
   type FeedbackType,
 } from '../domain.js';
+import { INCIDENT_LIMITS } from '../incident-input.js';
+import { stripControlCharacters } from '../input.js';
 import type { DestinationDefinition } from './definition.js';
 import { discordDefinition } from './discord.js';
 import { emailDefinition } from './email.js';
 import { gitHubDefinition } from './github.js';
 import { linearDefinition } from './linear.js';
 import { slackDefinition } from './slack.js';
+import { telegramDefinition } from './telegram.js';
 import { webhookDefinition } from './webhook.js';
 
 export { httpUrlSchema, type DestinationDefinition } from './definition.js';
@@ -21,6 +26,7 @@ export * from './email.js';
 export * from './github.js';
 export * from './linear.js';
 export * from './slack.js';
+export * from './telegram.js';
 export * from './webhook.js';
 
 /**
@@ -35,6 +41,7 @@ export const DESTINATION_DEFINITIONS = {
   slack: slackDefinition,
   github: gitHubDefinition,
   email: emailDefinition,
+  telegram: telegramDefinition,
 } as const satisfies Record<string, DestinationDefinition>;
 
 export type DestinationType = keyof typeof DESTINATION_DEFINITIONS;
@@ -61,6 +68,63 @@ export type FilterInput = z.input<typeof filterSchema>;
 /** The Filter of a Destination created without one: every Triaged Feedback is sent to it. */
 export const FILTER_ALL: FilterView = { types: FEEDBACK_TYPES, minimumSeverity: null };
 
+export const INCIDENT_FILTER_LIMITS = {
+  environments: 20,
+  conditions: 10,
+  conditionValues: 20,
+} as const;
+
+/** A text a Member types in an Incident Filter: trimmed, not blank; duplicates dropped. */
+const filterText = (max: number) =>
+  z
+    .string()
+    .transform(stripControlCharacters)
+    .pipe(z.string().trim().min(1, { message: 'Empty value' }).max(max));
+
+const distinct = <T>(values: readonly T[]): T[] => [...new Set(values)];
+
+/**
+ * A Destination's Incident Filter: minimum Level, accepted Environments (an empty list
+ * accepts every Environment, and none), and conditions "context key is one of these
+ * values", all required.
+ */
+export const incidentFilterSchema = z.strictObject({
+  minimumLevel: z.enum(LEVELS),
+  environments: z
+    .array(filterText(INCIDENT_LIMITS.environment))
+    .max(INCIDENT_FILTER_LIMITS.environments)
+    .transform(distinct),
+  conditions: z
+    .array(
+      z.strictObject({
+        key: filterText(INCIDENT_LIMITS.contextKey),
+        values: z
+          .array(filterText(INCIDENT_LIMITS.contextValue))
+          .min(1, { message: 'Give at least one value' })
+          .max(INCIDENT_FILTER_LIMITS.conditionValues)
+          .transform(distinct),
+      }),
+    )
+    .max(INCIDENT_FILTER_LIMITS.conditions)
+    .refine((conditions) => new Set(conditions.map(({ key }) => key)).size === conditions.length, {
+      message: 'One condition per context key',
+    }),
+});
+export type IncidentFilterInput = z.input<typeof incidentFilterSchema>;
+
+export interface IncidentFilterView {
+  readonly minimumLevel: Level;
+  readonly environments: readonly string[];
+  readonly conditions: readonly { readonly key: string; readonly values: readonly string[] }[];
+}
+
+/** The Incident Filter a Member starts from when turning it on: every Incident. */
+export const INCIDENT_FILTER_ALL: IncidentFilterView = {
+  minimumLevel: 'info',
+  environments: [],
+  conditions: [],
+};
+
 const destinationName = z.string().trim().min(1).max(DESTINATION_LIMITS.name);
 
 /**
@@ -76,7 +140,10 @@ const secretValues = z.record(z.string(), z.string().max(DESTINATION_LIMITS.secr
 export const newDestinationSchema = z.strictObject({
   type: z.enum(DESTINATION_TYPES),
   name: destinationName,
-  filter: filterSchema.optional(),
+  /** `null`: the Feedback Filter is off. Absent: every Triaged Feedback. */
+  filter: filterSchema.nullable().optional(),
+  /** `null` or absent: the Incident Filter is off. */
+  incidentFilter: incidentFilterSchema.nullable().optional(),
   config: z.record(z.string(), z.unknown()),
   secrets: secretValues.optional(),
 });
@@ -85,7 +152,9 @@ export type NewDestination = z.input<typeof newDestinationSchema>;
 /** Update: the type does not change; `config`, if present, is replaced as a whole. */
 export const destinationUpdateSchema = z.strictObject({
   name: destinationName.optional(),
-  filter: filterSchema.optional(),
+  /** `null` turns the Filter off; absent leaves it as it is. */
+  filter: filterSchema.nullable().optional(),
+  incidentFilter: incidentFilterSchema.nullable().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   secrets: z.record(z.string(), z.string().max(DESTINATION_LIMITS.secret).nullable()).optional(),
 });
@@ -107,7 +176,10 @@ export interface DestinationView {
    */
   readonly type: string;
   readonly config: Readonly<Record<string, unknown>>;
-  readonly filter: FilterView;
+  /** The Feedback Filter; `null`: off, the Destination receives no Feedback. */
+  readonly filter: FilterView | null;
+  /** The Incident Filter; `null`: off, the Destination receives no Incident. */
+  readonly incidentFilter: IncidentFilterView | null;
   readonly state: DestinationState;
   /** Names of the stored (encrypted) secrets. */
   readonly secrets: readonly string[];

@@ -1,4 +1,11 @@
-import { presentAlert, type Alert } from '@nudge/core';
+import {
+  presentAlert,
+  presentHeldSummary,
+  presentIncident,
+  type Alert,
+  type OutgoingHeldSummary,
+  type OutgoingIncident,
+} from '@nudge/core';
 
 /**
  * CommonMark escaping shared by the Destinations that render markdown (Linear,
@@ -21,5 +28,42 @@ export function alertToMarkdown(alert: Alert, escape: (text: string) => string):
     summary,
     ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
     ...(isSafeLink(alert.dashboardUrl) ? [`[Open in nudge](<${alert.dashboardUrl}>)`] : []),
+  ].join('\n\n');
+}
+
+/**
+ * The markdown of an Incident (Linear, GitHub issue or closing comment): the summary,
+ * each detail as a paragraph, then the link to the dashboard. The summary and the
+ * values carry the sender's and the Members' text: both go through `escape`.
+ */
+export function incidentToMarkdown(
+  delivery: OutgoingIncident,
+  escape: (text: string) => string,
+): string {
+  const { summary, details } = presentIncident(delivery);
+  const { dashboardUrl } = delivery.incident;
+  return [
+    escape(summary),
+    ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
+    ...(isSafeLink(dashboardUrl) ? [`[View the Incident in nudge](<${dashboardUrl}>)`] : []),
+  ].join('\n\n');
+}
+
+/**
+ * The markdown body of the summary of Held Incidents (Linear, GitHub issue): the summary,
+ * each detail as a paragraph, its value passed through `escape` (the Project name is
+ * typed by a Member), then the link to the Held Incidents in the dashboard.
+ */
+export function heldSummaryToMarkdown(
+  held: OutgoingHeldSummary,
+  escape: (text: string) => string,
+): string {
+  const { summary, details } = presentHeldSummary(held);
+  return [
+    summary,
+    ...details.map(({ label, value }) => `**${label}**: ${escape(value)}`),
+    ...(isSafeLink(held.dashboardUrl)
+      ? [`[View the Held Incidents in nudge](<${held.dashboardUrl}>)`]
+      : []),
   ].join('\n\n');
 }

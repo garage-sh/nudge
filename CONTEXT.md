@@ -152,6 +152,10 @@ _Avoid_: Rate limit, quota, throttle
 An Incident opened past its Project's Opening cap: recorded, but not dispatched. Once the Project is back under its cap, each Destination concerned receives a single summary of the Held Incidents; a Member may Redispatch any of them that is still Open.
 _Avoid_: Dropped, throttled, queued
 
+**Storm**:
+The time a Project spends past its Opening cap: it starts with its first Held Incident, warns the Members once through the Alert destination, and ends once a whole minute goes by without a Held Incident. Its end sends each Destination concerned the summary of its Held Incidents.
+_Avoid_: Burst, flood, spike
+
 ### Instance
 
 **Instance**:
@@ -175,5 +179,5 @@ The permanent removal of a Feedback and its Capture, or of an Incident, by a Mem
 _Avoid_: Archiving, rejection
 
 **Retention**:
-The optional duration, at the Instance level, after which Feedback, its Captures and Incidents are purged automatically. Unlimited by default.
+The optional duration, at the Instance level, after which Feedback, its Captures and Incidents are purged automatically. An Incident's age counts from its last Occurrence, so one still reporting is kept. Unlimited by default.
 _Avoid_: Expiration, TTL, archiving

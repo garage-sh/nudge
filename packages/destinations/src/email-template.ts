@@ -1,7 +1,23 @@
-import { presentAlert, type Alert, type MailMessage, type OutgoingDelivery } from '@nudge/core';
-import { FEEDBACK_TYPE_LABELS, SEVERITY_LABELS, type Severity, type Source } from '@nudge/shared';
+import {
+  presentAlert,
+  presentHeldSummary,
+  presentIncident,
+  type Alert,
+  type MailMessage,
+  type OutgoingHeldSummary,
+  type OutgoingDelivery,
+  type OutgoingIncident,
+} from '@nudge/core';
+import {
+  FEEDBACK_TYPE_LABELS,
+  LEVEL_LABELS,
+  SEVERITY_LABELS,
+  type Level,
+  type Severity,
+  type Source,
+} from '@nudge/shared';
 import { isSafeLink } from './markdown.js';
-import { firstLine, truncate } from './text.js';
+import { authorIdentity, escapeHtml, firstLine, truncate } from './text.js';
 
 /*
  * The emails nudge sends, in its own colors: the dashboard's tokens
@@ -46,16 +62,6 @@ const SOURCE_LABELS: Readonly<Record<Source, string>> = {
 /** Longest subject line: clients cut it well before, the rest is noise. */
 const SUBJECT_MAX = 150;
 
-/** Text from outside (the Author, a Member, a target) made inert in HTML. */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 /** A header carries one line: line breaks and runs of spaces collapse. */
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
 
@@ -99,11 +105,7 @@ export function feedbackEmail(delivery: OutgoingDelivery, to: readonly string[])
   const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
   const severity = feedback.severity;
   const author = feedback.author;
-  const authorText = author
-    ? [author.name, author.email ? `<${author.email}>` : null, author.id ? `(${author.id})` : null]
-        .filter(Boolean)
-        .join(' ') || 'Anonymous'
-    : 'Anonymous';
+  const authorText = authorIdentity(author) ?? 'Anonymous';
   const viewport = feedback.context.viewport;
   const details: Detail[] = [
     { label: 'Project', value: project.name },
@@ -165,7 +167,7 @@ export function feedbackEmail(delivery: OutgoingDelivery, to: readonly string[])
 export function alertEmail(alert: Alert, to: readonly string[]): MailMessage {
   const { title, summary, details } = presentAlert(alert);
   const content: EmailContent = {
-    eyebrow: alert.event === 'feedback_in_review' ? 'Review needed' : 'Destination suspended',
+    eyebrow: ALERT_EYEBROWS[alert.event],
     title,
     pills: [],
     notice: alert.isTest ? 'Test · a sample alert, sent to check the Alert destination.' : null,
@@ -183,6 +185,99 @@ export function alertEmail(alert: Alert, to: readonly string[]): MailMessage {
     stripe: alert.event === 'feedback_in_review' ? COLORS.review : COLORS.held,
   };
   return { to, subject: subject(title), html: render(content), text: plainText(content) };
+}
+
+const ALERT_EYEBROWS: Readonly<Record<Alert['event'], string>> = {
+  feedback_in_review: 'Review needed',
+  destination_suspended: 'Destination suspended',
+  incident_storm: 'Incident storm',
+};
+
+/** The summary of the Incidents a storm held, to an email Destination's recipients. */
+export function heldSummaryEmail(summary: OutgoingHeldSummary, to: readonly string[]): MailMessage {
+  const { title, summary: intro, details } = presentHeldSummary(summary);
+  const content: EmailContent = {
+    eyebrow: 'Incidents held',
+    title,
+    pills: [],
+    notice: null,
+    intro,
+    quote: null,
+    details: details.map(({ label, value, long }) => ({ label, value, code: long ?? false })),
+    action: isSafeLink(summary.dashboardUrl)
+      ? { label: 'View the Held Incidents', url: summary.dashboardUrl }
+      : null,
+    footer: `You receive this email because this address is a recipient of an email Destination of the ${summary.project.name} project in nudge.`,
+    stripe: COLORS.held,
+  };
+  return { to, subject: subject(title), html: render(content), text: plainText(content) };
+}
+
+/** The Level ramp, from info to critical, on the Severity one. */
+const LEVEL_COLORS: Readonly<Record<Level, string>> = {
+  info: '#87938e',
+  warning: '#b7791f',
+  error: '#d0531d',
+  critical: '#b4161b',
+};
+
+/**
+ * An Incident Delivery to an email Destination: its opening (or a Level rise that reached
+ * the Destination), then its closing as a reply to that mail. Both carry the subject of
+ * the opening, which names no Level (it may rise in between), and the closing names the
+ * opening's Message-ID: mail clients thread them. An Incident that closed before its
+ * opening went out is a single mail, in its final state.
+ */
+export function incidentEmail(delivery: OutgoingIncident, to: readonly string[]): MailMessage {
+  const { deliveryId, project, incident } = delivery;
+  const { title, summary, details } = presentIncident(delivery);
+  const closing = delivery.moment === 'closed';
+  const level = LEVEL_LABELS[incident.level];
+  const content: EmailContent = {
+    eyebrow: incident.closure
+      ? 'Incident closed'
+      : delivery.moment === 'raised'
+        ? 'Incident Level raised'
+        : 'Incident opened',
+    title,
+    pills: [
+      {
+        label: level,
+        color: COLORS.text,
+        background: COLORS.canvas,
+        dot: LEVEL_COLORS[incident.level],
+      },
+      ...(incident.environment
+        ? [{ label: incident.environment, color: COLORS.muted, background: COLORS.canvas }]
+        : []),
+      ...(incident.closure
+        ? [{ label: 'Closed', color: COLORS.accent, background: COLORS.accentSoft }]
+        : []),
+    ],
+    notice: null,
+    intro: summary,
+    quote: null,
+    details: [
+      ...details.map(({ label, value, long }) => ({ label, value, code: long ?? false })),
+      { label: 'Incident', value: incident.id, code: true },
+    ],
+    action: isSafeLink(incident.dashboardUrl)
+      ? { label: 'Open in nudge', url: incident.dashboardUrl }
+      : null,
+    footer: `You receive this email because this address is a recipient of an email Destination of the ${project.name} project in nudge.`,
+    stripe: incident.closure ? COLORS.accent : LEVEL_COLORS[incident.level],
+  };
+  const openingId = `incident.${deliveryId}`;
+  const openingSubject = subject(`Incident · ${project.name} · ${incident.title}`);
+  return {
+    to,
+    subject: closing ? `Re: ${openingSubject}` : openingSubject,
+    html: render(content),
+    text: plainText(content),
+    ...(closing
+      ? { messageId: `${openingId}.closed`, inReplyTo: openingId }
+      : { messageId: openingId }),
+  };
 }
 
 /** The message sent by the "send a test email" button of the SMTP settings. */

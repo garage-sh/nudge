@@ -9,6 +9,8 @@ nudge collects Feedback from an application, triages it and dispatches it. Each 
 
 The contract of that endpoint is the OpenAPI document, the single source of truth for fields, bounds and error codes: <https://github.com/garage-sh/nudge/releases/latest/download/openapi.json>. Fetch it before writing a payload by hand.
 
+What the application reports going wrong on its side (errors, failed jobs, failed healthchecks) is an Incident, the job of the sibling skill `integrate-nudge-incidents` (`npx skills add garage-sh/nudge --skill integrate-nudge-incidents`).
+
 ## 1. Collect the Instance values
 
 Every value below comes from the human, who reads it in the Instance's dashboard. Ask for the ones you are missing, and stop until you have them: an invented key or URL fails at runtime.
@@ -64,7 +66,7 @@ In a single-page app, mount once at startup and assign `widget.author` and `widg
 
 ### C. Server
 
-If the project depends on `@nudge/sdk`, use its `createClient({ url, secretKey }).sendFeedback(input)`. Otherwise post the JSON yourself:
+If the project depends on `@nudge/sdk`, use its `createClient({ url, secretKey }).sendFeedback(input)` (its `sendIncident` belongs to `integrate-nudge-incidents`). Otherwise post the JSON yourself:
 
 ```ts
 const response = await fetch(`${process.env.NUDGE_URL}/v1/feedbacks`, {

@@ -5,6 +5,7 @@ import type {
   RetryPolicy,
   TriageThresholds,
 } from '@nudge/core';
+import { DEFAULT_QUIET_PERIOD_MS, OPENING_CAP_WINDOW_MS } from '@nudge/shared';
 import type { JudgeConfig, Judge } from '@nudge/judge';
 import type { CaptureStorage } from '@nudge/storage';
 
@@ -48,6 +49,11 @@ export interface WorkerOptions {
   readonly purge?: PurgeOptions;
   /** Sweep of the orphaned Captures; `DEFAULT_CAPTURE_SWEEP` by default. */
   readonly captureSweep?: CaptureSweepOptions;
+  /**
+   * Instance default Quiet period and its sweep, and how long an Incident's Dispatch
+   * waits for the Judge; `DEFAULT_INCIDENTS` by default.
+   */
+  readonly incidents?: IncidentOptions;
   /** Jobs each worker runs at the same time, per queue; `DEFAULT_CONCURRENCY` by default. */
   readonly concurrency?: ConcurrencyOptions;
   /** Suspension threshold, cooldown and probe period; `DEFAULT_SUSPENSION` by default. */
@@ -97,14 +103,71 @@ export const DEFAULT_CAPTURE_SWEEP: CaptureSweepOptions = {
   intervalMs: 60 * 60_000,
 };
 
+/**
+ * How Open Incidents close on their own (the Instance default Quiet period and its
+ * sweep), and how long the Dispatch of an Incident without a declared Level waits for the
+ * Judge.
+ */
+export interface IncidentOptions {
+  /**
+   * The Instance default Quiet period: how long an Incident stays Open without a new
+   * Occurrence when neither its last Occurrence nor its Project sets one.
+   */
+  readonly quietPeriodMs: number;
+  /**
+   * Period of the sweep that closes the Open Incidents silent past their Quiet period,
+   * and queues again the Level assessments that were lost.
+   */
+  readonly sweepIntervalMs: number;
+  /**
+   * How long after an Incident opened without a declared Level its Dispatch waits for
+   * the Judge's Level; past it, the Project's default Level applies.
+   */
+  readonly judgeWaitMs: number;
+  /**
+   * The window the Opening cap counts a Project's openings in (one minute; tests shorten
+   * it, like the api's): a storm ends once a whole window goes by without a Held Incident.
+   */
+  readonly openingWindowMs?: number;
+}
+
+/**
+ * One hour of silence closes an Incident; the sweep runs every minute; the Judge gets
+ * ten seconds to assess a Level; the Opening cap counts the openings of the last minute.
+ */
+export const DEFAULT_INCIDENTS: Required<IncidentOptions> = {
+  quietPeriodMs: DEFAULT_QUIET_PERIOD_MS,
+  sweepIntervalMs: 60_000,
+  judgeWaitMs: 10_000,
+  openingWindowMs: OPENING_CAP_WINDOW_MS,
+};
+
+/** The Incident options in effect: `WorkerOptions.incidents`, else `DEFAULT_INCIDENTS`. */
+export function incidentOptionsOf(options: WorkerOptions): Required<IncidentOptions> {
+  const incidents = options.incidents ?? DEFAULT_INCIDENTS;
+  return {
+    ...incidents,
+    openingWindowMs: incidents.openingWindowMs ?? DEFAULT_INCIDENTS.openingWindowMs,
+  };
+}
+
 export interface ConcurrencyOptions {
   /** Triage jobs at the same time: as many Judge requests in flight. */
   readonly triage: number;
   /** Dispatch jobs at the same time: a slow Destination only holds one of them. */
   readonly dispatch: number;
+  /**
+   * Level assessments of Incidents at the same time: as many Judge requests in flight,
+   * each one waiting at most `IncidentOptions.judgeWaitMs`.
+   */
+  readonly incidentLevel: number;
 }
 
-export const DEFAULT_CONCURRENCY: ConcurrencyOptions = { triage: 2, dispatch: 10 };
+export const DEFAULT_CONCURRENCY: ConcurrencyOptions = {
+  triage: 2,
+  dispatch: 10,
+  incidentLevel: 10,
+};
 
 export interface PurgeOptions {
   /**

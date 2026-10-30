@@ -1,5 +1,7 @@
 import {
   presentAlert,
+  presentHeldSummary,
+  presentIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -22,7 +24,13 @@ import {
   errorMessage,
   externalLink,
 } from './http.js';
-import { alertToMarkdown, escapePunctuation, isSafeLink } from './markdown.js';
+import {
+  alertToMarkdown,
+  escapePunctuation,
+  heldSummaryToMarkdown,
+  incidentToMarkdown,
+  isSafeLink,
+} from './markdown.js';
 import { titleWithType, truncate } from './text.js';
 
 export interface LinearOptions {
@@ -33,9 +41,11 @@ export interface LinearOptions {
   readonly teams?: Map<string, LoadedTeam>;
 }
 
-/** A Destination's team, as read from Linear: its id and its labels by name. */
+/** A Destination's team, as read from Linear: its id, its labels by name, its completed state. */
 export interface LoadedTeam {
   readonly id: string;
+  /** The first workflow state of type `completed` by position, where a closed issue goes. */
+  readonly completedStateId: string | null;
   /** Id of each applicable label, by lowercase name. */
   readonly labels: ReadonlyMap<string, string>;
 }
@@ -46,11 +56,13 @@ const TEAMS_BY_DESTINATION = new Map<string, LoadedTeam>();
 const ENDPOINT = 'https://api.linear.app/graphql';
 
 /**
- * The team by its key, and the labels an issue of this team can carry: its own and
- * the workspace's (`team` null).
+ * The team by its key with its workflow states, and the labels an issue of this team
+ * can carry: its own and the workspace's (`team` null).
  */
 const TEAM_QUERY = `query NudgeTeam($team: String!) {
-  teams(filter: { key: { eqIgnoreCase: $team } }) { nodes { id key } }
+  teams(filter: { key: { eqIgnoreCase: $team } }) {
+    nodes { id key states { nodes { id type position } } }
+  }
   issueLabels(
     first: 250
     filter: { or: [{ team: { key: { eqIgnoreCase: $team } } }, { team: { null: true } }] }
@@ -67,6 +79,15 @@ const FILE_MUTATION = `mutation NudgeFile($contentType: String!, $filename: Stri
 
 const ISSUE_MUTATION = `mutation NudgeIssue($input: IssueCreateInput!) {
   issueCreate(input: $input) { success issue { id identifier url } }
+}`;
+
+/** `id`: the issue's identifier (ENG-123), which Linear accepts in place of its UUID. */
+const ISSUE_UPDATE_MUTATION = `mutation NudgeIssueUpdate($id: String!, $input: IssueUpdateInput!) {
+  issueUpdate(id: $id, input: $input) { success issue { id } }
+}`;
+
+const COMMENT_MUTATION = `mutation NudgeComment($input: CommentCreateInput!) {
+  commentCreate(input: $input) { success }
 }`;
 
 /**
@@ -130,7 +151,10 @@ export function linearAdapter(
     for (const label of call.data.issueLabels.nodes) {
       if (!label.isGroup) labels.set(labelKey(label.name), label.id);
     }
-    const loaded = { id: found.id, labels };
+    const completed = (found.states?.nodes ?? [])
+      .filter((state) => state.type === 'completed')
+      .sort((a, b) => a.position - b.position);
+    const loaded = { id: found.id, completedStateId: completed[0]?.id ?? null, labels };
     teams.set(cacheKey, loaded);
     return { ok: true, data: loaded };
   }
@@ -216,11 +240,33 @@ export function linearAdapter(
     return { ok: true, data: file.assetUrl };
   }
 
+  /**
+   * The team's completed state, where a closed issue goes: read again if the kept team
+   * has none (state created since). A team without one rejects the Destination: no
+   * Incident could ever be closed there.
+   */
+  async function completedState(): Promise<Call<{ teamId: string; stateId: string }>> {
+    const kept = teams.get(cacheKey);
+    let team: LoadedTeam;
+    if (kept?.completedStateId) {
+      team = kept;
+    } else {
+      const loaded = await readTeam();
+      if (!loaded.ok) return loaded;
+      team = loaded.data;
+    }
+    if (!team.completedStateId) {
+      return refusal(`Linear team ${config.team} has no completed workflow state to close issues`);
+    }
+    return { ok: true, data: { teamId: team.id, stateId: team.completedStateId } };
+  }
+
   async function createIssue(input: {
     teamId: string;
     title: string;
     description: string;
     labelIds: readonly string[];
+    stateId?: string;
   }): Promise<DeliveryResult> {
     const creation = await graphql<CreationData>(ISSUE_MUTATION, { input });
     const issue = creation.ok ? creation.data.issueCreate.issue : null;
@@ -228,11 +274,7 @@ export function linearAdapter(
       // A label or the team may have changed in Linear: the next Delivery reads them again.
       teams.delete(cacheKey);
       return creation.ok
-        ? {
-            status: 'failed',
-            failureClass: 'permanent',
-            message: 'Linear did not create the issue (success: false)',
-          }
+        ? permanentFailure('Linear did not create the issue (success: false)')
         : failed(creation);
     }
     return { status: 'delivered', externalUrl: externalLink(issue.url) };
@@ -261,6 +303,70 @@ export function linearAdapter(
         title: titleWithType(delivery, TITLE_MAX),
         description: description(delivery, assetUrl),
         labelIds: target.data.labelIds,
+      });
+    },
+    /**
+     * An issue in the configured team, without labels (they are the Feedback's): its
+     * link is what finds it again to close it. "Opened then closed" creates it directly
+     * in the team's completed state.
+     */
+    async deliverIncident(delivery) {
+      const issue = {
+        title: truncate(presentIncident(delivery).title, TITLE_MAX),
+        description: incidentToMarkdown(delivery, escapedText),
+        labelIds: [],
+      };
+      if (delivery.incident.closure) {
+        const done = await completedState();
+        if (!done.ok) return failed(done);
+        return createIssue({ ...issue, teamId: done.data.teamId, stateId: done.data.stateId });
+      }
+      const target = await resolve([]);
+      if (!target.ok) return failed(target);
+      return createIssue({ ...issue, teamId: target.data.teamId });
+    },
+    /**
+     * Moves the issue the opening created to the completed state, then comments the
+     * closing on it: a retry after a failed comment moves it again harmlessly. Never
+     * creates a second issue.
+     */
+    async closeIncident(closing) {
+      const identifier = issueIdentifierOf(closing.opening.externalUrl);
+      if (!identifier) {
+        return permanentFailure('The opening kept no link to a Linear issue: nothing to close');
+      }
+      const target = await completedState();
+      if (!target.ok) return failed(target);
+      const update = await graphql<UpdateData>(ISSUE_UPDATE_MUTATION, {
+        id: identifier,
+        input: { stateId: target.data.stateId },
+      });
+      const issue = update.ok ? update.data.issueUpdate.issue : null;
+      if (!update.ok || !update.data.issueUpdate.success || !issue) {
+        // The completed state may have been deleted in Linear: the next closing reads it again.
+        teams.delete(cacheKey);
+        if (!update.ok) return failed(update);
+        return permanentFailure('Linear did not close the issue (success: false)');
+      }
+      const comment = await graphql<CommentData>(COMMENT_MUTATION, {
+        input: { issueId: issue.id, body: incidentToMarkdown(closing, escapedText) },
+      });
+      if (!comment.ok) return failed(comment);
+      if (!comment.data.commentCreate.success) {
+        return permanentFailure('Linear did not comment the closing (success: false)');
+      }
+      return { status: 'delivered', externalUrl: closing.opening.externalUrl };
+    },
+    /** An issue in the configured team, without labels, like an Incident's. */
+    async summarizeHeld(summary) {
+      const target = await resolve([]);
+      if (!target.ok) return failed(target);
+      const { title } = presentHeldSummary(summary);
+      return createIssue({
+        teamId: target.data.teamId,
+        title: truncate(title, TITLE_MAX),
+        description: heldSummaryToMarkdown(summary, escapedText),
+        labelIds: [],
       });
     },
     /** An issue in the configured team, without labels: the labels are the Feedback's. */
@@ -293,7 +399,18 @@ export function linearAdapter(
 }
 
 interface TeamData {
-  readonly teams: { readonly nodes: readonly { readonly id: string }[] };
+  readonly teams: {
+    readonly nodes: readonly {
+      readonly id: string;
+      readonly states?: {
+        readonly nodes: readonly {
+          readonly id: string;
+          readonly type: string;
+          readonly position: number;
+        }[];
+      };
+    }[];
+  };
   readonly issueLabels: {
     readonly nodes: readonly {
       readonly id: string;
@@ -319,6 +436,28 @@ interface CreationData {
     readonly success: boolean;
     readonly issue: { readonly url: unknown } | null;
   };
+}
+
+interface UpdateData {
+  readonly issueUpdate: {
+    readonly success: boolean;
+    readonly issue: { readonly id: string } | null;
+  };
+}
+
+interface CommentData {
+  readonly commentCreate: { readonly success: boolean };
+}
+
+/**
+ * The identifier (ENG-123) of the issue a Linear link points at
+ * (`https://linear.app/<workspace>/issue/<identifier>/<slug>`), or `null`.
+ */
+function issueIdentifierOf(link: string | null): string | null {
+  const match = link
+    ? /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Za-z0-9]+-\d+)(?:\/[^/]*)?$/.exec(link)
+    : null;
+  return match?.[1] ?? null;
 }
 
 /** Maximum length of an issue title (plain text on Linear), in UTF-16 units. */
@@ -386,6 +525,13 @@ interface TeamAndLabels {
  * rejected key, rather than each Delivery failing.
  */
 const refusal = (message: string): Failure => ({ ok: false, failureClass: 'auth', message });
+
+/** A refusal that targets this Delivery only: a retry would get the same answer. */
+const permanentFailure = (message: string): DeliveryResult => ({
+  status: 'failed',
+  failureClass: 'permanent',
+  message,
+});
 
 const failed = ({ failureClass, message }: Failure): DeliveryResult => ({
   status: 'failed',

@@ -4,6 +4,7 @@ import {
   DESTINATION_TYPES,
   type DestinationView,
   type FilterView,
+  type IncidentFilterView,
   type DestinationTestResult,
 } from '@nudge/shared';
 import { useEffect, useRef, useState } from 'react';
@@ -145,21 +146,54 @@ export function GeneratedSecrets({ type, name, secrets }: ShownSecrets) {
   );
 }
 
-/** The Filter, readable: the accepted types, and the Severity threshold as a gauge. */
-function FilterSummary({ filter: { types, minimumSeverity } }: { filter: FilterView }) {
+/**
+ * The Filters, readable: the accepted types and the Severity threshold as a gauge, then
+ * the Incident Filter's Level, Environments and number of conditions.
+ */
+function FilterSummary({
+  filter,
+  incidentFilter,
+}: {
+  filter: FilterView | null;
+  incidentFilter: IncidentFilterView | null;
+}) {
   const t = useT();
+  const d = t.destinations;
   return (
-    <p className="destination-filter">
-      <span>{types.map((type) => t.labels.feedbackType[type]).join(', ')}</span>
-      {minimumSeverity ? (
-        <SeverityGauge
-          severity={minimumSeverity}
-          label={t.destinations.severityOrMore(t.labels.severity[minimumSeverity])}
-        />
-      ) : (
-        <span>{t.destinations.anySeverity}</span>
-      )}
-    </p>
+    <div className="destination-filters">
+      <p className="destination-filter">
+        {filter ? (
+          <>
+            <span>{filter.types.map((type) => t.labels.feedbackType[type]).join(', ')}</span>
+            {filter.minimumSeverity ? (
+              <SeverityGauge
+                severity={filter.minimumSeverity}
+                label={d.severityOrMore(t.labels.severity[filter.minimumSeverity])}
+              />
+            ) : (
+              <span>{d.anySeverity}</span>
+            )}
+          </>
+        ) : (
+          <span className="muted">{d.noFeedback}</span>
+        )}
+      </p>
+      <p className="destination-filter">
+        {incidentFilter ? (
+          <>
+            <span>{d.incidentLevelOrMore(t.labels.level[incidentFilter.minimumLevel])}</span>
+            {incidentFilter.environments.length > 0 ? (
+              <span>{d.incidentEnvironments(incidentFilter.environments.join(', '))}</span>
+            ) : null}
+            {incidentFilter.conditions.length > 0 ? (
+              <span>{d.incidentConditions(incidentFilter.conditions.length)}</span>
+            ) : null}
+          </>
+        ) : (
+          <span className="muted">{d.noIncident}</span>
+        )}
+      </p>
+    </div>
   );
 }
 
@@ -197,9 +231,9 @@ function DestinationRow({
         pending={update.isPending}
         error={update.error}
         onCancel={() => setEditing(false)}
-        onSubmit={({ name, config, filter, secrets }) =>
+        onSubmit={({ name, config, filter, incidentFilter, secrets }) =>
           update.mutate(
-            { name, config, filter, ...(secrets ? { secrets } : {}) },
+            { name, config, filter, incidentFilter, ...(secrets ? { secrets } : {}) },
             { onSuccess: () => setEditing(false) },
           )
         }
@@ -225,7 +259,7 @@ function DestinationRow({
             ) : null}
           </p>
         </div>
-        <FilterSummary filter={destination.filter} />
+        <FilterSummary filter={destination.filter} incidentFilter={destination.incidentFilter} />
         <DestinationStatePill state={destination.state} />
       </div>
       {destination.state === 'suspended' ? (
@@ -323,6 +357,7 @@ function AddDestination({
         name: '',
         config: { ...DESTINATION_FORMS[type].initialConfig },
         filter: FILTER_ALL,
+        incidentFilter: null,
       }}
       typeEditable
       submitLabel={t.destinations.add}

@@ -17,8 +17,7 @@ import {
   type RetentionView,
   type SmtpSecurity,
 } from '@nudge/shared';
-import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router';
+import { useState, type FormEvent } from 'react';
 import {
   useAlertDestination,
   useChangeRetention,
@@ -45,6 +44,7 @@ import {
   PanelHeader,
   Pill,
   SaveStatus,
+  useScrollToHash,
 } from '../layout/ui.js';
 import { GeneratedSecrets, TestResult, type ShownSecrets } from './destinations/Destinations.js';
 import { DestinationForm } from './destinations/DestinationForm.js';
@@ -101,20 +101,8 @@ export function Settings() {
 }
 
 /**
- * A link to `/settings#settings-smtp` (from an email Destination's form) lands on its
- * panel once the panels are drawn: the router does not scroll to a hash by itself.
- */
-function useScrollToHash(ready: boolean) {
-  const { hash } = useLocation();
-  useEffect(() => {
-    if (!ready || !hash) return;
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
-  }, [ready, hash]);
-}
-
-/**
- * Feedback retention period: a scheduled task erases older Feedback, with its
- * Captures. Empty field: unlimited retention.
+ * Retention period: a scheduled task erases older Feedback, with its Captures, and the
+ * Incidents last seen before it. Empty field: unlimited retention.
  */
 function Retention({ retention }: { retention: RetentionView }) {
   const t = useT();

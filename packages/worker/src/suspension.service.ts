@@ -19,6 +19,7 @@ import {
   type OnSuspension,
   type WorkerOptions,
 } from './options.js';
+import type { DeliveredAs } from './subject-dispatcher.js';
 import { withTimeout } from './timeout.js';
 import {
   DB,
@@ -110,14 +111,19 @@ export class SuspensionService {
       .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'held')));
   }
 
-  /** The Delivery is delivered; its Destination's consecutive failure streak starts over. */
+  /**
+   * The Delivery is delivered; its Destination's consecutive failure streak starts over.
+   * `deliveredAs`: what its subject records with it, in the same update.
+   */
   async afterDelivery(
     delivery: { readonly id: string; readonly destinationId: string },
     externalUrl: string | null,
+    deliveredAs: DeliveredAs = {},
   ): Promise<void> {
     await this.db
       .update(deliveries)
       .set({
+        ...deliveredAs,
         status: 'delivered',
         externalUrl,
         attempts: sql`${deliveries.attempts} + 1`,

@@ -1,4 +1,10 @@
-import type { ProjectView } from '@nudge/shared';
+import {
+  LEVELS,
+  OPENING_CAP_BOUNDS,
+  QUIET_PERIOD_BOUNDS,
+  type Level,
+  type ProjectView,
+} from '@nudge/shared';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router';
 import {
@@ -16,6 +22,7 @@ import {
   Loading,
   PageHeader,
   SaveStatus,
+  useScrollToHash,
 } from '../layout/ui.js';
 
 /** Navigation state: the secret key of a Project just created. */
@@ -43,6 +50,7 @@ function useReceivedSecretKey(): [string | null, (key: string) => void] {
 export function Project() {
   const id = useParams().id ?? '';
   const project = useProject(id);
+  useScrollToHash(project.isSuccess);
   if (project.isPending) return <Loading />;
   if (project.isError) {
     return <ProjectNotFound error={project.error} onRetry={() => void project.refetch()} />;
@@ -54,6 +62,7 @@ export function Project() {
         <Keys project={project.data} />
         <Details project={project.data} />
         <AllowedOrigins project={project.data} />
+        <IncidentSettings project={project.data} />
       </div>
     </section>
   );
@@ -75,7 +84,8 @@ export function ProjectNotFound({ error, onRetry }: { error: unknown; onRetry: (
 
 /**
  * The header shared by a Project's pages: its name, its description and the tabs
- * Destinations (where its Feedback goes) and Settings (keys, details, origins).
+ * Destinations (where its Feedback goes), Incidents (what its applications report) and
+ * Settings (keys, details, origins, Incidents).
  */
 export function ProjectHeader({ project, actions }: { project: ProjectView; actions?: ReactNode }) {
   const t = useT();
@@ -92,6 +102,7 @@ export function ProjectHeader({ project, actions }: { project: ProjectView; acti
         <NavLink to={`${base}/destinations`} end>
           {t.project.destinationsTab}
         </NavLink>
+        <NavLink to={`${base}/incidents`}>{t.project.incidentsTab}</NavLink>
         <NavLink to={base} end>
           {t.project.settingsTab}
         </NavLink>
@@ -217,6 +228,114 @@ function AllowedOrigins({ project }: { project: ProjectView }) {
         </button>
       </div>
       <SaveStatus saved={update.isSuccess} />
+    </form>
+  );
+}
+
+/** Where the Project's settings explain how to report an Incident: `/projects/:id#…`. */
+export const INCIDENT_SETTINGS_ANCHOR = 'project-incidents';
+
+/** The request a server sends to report an Incident, with the secret key from its environment. */
+const incidentExample = (origin: string) =>
+  [
+    `curl -X POST ${origin}/v1/incidents \\`,
+    '  -H "Authorization: Bearer $NUDGE_SECRET_KEY" \\',
+    '  -H "Content-Type: application/json" \\',
+    `  -d '{"title": "Payment provider timed out", "level": "error", "environment": "production"}'`,
+  ].join('\n');
+
+/** Seconds as the minutes the field shows; `null` (the Instance default) as an empty field. */
+const toMinutes = (seconds: number | null) =>
+  seconds === null ? '' : String(Math.max(1, Math.round(seconds / 60)));
+
+/**
+ * How the Project's Incidents are reported, closed and held: the default Level, the Quiet
+ * period, the Opening cap, and an example request.
+ */
+function IncidentSettings({ project }: { project: ProjectView }) {
+  const t = useT();
+  const i = t.project.incidents;
+  const [defaultLevel, setDefaultLevel] = useState<Level>(project.defaultLevel);
+  const [quietMinutes, setQuietMinutes] = useState(toMinutes(project.quietPeriod));
+  const [openingCap, setOpeningCap] = useState(
+    project.openingCap === null ? '' : String(project.openingCap),
+  );
+  const update = useUpdateProject(project.id);
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const minutes = quietMinutes.trim();
+    const cap = openingCap.trim();
+    update.mutate({
+      defaultLevel,
+      // Untouched, a period that is no whole number of minutes (set through the api) is
+      // kept as is rather than rounded to what the field shows.
+      quietPeriod:
+        minutes === toMinutes(project.quietPeriod)
+          ? project.quietPeriod
+          : minutes === ''
+            ? null
+            : Number(minutes) * 60,
+      openingCap: cap === '' ? null : Number(cap),
+    });
+  };
+  return (
+    <form
+      id={INCIDENT_SETTINGS_ANCHOR}
+      onSubmit={submit}
+      onChange={() => update.reset()}
+      className="form panel"
+    >
+      <h2>{i.title}</h2>
+      <p className="help">{i.help}</p>
+      <div className="field">
+        <label htmlFor="project-default-level">{i.defaultLevel}</label>
+        <select
+          id="project-default-level"
+          value={defaultLevel}
+          onChange={(e) => setDefaultLevel(e.target.value as Level)}
+        >
+          {LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {t.labels.level[level]}
+            </option>
+          ))}
+        </select>
+        <p className="help">{i.defaultLevelHelp}</p>
+      </div>
+      <Field
+        id="project-quiet-period"
+        label={i.quietPeriod}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={QUIET_PERIOD_BOUNDS.max / 60}
+        step={1}
+        value={quietMinutes}
+        help={i.quietPeriodHelp}
+        onChange={(e) => setQuietMinutes(e.target.value)}
+      />
+      <Field
+        id="project-opening-cap"
+        label={i.openingCap}
+        type="number"
+        inputMode="numeric"
+        min={OPENING_CAP_BOUNDS.min}
+        max={OPENING_CAP_BOUNDS.max}
+        step={1}
+        value={openingCap}
+        help={i.openingCapHelp}
+        onChange={(e) => setOpeningCap(e.target.value)}
+      />
+      <ErrorMessage error={update.error} />
+      <div className="actions">
+        <button type="submit" disabled={update.isPending}>
+          {i.save}
+        </button>
+      </div>
+      <SaveStatus saved={update.isSuccess} />
+      <h3>{i.example}</h3>
+      <p className="help">{i.exampleHelp}</p>
+      <CopyableValue label={i.example} value={incidentExample(window.location.origin)} multiline />
     </form>
   );
 }

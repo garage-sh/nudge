@@ -22,6 +22,60 @@ export const SEVERITY_LABELS: Readonly<Record<Severity, string>> = {
   blocking: 'Blocking',
 };
 
+/**
+ * How serious an Incident is, ordered from least to most serious. A scale of its own,
+ * never mixed with Severity, which belongs to Feedback.
+ */
+export const LEVELS = ['info', 'warning', 'error', 'critical'] as const;
+export type Level = (typeof LEVELS)[number];
+
+export const LEVEL_LABELS: Readonly<Record<Level, string>> = {
+  info: 'Info',
+  warning: 'Warning',
+  error: 'Error',
+  critical: 'Critical',
+};
+
+/** Where an Incident's Level came from: its sender, the Judge, or the Project's default Level. */
+export const LEVEL_ORIGINS = ['declared', 'judge', 'default'] as const;
+export type LevelOrigin = (typeof LEVEL_ORIGINS)[number];
+
+/** The Level an undeclared Incident gets when its Project sets none. */
+export const DEFAULT_LEVEL: Level = 'error';
+
+/** An Open Incident absorbs Occurrences; a Closed one never reopens. */
+export const INCIDENT_STATES = ['open', 'closed'] as const;
+export type IncidentState = (typeof INCIDENT_STATES)[number];
+
+/**
+ * Why an Incident closed: its sender reported it `resolved`, a `member` closed it, or its
+ * `quiet_period` went by without a new Occurrence.
+ */
+export const INCIDENT_CLOSE_CAUSES = ['resolved', 'member', 'quiet_period'] as const;
+export type IncidentCloseCause = (typeof INCIDENT_CLOSE_CAUSES)[number];
+
+/**
+ * The Quiet period of an Incident, in seconds: how long it stays Open without a new
+ * Occurrence. Set per Project (`null`: the Instance default) and per Occurrence.
+ */
+export const QUIET_PERIOD_BOUNDS = { min: 1, max: 30 * 24 * 60 * 60 } as const;
+
+/** The Instance default Quiet period, unless the Self-hoster sets another one. */
+export const DEFAULT_QUIET_PERIOD_MS = 60 * 60_000;
+
+/**
+ * The Opening cap of a Project: how many Incidents it may open per minute and still have
+ * them dispatched. Set per Project (`null`: the Instance default); past it, the Incidents
+ * opened are Held.
+ */
+export const OPENING_CAP_BOUNDS = { min: 1, max: 10_000 } as const;
+
+/** The Instance default Opening cap, unless the Self-hoster sets another one. */
+export const DEFAULT_OPENING_CAP = 20;
+
+/** The window the Opening cap counts a Project's openings in: one minute. */
+export const OPENING_CAP_WINDOW_MS = 60_000;
+
 /** `extension` is reserved for the future QA module. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];
@@ -53,17 +107,39 @@ export const DELIVERY_STATUSES = ['pending', 'delivered', 'failed', 'held'] as c
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
- * Statuses from which a Member can replay a Delivery: finished, delivered or failed. A
- * pending Delivery already has a job running; a held Delivery waits for its Destination
- * to be active again, and the probe releases it.
+ * What a Delivery delivers: its subject, a Feedback or an Incident. Each new subject is
+ * one more case here, in the database's subject columns and in the worker's subject
+ * dispatchers.
  */
-export const REPLAYABLE_DELIVERY_STATUSES = [
-  'delivered',
-  'failed',
-] as const satisfies readonly DeliveryStatus[];
+export const DELIVERY_SUBJECTS = ['feedback', 'incident'] as const;
+export type DeliverySubjectKind = (typeof DELIVERY_SUBJECTS)[number];
 
-export const isDeliveryReplayable = (status: DeliveryStatus): boolean =>
-  (REPLAYABLE_DELIVERY_STATUSES as readonly DeliveryStatus[]).includes(status);
+/**
+ * The Dispatch moment an Incident's Delivery carries: `opened` when the Incident opened
+ * (or a Member redispatched it), `raised` when its Level rose and the Destination newly
+ * accepted it, `closed` once the Incident closed after that Delivery went out — the same
+ * Delivery then carries the closing of what it created. An Incident has at most one
+ * Delivery per Destination.
+ */
+export const INCIDENT_DISPATCH_MOMENTS = ['opened', 'raised', 'closed'] as const;
+export type IncidentDispatchMoment = (typeof INCIDENT_DISPATCH_MOMENTS)[number];
+
+/**
+ * Statuses from which a Member can replay a Delivery, per subject. A pending Delivery
+ * already has a job running; a held Delivery waits for its Destination to be active
+ * again, and the probe releases it. A delivered Feedback Delivery replays to pass on a
+ * Verdict correction; a delivered Incident Delivery never does: replaying it would create
+ * its issue or message a second time, or send its closing twice.
+ */
+export const REPLAYABLE_DELIVERY_STATUSES = {
+  feedback: ['delivered', 'failed'],
+  incident: ['failed'],
+} as const satisfies Record<DeliverySubjectKind, readonly DeliveryStatus[]>;
+
+export const isDeliveryReplayable = (
+  subject: DeliverySubjectKind,
+  status: DeliveryStatus,
+): boolean => (REPLAYABLE_DELIVERY_STATUSES[subject] as readonly DeliveryStatus[]).includes(status);
 
 /**
  * States from which a Member can redispatch a Feedback (D22): it has already been

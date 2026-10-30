@@ -79,6 +79,7 @@ export function smtpMailer(options: SmtpMailerOptions): Mailer {
           subject: message.subject,
           html: message.html,
           text: message.text,
+          ...threadingHeaders(message, smtp.fromAddress),
           attachments: (message.attachments ?? []).map((attachment) => ({
             filename: attachment.filename,
             contentType: attachment.contentType,
@@ -107,6 +108,19 @@ export function smtpMailer(options: SmtpMailerOptions): Mailer {
         transport?.close();
       }
     },
+  };
+}
+
+/**
+ * The Message-ID and the reply headers of a message, qualified with the domain of the
+ * sender's address (RFC 5322 §3.6.4): a client threads a reply with the message it names.
+ */
+function threadingHeaders({ messageId, inReplyTo }: MailMessage, fromAddress: string) {
+  const domain = fromAddress.slice(fromAddress.lastIndexOf('@') + 1);
+  const qualified = (local: string) => `<${local}@${domain}>`;
+  return {
+    ...(messageId ? { messageId: qualified(messageId) } : {}),
+    ...(inReplyTo ? { inReplyTo: qualified(inReplyTo), references: [qualified(inReplyTo)] } : {}),
   };
 }
 

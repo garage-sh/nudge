@@ -6,11 +6,13 @@ import { createApi, deriveSetupToken, type WidgetLimits, type TrustProxy } from 
 import {
   createSecretCipher,
   DISPATCH_QUEUE,
+  INCIDENT_LEVEL_QUEUE,
   jobOptions,
   TRIAGE_QUEUE,
   type ReviewAction,
   type DestinationAdapterResolver,
   type Filter,
+  type IncidentFilter,
   type ReviewResult,
   type TriageThresholds,
 } from '@nudge/core';
@@ -25,20 +27,24 @@ import {
   instanceSettings,
   readFeedback,
   feedbacks,
+  incidents,
   runMigrations,
   undoReview,
+  type Db,
   type DestinationRow,
   type Project,
   type LoadedFeedback,
+  type OpeningCap,
 } from '@nudge/database';
 import type { JudgeConfig } from '@nudge/judge';
 import { destinationAdapterResolver, guardedFetch } from '@nudge/destinations';
-import type { FeedbackState, FeedbackInput } from '@nudge/shared';
+import type { FeedbackState, FeedbackInput, IncidentInput } from '@nudge/shared';
 import { diskStorage, type CaptureStorage } from '@nudge/storage';
 import {
   createWorker,
   type CaptureSweepOptions,
   type ConcurrencyOptions,
+  type IncidentOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,
@@ -75,6 +81,11 @@ export interface PipelineOptions {
    */
   readonly destinations?: 'fakes' | 'real';
   /**
+   * With `destinations: 'real'`: the HTTP client of the adapters, in place of the guarded
+   * one — a recorded target (Discord, Slack) whose fixed host a test cannot reach.
+   */
+  readonly adapterFetch?: typeof globalThis.fetch;
+  /**
    * Internal hosts the real adapters and the Instance's Judge may reach
    * (`NUDGE_OUTBOUND_ALLOWED_HOSTS`): by default `127.0.0.1`, where the test receivers
    * and servers listen.
@@ -106,6 +117,13 @@ export interface PipelineOptions {
   readonly captureSweep?: CaptureSweepOptions;
   /** Jobs each worker runs at the same time; the worker's otherwise. */
   readonly concurrency?: ConcurrencyOptions;
+  /** Instance default Quiet period and its sweep; the worker's (1 h, every minute) otherwise. */
+  readonly incidents?: IncidentOptions;
+  /**
+   * The api's Instance Opening cap and its window; the api's (20 per minute) otherwise.
+   * Pass the same window to `incidents.openingWindowMs`, which ends the storms.
+   */
+  readonly openingCap?: OpeningCap;
 }
 
 export interface Pipeline {
@@ -124,6 +142,8 @@ export interface Pipeline {
   readonly suspensions: readonly Suspension[];
   /** The Instance's SMTP server: the emails sent, by the email Destinations and the api. */
   readonly mailer: FakeMailer;
+  /** The pipeline's database, for a test that orders transactions of the data layer itself. */
+  readonly db: Db;
   /** The Project is created directly in the database (seed); its keys are returned in clear. */
   createProject(data: {
     name: string;
@@ -132,11 +152,17 @@ export interface Pipeline {
   }): Promise<{ project: Project; publicKey: string; secretKey: string }>;
   /**
    * A Destination of the Project created directly in the database (seed), served by
-   * its own `FakeDestination`. Without a Filter, it accepts every Triaged Feedback.
+   * its own `FakeDestination`. Without a Filter, it accepts every Triaged Feedback;
+   * without an Incident Filter, it receives no Incident (`null`: the Filter is off).
    */
   createDestination(
     projectId: string,
-    data?: { name?: string; config?: Record<string, unknown>; filter?: Filter },
+    data?: {
+      name?: string;
+      config?: Record<string, unknown>;
+      filter?: Filter | null;
+      incidentFilter?: IncidentFilter | null;
+    },
   ): Promise<{ destination: DestinationRow; fake: FakeDestination }>;
   /** The `FakeDestination` that serves this Destination (created by the dashboard, for example). */
   fakeDestination(destinationId: string): FakeDestination;
@@ -176,8 +202,15 @@ export interface Pipeline {
   insertDeliveryWithoutDispatch(feedbackId: string, destinationId: string): Promise<string>;
   /** Moves a Feedback's creation date back by `days` days, as if it were old. */
   ageFeedback(feedbackId: string, days: number): Promise<void>;
+  /**
+   * Moves every instant of an Incident (opened, first and last seen, closed) back by
+   * `days` days, as if its Occurrences were that old.
+   */
+  ageIncident(incidentId: string, days: number): Promise<void>;
   /** POST /v1/feedbacks with the Project's secret key. */
   postFeedback(secretKey: string, body: FeedbackInput | Record<string, unknown>): Promise<Response>;
+  /** POST /v1/incidents with the Project's secret key: one Occurrence. */
+  postIncident(secretKey: string, body: IncidentInput | Record<string, unknown>): Promise<Response>;
   /**
    * POST /v1/feedbacks with the Project's public key, like the Widget from a page
    * of origin `origin` (`null`: without an Origin header).
@@ -207,7 +240,9 @@ export interface Pipeline {
    * Makes every enqueue into queue `name` fail (the api's as well as the worker's), like
    * a Redis that refuses writes. Returns the function that repairs it.
    */
-  breakEnqueue(name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE): Promise<() => Promise<void>>;
+  breakEnqueue(
+    name: typeof TRIAGE_QUEUE | typeof DISPATCH_QUEUE | typeof INCIDENT_LEVEL_QUEUE,
+  ): Promise<() => Promise<void>>;
   /** The instance settings row as stored (encrypted secrets), or `null`. */
   instanceSettings(): Promise<typeof instanceSettings.$inferSelect | null>;
   /** The Feedback as a Member reads it (state, Verdict, Deliveries), or `null`. */
@@ -286,7 +321,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
   const mailer = new FakeMailer();
   const resolveDestinationAdapter: DestinationAdapterResolver =
     options.destinations === 'real'
-      ? destinationAdapterResolver({ fetch: outboundFetch, mailer })
+      ? destinationAdapterResolver({ fetch: options.adapterFetch ?? outboundFetch, mailer })
       : (destination) => fakeFor(destination.id);
   const infra = {
     databaseUrl: databaseUrl.toString(),
@@ -310,6 +345,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.purge ? { purge: options.purge } : {}),
     ...(options.captureSweep ? { captureSweep: options.captureSweep } : {}),
     ...(options.concurrency ? { concurrency: options.concurrency } : {}),
+    ...(options.incidents ? { incidents: options.incidents } : {}),
     ...(options.dashboardUrl ? { dashboardUrl: options.dashboardUrl } : {}),
     onSuspension: (suspension) => {
       suspensions.push(suspension);
@@ -325,6 +361,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     resolveDestinationAdapter,
     mailer,
     ...(options.widgetLimits ? { widgetLimits: options.widgetLimits } : {}),
+    ...(options.openingCap ? { openingCap: options.openingCap } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
     ...(options.setupToken ? { setupToken: options.setupToken } : {}),
   });
@@ -362,6 +399,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     fakeAlert: fakeFor(ALERT_DESTINATION_ID),
     suspensions,
     mailer,
+    db,
     createProject: (data) => createProject(db, data),
     async createDestination(projectId, data = {}) {
       const destination = await createDestination(db, cipher, {
@@ -369,7 +407,8 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         name: data.name ?? 'Test destination',
         type: 'fake',
         config: data.config ?? {},
-        ...(data.filter ? { filter: data.filter } : {}),
+        ...(data.filter !== undefined ? { filter: data.filter } : {}),
+        incidentFilter: data.incidentFilter ?? null,
       });
       return { destination, fake: fakeFor(destination.id) };
     },
@@ -426,7 +465,7 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     async insertDeliveryWithoutDispatch(feedbackId, destinationId) {
       const [delivery] = await db
         .insert(deliveries)
-        .values({ feedbackId, destinationId })
+        .values({ subject: 'feedback', feedbackId, destinationId })
         .returning({ id: deliveries.id });
       if (!delivery) throw new Error('Delivery not recorded');
       return delivery.id;
@@ -437,8 +476,27 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .set({ createdAt: sql`${feedbacks.createdAt} - make_interval(days => ${days})` })
         .where(eq(feedbacks.id, feedbackId));
     },
+    async ageIncident(incidentId, days) {
+      const back = sql`make_interval(days => ${days})`;
+      await db
+        .update(incidents)
+        .set({
+          createdAt: sql`${incidents.createdAt} - ${back}`,
+          updatedAt: sql`${incidents.updatedAt} - ${back}`,
+          firstSeenAt: sql`${incidents.firstSeenAt} - ${back}`,
+          lastSeenAt: sql`${incidents.lastSeenAt} - ${back}`,
+          closedAt: sql`${incidents.closedAt} - ${back}`,
+        })
+        .where(eq(incidents.id, incidentId));
+    },
     postFeedback: (secretKey, body) =>
       fetch(`${url}/v1/feedbacks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secretKey}` },
+        body: JSON.stringify(body),
+      }),
+    postIncident: (secretKey, body) =>
+      fetch(`${url}/v1/incidents`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${secretKey}` },
         body: JSON.stringify(body),

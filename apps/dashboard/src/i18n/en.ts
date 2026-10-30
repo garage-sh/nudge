@@ -5,7 +5,11 @@ import type {
   FailureClass,
   FeedbackState,
   FeedbackType,
+  IncidentCloseCause,
+  IncidentState,
   JudgeProvider,
+  Level,
+  LevelOrigin,
   Severity,
   SmtpSecurity,
   Source,
@@ -59,6 +63,28 @@ export const en = {
       active: 'Active',
       suspended: 'Suspended',
     } satisfies Record<DestinationState, string>,
+    level: {
+      info: 'Info',
+      warning: 'Warning',
+      error: 'Error',
+      critical: 'Critical',
+    } satisfies Record<Level, string>,
+    /** Where an Incident's Level came from. */
+    levelOrigin: {
+      declared: 'Declared by the sender',
+      judge: 'Assessed by the Judge',
+      default: 'Project’s default Level',
+    } satisfies Record<LevelOrigin, string>,
+    incidentState: {
+      open: 'Open',
+      closed: 'Closed',
+    } satisfies Record<IncidentState, string>,
+    /** Why an Incident closed. */
+    closeCause: {
+      resolved: 'Resolved by its sender',
+      member: 'Closed by a Member',
+      quiet_period: 'Quiet period over',
+    } satisfies Record<IncidentCloseCause, string>,
     /** A Delivery's failure class, as a Member reads it. */
     failureClass: {
       transient: 'temporarily unavailable',
@@ -91,15 +117,17 @@ export const en = {
     invalid_invitation: 'This invitation link is invalid, expired or already used.',
     project_not_found: 'This Project does not exist.',
     feedback_not_found: 'This Feedback does not exist.',
+    incident_not_found: 'This Incident does not exist.',
     transition_refused: 'This Feedback changed in the meantime: here is its current state.',
     storage_unavailable:
       'The Capture could not be erased from storage: the Feedback is kept. Try again later.',
     feedback_not_triaged: 'This Feedback is not triaged yet: it has no Verdict to correct.',
     delivery_not_found: 'This Delivery no longer exists.',
     delivery_not_replayable:
-      'This Delivery is in progress or held by its Suspended Destination: it cannot be replayed now.',
+      'This Delivery is in progress, held by its Suspended Destination, or an Incident Delivery already delivered: it cannot be replayed now.',
     feedback_not_redispatchable:
       'This Feedback cannot be redispatched: only a Triaged or Dispatched Feedback can.',
+    incident_not_redispatchable: 'This Incident cannot be redispatched: only an Open Incident can.',
     destination_not_found: 'This Destination no longer exists.',
     unknown_destination_type: 'This Instance does not support this Destination type.',
     session_required: 'Your session has expired: sign in again.',
@@ -378,6 +406,7 @@ export const en = {
       none: 'No Delivery.',
       attempts: (count: number) => `${count} ${count === 1 ? 'attempt' : 'attempts'}`,
       replay: 'Replay',
+      replayLabel: (destination: string) => `Replay the Delivery to ${destination}`,
       lastError: (error: string) => `Last error: ${error}`,
     },
     redispatch: {
@@ -411,6 +440,7 @@ export const en = {
     fallbackTitle: 'Project',
     sections: 'Project sections',
     destinationsTab: 'Destinations',
+    incidentsTab: 'Incidents',
     settingsTab: 'Settings',
     keys: 'Keys',
     publicKey: 'Public key',
@@ -432,14 +462,118 @@ export const en = {
     originsLabel: 'One origin per line',
     originsHelp: 'The Widget is accepted only from these origins (scheme://host[:port], no path).',
     saveOrigins: 'Save origins',
+    incidents: {
+      title: 'Incidents',
+      help: 'Your application reports an Incident when something goes wrong on its side, from its server only, with the secret key.',
+      defaultLevel: 'Default Level',
+      defaultLevelHelp:
+        'The Level of an Incident whose sender declares none, when the Judge gives none in time.',
+      quietPeriod: 'Quiet period (minutes)',
+      quietPeriodHelp:
+        'An Incident with no new Occurrence for this long closes on its own. Empty: the Instance default (one hour, unless NUDGE_INCIDENT_QUIET_PERIOD_MS sets another). An Occurrence can set its own with quietPeriod, in seconds.',
+      openingCap: 'Opening cap (Incidents per minute)',
+      openingCapHelp:
+        'Past this many Incidents opened in a minute, the next ones are recorded but Held: they go to no Destination. The Alert destination is warned once per storm, and each Destination concerned gets a single summary once the Project is back under its cap. Empty: the Instance default (20, unless NUDGE_INCIDENT_OPENING_CAP sets another).',
+      save: 'Save Incident settings',
+      example: 'Example request',
+      exampleHelp:
+        'Put the secret key in the NUDGE_SECRET_KEY environment variable of the server that reports. The same title and Environment are grouped into one Incident; a fingerprint groups different titles.',
+    },
+  },
+
+  incidents: {
+    views: 'Views',
+    view: {
+      all: 'All',
+      open: 'Open',
+      closed: 'Closed',
+    } satisfies Record<IncidentState | 'all', string>,
+    filters: 'Filters',
+    filter: { level: 'Level', environment: 'Environment', held: 'Dispatch' },
+    anyLevel: 'All',
+    anyEnvironment: 'All',
+    anyDispatch: 'All',
+    heldOnly: 'Held only',
+    shown: (count: number, more: boolean) =>
+      `${count} Incident${count === 1 ? '' : 's'} shown${more ? ', more to load' : ''}.`,
+    noMatch: 'No Incident matches these filters.',
+    noneInView: { open: 'No Open Incident.', closed: 'No Closed Incident.' },
+    clearFilters: 'Clear filters',
+    invalidFilters: 'This address carries filters nudge does not know.',
+    emptyTitle: 'No Incident reported yet.',
+    emptyHelp:
+      'Incidents arrive here when the Project’s server reports something going wrong, with its secret key.',
+    emptyAction: 'See how to report one',
+    showMore: 'Show more',
+    occurrences: (count: number) => `${count} Occurrence${count === 1 ? '' : 's'}`,
+    noEnvironment: 'No Environment',
+    lastSeen: 'Last seen',
+    held: 'Held',
+    heldTitle: 'Opened past the Project’s Opening cap: not dispatched.',
+  },
+
+  incident: {
+    backToList: 'Back to Incidents',
+    properties: 'Incident',
+    state: 'State',
+    level: 'Level',
+    levelOrigin: 'Level from',
+    environment: 'Environment',
+    occurrences: 'Occurrences',
+    firstSeen: 'First seen',
+    lastSeen: 'Last seen',
+    closed: 'Closed',
+    fingerprint: 'Fingerprint',
+    firstReport: 'First Occurrence',
+    lastReport: 'Last Occurrence',
+    onlyReport: 'Occurrence',
+    title: 'Title',
+    message: 'Message',
+    declaredLevel: 'Declared Level',
+    notDeclared: 'Not declared',
+    receivedAt: 'Received',
+    context: 'Context',
+    noContext: 'No context.',
+    noMessage: 'No message.',
+    deliveries: 'Deliveries',
+    heldHelp:
+      'Opened while the Project went past its Opening cap: recorded, but sent to no Destination. Redispatch it if it matters; the Destinations concerned get a summary of the Held Incidents instead.',
+    heldClosedHelp:
+      'Opened while the Project went past its Opening cap: recorded, but sent to no Destination. Closed, it can no longer be Redispatched.',
+    close: {
+      action: 'Close Incident',
+      help: 'Close it once you know the problem is over: its Destinations are told, and a new Occurrence will open a new Incident.',
+      question:
+        'The Incident will be Closed for good and its Destinations told. A new Occurrence will open a new Incident. Close it?',
+      done: 'Incident closed: its Destinations are being told.',
+    },
+    deletion: {
+      title: 'Deletion',
+      help: 'Permanently erases this Incident and the history of its Deliveries, for example when personal data leaked into a report. What was already created in the Destinations (issues, messages) is not touched, and a new Occurrence will open a new Incident.',
+      question: 'The Incident will be permanently erased. Delete?',
+    },
+    redispatch: {
+      help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
+      action: 'Redispatch',
+      pending: 'Redispatching…',
+      noneCreated: 'No other Destination accepts this Incident.',
+      created: (count: number) => `${count} ${count === 1 ? 'Delivery' : 'Deliveries'} created.`,
+    },
   },
 
   destinations: {
     add: 'Add Destination',
-    intro: 'Each Triaged Feedback goes to every Destination whose Filter accepts it.',
-    emptyTitle: 'No Destination: Triaged Feedback goes nowhere.',
+    intro:
+      'Each Triaged Feedback goes to every Destination whose Feedback Filter accepts it, and each Incident to every Destination whose Incident Filter accepts it.',
+    noFeedback: 'No Feedback',
+    noIncident: 'No Incident',
+    incidentLevelOrMore: (level: string) => `Incidents: ${level} or higher`,
+    incidentEnvironments: (environments: string) => `in ${environments}`,
+    incidentConditions: (count: number) =>
+      `${count} context ${count === 1 ? 'condition' : 'conditions'}`,
+    emptyTitle: 'No Destination: Triaged Feedback and Incidents go nowhere.',
     emptyHelp:
-      'Add one below: a GitHub repository, a Linear team, a Slack or Discord channel, or your own webhook.',
+      'Add one below: a GitHub repository, a Linear team, a Slack, Discord or Telegram channel, or your own webhook.',
     copySecretNow: (name: string) =>
       `Copy the secret of “${name}” now: it will never be shown again.`,
     anySeverity: 'any Severity',
@@ -471,6 +605,28 @@ export const en = {
       noMinimum: 'None',
       minimumSeverityHelp:
         'A Feedback without Severity (nudge without a Judge) reaches no minimum Severity.',
+      feedbackFilter: 'Feedback Filter',
+      feedbackFilterOn: 'Receive Feedback',
+      incidentFilter: 'Incident Filter',
+      incidentFilterOn: 'Receive Incidents',
+      incidentFilterOff: 'Off: this Destination receives no Incident.',
+      minimumLevel: 'Minimum Level',
+      environments: 'Environments',
+      environmentsHelp:
+        'Separated by commas. Empty: every Environment. An Incident without an Environment passes only an empty list.',
+      conditions: 'Context conditions',
+      conditionsHelp:
+        'Every condition must hold. An Incident whose context lacks the key is refused.',
+      noCondition: 'No condition.',
+      conditionKey: 'Context key',
+      conditionValues: 'Is one of',
+      conditionValuesHelp: 'Separated by commas.',
+      addCondition: 'Add a condition',
+      removeCondition: 'Remove',
+      removeConditionLabel: (key: string) => `Remove the condition on ${key}`,
+      environmentsPlaceholder: 'production, staging',
+      conditionKeyPlaceholder: 'service',
+      conditionValuesPlaceholder: 'checkout, billing',
     },
   },
 
@@ -489,20 +645,38 @@ export const en = {
         title: 'Payload',
         show: 'What your receiver gets',
         event: 'Event',
-        events: { feedback: 'Feedback', alert: 'Alert', ping: 'Ping' },
+        events: {
+          feedback: 'Feedback',
+          'incident.opened': 'Incident opened',
+          'incident.raised': 'Incident raised',
+          'incident.closed': 'Incident closed',
+          'incidents.held': 'Incidents held',
+          alert: 'Alert',
+          ping: 'Ping',
+        },
         eventHelp: {
           feedback:
             'Each dispatched Feedback, and the Test button with isTest: true. The text is raw: encode it for your target.',
+          'incident.opened':
+            'An Incident that opened, with its stable id: track the Incident by it. Its title, message, Environment and context are raw: encode them for your target.',
+          'incident.raised':
+            'An Incident whose Level rose enough to reach this Destination: it had not received it at its previous Level. Each Destination gets a single opened or raised event per Incident.',
+          'incident.closed':
+            'The Incident closed: resolved by its sender, closed by a Member, or silent past its Quiet period (incident.closure). It comes on the Delivery of its opening. An id you never saw is an Incident that opened and closed while this Destination was unreachable: it is delivered once.',
+          'incidents.held':
+            'The summary of a storm: the Project opened Incidents faster than its Opening cap, and those past it were held. Once it is back under its cap, a single summary (count, time range, link) comes in place of the Incidents this Destination would have received.',
           alert:
-            'An alert for the Members: a Feedback In review or a Suspended Destination. It never carries a Feedback’s text.',
+            'An alert for the Members: a Feedback In review, a Suspended Destination, or a Project opening Incidents faster than its Opening cap. It never carries a Feedback’s text.',
           ping: 'The health check, while the Destination is Suspended: answer with a 2xx to resume its Deliveries.',
         },
         request: 'Request',
         headers: 'Headers',
         body: 'Example body',
         headerHelp: {
-          event: 'feedback, alert or ping.',
+          event:
+            'feedback, incident.opened, incident.raised, incident.closed, incidents.held, alert or ping.',
           delivery: 'The Delivery’s stable id: ignore a retry you already processed.',
+          summary: 'The summary’s stable id: ignore a retry you already processed.',
           alert: 'The alert’s stable id: ignore a retry you already processed.',
           timestamp: 'Unix seconds at signing: reject a call older than a few minutes.',
           signature: 'HMAC-SHA256 of timestamp + "." + raw body, with the signing secret.',
@@ -553,6 +727,19 @@ export const en = {
         'The label’s name as Linear shows it, from the team or the workspace. Left empty: no label. A label that cannot be found suspends the Destination.',
       summary: (team: string) => `Team ${team}`,
     },
+    telegram: {
+      botToken: 'Bot token',
+      botTokenHelp:
+        'In Telegram, send /newbot to @BotFather and paste the token it gives you. Stored encrypted, never shown again.',
+      chatId: 'Chat id',
+      chatIdHelp:
+        'Add the bot to the group or channel (as an administrator for a channel), post a message there, then open api.telegram.org/bot<token>/getUpdates: the id is chat.id, -100… for a supergroup or a channel. A public channel can be given as @username; a person must start the bot first.',
+      topicId: 'Forum topic (optional)',
+      topicIdHelp:
+        'In a group with topics, the topic’s id: the last number of a link to the topic (t.me/c/…/7). Empty: the chat itself.',
+      summary: (chatId: string, topicId: number | null) =>
+        topicId === null ? `Chat ${chatId}` : `Chat ${chatId}, topic ${topicId}`,
+    },
   },
 
   settings: {
@@ -566,19 +753,19 @@ export const en = {
       retention: 'Retention',
     },
     retention: {
-      title: 'Feedback retention',
+      title: 'Retention',
       status: {
         unlimited: 'Unlimited',
         days: (days: number) => (days === 1 ? '1 day' : `${days} days`),
       },
-      unlimited: 'Unlimited retention: no Feedback is erased automatically.',
+      unlimited: 'Unlimited retention: no Feedback or Incident is erased automatically.',
       limited: (days: number) =>
-        `Feedback older than ${days} days is erased automatically, with its Captures.`,
+        `Feedback older than ${days} days is erased automatically, with its Captures, and so are Incidents last seen more than ${days} days ago.`,
       label: 'Retention period (days)',
       help: 'Empty: unlimited retention. Erasure is permanent.',
       save: 'Save retention',
       confirm: (days: number) =>
-        `Feedback older than ${days} days and its Captures will be permanently erased at the next purge. Save?`,
+        `Feedback older than ${days} days and its Captures, and Incidents last seen more than ${days} days ago, will be permanently erased at the next purge. Save?`,
     },
     alertDestination: {
       title: 'Alert destination',

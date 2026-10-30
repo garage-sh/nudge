@@ -13,6 +13,9 @@
  * - https://docs.github.com/en/rest/issues/issues#create-an-issue (201, 400, 403, 404,
  *   "410 Gone" when issues are disabled, "422 Validation failed, or the endpoint has
  *   been spammed", 503; issue schema: `html_url`, `number`…);
+ * - https://docs.github.com/en/rest/issues/issues#update-an-issue (200; `state`,
+ *   `state_reason`);
+ * - https://docs.github.com/en/rest/issues/comments#create-an-issue-comment (201);
  * - https://docs.github.com/en/rest/repos/repos#get-a-repository (200, 301, 403, 404;
  *   `has_issues`, `archived`);
  * - https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
@@ -34,6 +37,8 @@ export interface Recording {
 }
 
 const ISSUES = 'https://docs.github.com/en/rest/issues/issues#create-an-issue';
+const UPDATE = 'https://docs.github.com/en/rest/issues/issues#update-an-issue';
+const COMMENTS = 'https://docs.github.com/en/rest/issues/comments#create-an-issue-comment';
 const REPOSITORY_DOCS = 'https://docs.github.com/en/rest/repos/repos#get-a-repository';
 const AUTH = 'https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api';
 const RATE_LIMITS =
@@ -84,6 +89,34 @@ export const GITHUB = {
       created_at: '2026-10-24T09:30:00Z',
       updated_at: '2026-10-24T09:30:00Z',
       author_association: 'OWNER',
+    },
+  },
+  /** The issue closed by "Update an issue": `state` closed, completed. */
+  issueClosed: {
+    provenance: 'reconstructed',
+    source: `${UPDATE} (Response schema, Status: 200)`,
+    status: 200,
+    body: {
+      id: 1296269,
+      url: `${API}/issues/${ISSUE_NUMBER}`,
+      html_url: ISSUE_URL,
+      number: ISSUE_NUMBER,
+      state: 'closed',
+      state_reason: 'completed',
+      closed_at: '2026-10-24T09:31:00Z',
+    },
+  },
+  /** The comment created on the issue. */
+  commentCreated: {
+    provenance: 'reconstructed',
+    source: `${COMMENTS} (Response schema, Status: 201)`,
+    status: 201,
+    body: {
+      id: 1,
+      url: `${API}/issues/comments/1`,
+      html_url: `${ISSUE_URL}#issuecomment-1`,
+      body: '…',
+      created_at: '2026-10-24T09:31:00Z',
     },
   },
   /** The repository, issues enabled. */

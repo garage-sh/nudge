@@ -1,8 +1,10 @@
 import { Inject, Module, type DynamicModule, type OnApplicationShutdown } from '@nestjs/common';
 import {
+  ALERTS_QUEUE,
   createSecretCipher,
   DEFAULT_QUEUE_PREFIX,
   DISPATCH_QUEUE,
+  INCIDENT_LEVEL_QUEUE,
   jobOptions,
   TRIAGE_QUEUE,
   type RetryPolicy,
@@ -12,9 +14,11 @@ import type { CaptureStorage } from '@nudge/storage';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import {
+  ALERTS_QUEUE_TOKEN,
   SECRET_CIPHER,
   DB,
   DISPATCH_QUEUE_TOKEN,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
   CAPTURE_STORAGE,
   TRIAGE_QUEUE_TOKEN,
 } from './tokens.js';
@@ -41,6 +45,8 @@ export class InfraModule implements OnApplicationShutdown {
     @Inject(DB_CONNECTION) private readonly connection: DbConnection,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
+    @Inject(INCIDENT_LEVEL_QUEUE_TOKEN) private readonly incidentLevelQueue: Queue,
+    @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -69,13 +75,28 @@ export class InfraModule implements OnApplicationShutdown {
         },
         { provide: TRIAGE_QUEUE_TOKEN, ...queue(TRIAGE_QUEUE) },
         { provide: DISPATCH_QUEUE_TOKEN, ...queue(DISPATCH_QUEUE) },
+        { provide: INCIDENT_LEVEL_QUEUE_TOKEN, ...queue(INCIDENT_LEVEL_QUEUE) },
+        { provide: ALERTS_QUEUE_TOKEN, ...queue(ALERTS_QUEUE) },
       ],
-      exports: [DB, TRIAGE_QUEUE_TOKEN, DISPATCH_QUEUE_TOKEN, SECRET_CIPHER, CAPTURE_STORAGE],
+      exports: [
+        DB,
+        TRIAGE_QUEUE_TOKEN,
+        DISPATCH_QUEUE_TOKEN,
+        INCIDENT_LEVEL_QUEUE_TOKEN,
+        ALERTS_QUEUE_TOKEN,
+        SECRET_CIPHER,
+        CAPTURE_STORAGE,
+      ],
     };
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await Promise.all([this.triageQueue.close(), this.dispatchQueue.close()]);
+    await Promise.all([
+      this.triageQueue.close(),
+      this.dispatchQueue.close(),
+      this.incidentLevelQueue.close(),
+      this.alertsQueue.close(),
+    ]);
     await this.redis.quit();
     await this.connection.close();
   }

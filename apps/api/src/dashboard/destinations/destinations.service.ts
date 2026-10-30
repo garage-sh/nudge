@@ -10,7 +10,10 @@ import {
   createDestination,
   decryptDestinationSecrets,
   destinations,
+  filterColumns,
   filterOf,
+  incidentFilterColumns,
+  incidentFilterOf,
   toConfiguredDestination,
   type Db,
   type DestinationRow,
@@ -80,7 +83,8 @@ export class DestinationsService {
       type: input.type,
       config,
       secrets: { ...secrets, ...generatedSecrets },
-      filter: input.filter ?? FILTER_ALL,
+      filter: input.filter === undefined ? FILTER_ALL : input.filter,
+      incidentFilter: input.incidentFilter ?? null,
     });
     return { destination: this.view(row), generatedSecrets };
   }
@@ -114,11 +118,9 @@ export class DestinationsService {
         .update(destinations)
         .set({
           ...(fields.name ? { name: fields.name } : {}),
-          ...(fields.filter
-            ? {
-                filterTypes: [...fields.filter.types],
-                filterMinimumSeverity: fields.filter.minimumSeverity,
-              }
+          ...(fields.filter !== undefined ? filterColumns(fields.filter) : {}),
+          ...(fields.incidentFilter !== undefined
+            ? incidentFilterColumns(fields.incidentFilter)
             : {}),
           config,
           encryptedSecrets: encryptDestinationSecrets(this.cipher, id, {
@@ -195,6 +197,7 @@ export class DestinationsService {
       type: row.type,
       config: row.config,
       filter: filterOf(row),
+      incidentFilter: incidentFilterOf(row),
       state: row.state,
       secrets: Object.keys(this.readableSecrets(row)).sort(),
       createdAt: row.createdAt.toISOString(),

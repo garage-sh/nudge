@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { FEEDBACK_TYPES, type FeedbackState } from './domain.js';
+import { boundedString, nonBlank, scalarRecord } from './input.js';
+
+export { stripControlCharacters } from './input.js';
 
 /** Ingestion bounds: they protect storage and the Judge. */
 export const FEEDBACK_LIMITS = {
@@ -14,35 +17,17 @@ export const FEEDBACK_LIMITS = {
   metadataValue: 1000,
 } as const;
 
-// C0, DEL and C1 control characters, except tab and line breaks.
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
-
-export const stripControlCharacters = (value: string): string =>
-  value.replace(CONTROL_CHARACTERS, '');
-
-/** A string stripped of its control characters, then bounded. Nothing else is changed. */
-const boundedString = (max: number) =>
-  z.string().transform(stripControlCharacters).pipe(z.string().max(max));
-
-const nonBlank = (value: string) => value.trim().length > 0;
-
-const metadataValueSchema = z.union([
-  boundedString(FEEDBACK_LIMITS.metadataValue),
-  z.number().finite(),
-  z.boolean(),
-  z.null(),
-]);
-
-const metadata = z
-  .record(boundedString(FEEDBACK_LIMITS.metadataKey).refine(nonBlank), metadataValueSchema)
-  .refine((value) => Object.keys(value).length <= FEEDBACK_LIMITS.metadataKeys, {
-    message: `${FEEDBACK_LIMITS.metadataKeys} metadata entries at most`,
-  })
-  .describe(
-    `What the application knows and the Feedback does not say: plan, release, feature flag… ` +
-      `${FEEDBACK_LIMITS.metadataKeys} entries at most, with non-blank keys and scalar values only.`,
-  );
+const metadata = scalarRecord(
+  {
+    keys: FEEDBACK_LIMITS.metadataKeys,
+    key: FEEDBACK_LIMITS.metadataKey,
+    value: FEEDBACK_LIMITS.metadataValue,
+  },
+  'metadata entries',
+).describe(
+  `What the application knows and the Feedback does not say: plan, release, feature flag… ` +
+    `${FEEDBACK_LIMITS.metadataKeys} entries at most, with non-blank keys and scalar values only.`,
+);
 
 const dimension = z.number().int().min(0).max(FEEDBACK_LIMITS.viewportDimension);
 

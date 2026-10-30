@@ -1,6 +1,11 @@
 import {
   presentAlert,
+  presentHeldSummary,
+  presentIncident,
   type Alert,
+  type OutgoingHeldSummary,
+  type PresentedMessage,
+  type OutgoingIncident,
   type FailureClass,
   type DestinationAdapter,
   type ConfiguredDestination,
@@ -30,7 +35,9 @@ export interface SlackOptions {
 
 /**
  * Slack: an incoming webhook, tied to a channel
- * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks).
+ * (https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks). It answers
+ * `ok` and nothing else: a posted message cannot be found again, to reply in its thread
+ * or edit it.
  */
 export function slackAdapter(
   destination: ConfiguredDestination,
@@ -65,6 +72,13 @@ export function slackAdapter(
 
   return {
     send: (delivery) => publish(slackBody(delivery)),
+    deliverIncident: (delivery) => publish(incidentBody(delivery)),
+    /**
+     * An incoming webhook returns no message id: the closing cannot go in the opening's
+     * thread nor edit it. It is a message of its own, titled like the opening.
+     */
+    closeIncident: (closing) => publish(incidentBody(closing)),
+    summarizeHeld: (summary) => publish(heldSummaryBody(summary)),
     alert: (alert) => publish(alertBody(alert)),
     /**
      * An incoming webhook cannot be read: the probe posts it an empty message, which it
@@ -133,7 +147,7 @@ function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
   const type = FEEDBACK_TYPE_LABELS[feedback.resolvedType];
   const severity = feedback.severity ? SEVERITY_LABELS[feedback.severity] : 'Not assessed';
   // Typed by a Member: no `@channel` either, as in the alerts.
-  const projectName = escapeControls(neutralizeBroadMentions(project.name));
+  const projectName = slackText(project.name);
   const title = `${isTest ? 'Test · ' : ''}${type} · ${projectName}`;
   const footer = [
     feedback.uncertain ? 'nudge · Uncertain verdict' : 'nudge',
@@ -165,23 +179,76 @@ function slackBody({ isTest, project, feedback }: OutgoingDelivery) {
  * target) go through control-character escaping, with mentions broken.
  */
 function alertBody(alert: Alert) {
-  const { title, summary, details } = presentAlert(alert);
-  const text = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
-  const footer = [
+  return noticeBody(
+    presentAlert(alert),
     alert.isTest ? 'nudge · test alert' : 'nudge · alert',
-    ...(isSafeSlackLink(alert.dashboardUrl) ? [`<${alert.dashboardUrl}|Open in nudge>`] : []),
+    alert.dashboardUrl,
+  );
+}
+
+/** The summary of Held Incidents, as blocks like an alert: the Project name is escaped. */
+function heldSummaryBody(summary: OutgoingHeldSummary) {
+  return noticeBody(presentHeldSummary(summary), 'nudge · Incidents held', summary.dashboardUrl);
+}
+
+/**
+ * A message written by nudge (alert, summary of Held Incidents): its title and details
+ * escaped, its summary as is, a footer and the dashboard link.
+ */
+function noticeBody(
+  { title, summary, details }: PresentedMessage,
+  label: string,
+  dashboardUrl: string | null,
+) {
+  const footer = [
+    label,
+    ...(isSafeSlackLink(dashboardUrl) ? [`<${dashboardUrl}|Open in nudge>`] : []),
   ];
   return {
-    text: text(title),
+    text: slackText(title),
     blocks: [
-      { type: 'section', text: mrkdwn(`*${text(title)}*`) },
+      { type: 'section', text: mrkdwn(`*${slackText(title)}*`) },
       { type: 'section', text: mrkdwn(summary) },
       {
         type: 'section',
         fields: details.map(({ label, value }) =>
-          mrkdwn(`*${label}*\n${truncate(text(value), FIELD_MAX)}`),
+          mrkdwn(`*${label}*\n${truncate(slackText(value), FIELD_MAX)}`),
         ),
       },
+      { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
+    ],
+  };
+}
+
+/**
+ * An Incident as blocks: its title, what happened, the short details as fields and the
+ * long ones (message, context) in code blocks. Every text of the sender goes through
+ * the same encoding as the Author's text of a Feedback.
+ */
+function incidentBody(delivery: OutgoingIncident) {
+  const { title, summary, details } = presentIncident(delivery);
+  const short = details.filter((detail) => !detail.long);
+  const long = details.filter((detail) => detail.long);
+  const { dashboardUrl } = delivery.incident;
+  const footer = [
+    'nudge · Incident',
+    ...(isSafeSlackLink(dashboardUrl) ? [`<${dashboardUrl}|Open in nudge>`] : []),
+  ];
+  return {
+    text: truncate(slackText(title), FIELD_MAX),
+    blocks: [
+      { type: 'section', text: mrkdwn(`*${truncate(slackText(title), FIELD_MAX)}*`) },
+      { type: 'section', text: mrkdwn(slackText(summary)) },
+      {
+        type: 'section',
+        fields: short.map(({ label, value }) =>
+          mrkdwn(`*${label}*\n${truncate(slackText(value), FIELD_MAX)}`),
+        ),
+      },
+      ...long.flatMap(({ label, value }) => [
+        { type: 'section', text: mrkdwn(`*${label}*`) },
+        { type: 'section', text: mrkdwn(codeBlock(value)) },
+      ]),
       { type: 'context', elements: [mrkdwn(footer.join(' · '))] },
     ],
   };
@@ -230,6 +297,9 @@ function codeBlock(text: string): string {
   }
   return `${OPENING}${bounded}${CLOSING}`;
 }
+
+/** A text from outside nudge shown as is: control characters escaped, broad mentions broken. */
+const slackText = (raw: string) => escapeControls(neutralizeBroadMentions(raw));
 
 /** Escaping of Slack's control characters (docs.slack.dev, Formatting message text). */
 const escapeControls = (text: string) =>

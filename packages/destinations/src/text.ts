@@ -1,4 +1,4 @@
-import type { OutgoingDelivery } from '@nudge/core';
+import type { FeedbackToDispatch, OutgoingDelivery } from '@nudge/core';
 import { FEEDBACK_TYPE_LABELS } from '@nudge/shared';
 
 /** Bounded to `max` UTF-16 units, without splitting a surrogate pair, with "…". */
@@ -24,4 +24,28 @@ export function titleWithType({ isTest, feedback }: OutgoingDelivery, max: numbe
   const line = firstLine(feedback.text);
   const heading = `${isTest ? 'Test · ' : ''}${FEEDBACK_TYPE_LABELS[feedback.resolvedType]}`;
   return truncate(line ? `${heading} · ${line}` : heading, max);
+}
+
+/**
+ * Who wrote a Feedback, as far as it is known: "Name <email> (id)", or `null` for an
+ * anonymous Feedback. Its trust is left to each target.
+ */
+export function authorIdentity(author: FeedbackToDispatch['author']): string | null {
+  if (!author) return null;
+  const parts = [
+    author.name,
+    author.email ? `<${author.email}>` : null,
+    author.id ? `(${author.id})` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/** Text from outside (the Author, a Member, a target) made inert in HTML. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

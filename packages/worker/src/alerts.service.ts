@@ -3,6 +3,7 @@ import {
   sendAlert,
   alertJobId,
   buildDashboardUrl,
+  heldIncidentsPath,
   type Alert,
   type AlertJob,
   type DestinationAdapterResolver,
@@ -12,6 +13,7 @@ import {
   configuredAlertDestination,
   destinations,
   readAlertDestination,
+  readStormToAlert,
   feedbacks,
   type Db,
 } from '@nudge/database';
@@ -28,8 +30,9 @@ import {
 } from './tokens.js';
 
 /**
- * Member alerts: an event (Feedback moved to In review, Destination Suspended) is
- * queued, then sent to the Instance's Alert destination by the adapter of its type.
+ * Member alerts: an event (Feedback moved to In review, Destination Suspended, Incident
+ * storm started) is queued, then sent to the Instance's Alert destination by the adapter
+ * of its type.
  * Without an Alert destination, the job does nothing: the dashboard always shows these
  * states through its badges, read from the database.
  *
@@ -82,8 +85,27 @@ export class AlertsService {
     );
   }
 
-  /** `null`: the Feedback or the Destination has since been deleted, nothing left to report. */
+  /**
+   * `null`: the Feedback, the Destination or the storm's Project has since been deleted,
+   * nothing left to report.
+   */
   private async compose(job: AlertJob, id: string, raisedAt: Date): Promise<Alert | null> {
+    if (job.event === 'incident_storm') {
+      const storm = await readStormToAlert(this.db, job.stormId);
+      if (!storm) return null;
+      return {
+        event: 'incident_storm',
+        id,
+        isTest: false,
+        at: storm.startedAt,
+        project: storm.project,
+        storm: { held: storm.held, cap: storm.cap, startedAt: storm.startedAt },
+        dashboardUrl: buildDashboardUrl(
+          this.options.dashboardUrl,
+          heldIncidentsPath(storm.project.id),
+        ),
+      };
+    }
     if (job.event === 'feedback_in_review') {
       const feedback = await this.db.query.feedbacks.findFirst({
         where: eq(feedbacks.id, job.feedbackId),

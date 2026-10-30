@@ -159,4 +159,79 @@ describe('Webhook Destination end to end', () => {
     expect(validSignature(trial!, regeneration.body.generatedSecrets.signingSecret!)).toBe(true);
     expect(validSignature(trial!, generatedSecrets.signingSecret!)).toBe(false);
   });
+  it('an Incident reaches the receiver as signed incident.opened, then incident.raised for the Destination its higher Level reaches', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Incident events' });
+    const create = async (name: string, minimumLevel: 'error' | 'critical') => {
+      const creation = await member.post<DestinationWithGeneratedSecrets>(
+        `/api/projects/${project.id}/destinations`,
+        {
+          type: 'webhook',
+          name,
+          config: { url: `${receiver.url}/incidents-${minimumLevel}` },
+          filter: null,
+          incidentFilter: { minimumLevel, environments: [], conditions: [] },
+        },
+      );
+      expect(creation.status).toBe(201);
+      return { path: `/incidents-${minimumLevel}`, ...creation.body };
+    };
+    const team = await create('Team', 'error');
+    const onCall = await create('On-call', 'critical');
+    const occurrence = { title: 'Queue backing up', environment: 'production' };
+
+    const response = await pipeline.postIncident(secretKey, { ...occurrence, level: 'error' });
+    const { id } = (await response.json()) as { id: string };
+    await expect.poll(() => receiver.requests.filter((r) => r.path === team.path).length).toBe(1);
+    await pipeline.postIncident(secretKey, { ...occurrence, level: 'critical' });
+    await expect.poll(() => receiver.requests.filter((r) => r.path === onCall.path).length).toBe(1);
+
+    const [opened] = receiver.requests.filter((r) => r.path === team.path);
+    const [raised] = receiver.requests.filter((r) => r.path === onCall.path);
+    expect(validSignature(opened!, team.generatedSecrets.signingSecret!)).toBe(true);
+    expect(validSignature(raised!, onCall.generatedSecrets.signingSecret!)).toBe(true);
+    expect(opened!.headers['x-nudge-event']).toBe('incident.opened');
+    expect(raised!.headers['x-nudge-event']).toBe('incident.raised');
+    expect(JSON.parse(opened!.body)).toMatchObject({
+      event: 'incident.opened',
+      project: { id: project.id, name: 'Incident events' },
+      incident: { id, title: 'Queue backing up', level: 'error', environment: 'production' },
+    });
+    expect(JSON.parse(raised!.body)).toMatchObject({
+      event: 'incident.raised',
+      incident: { id, level: 'critical', occurrences: 2 },
+    });
+    expect(receiver.requests.filter((r) => r.path === team.path)).toHaveLength(1);
+  });
+
+  it('an Incident its sender resolves reaches the receiver as signed incident.closed, on the Delivery of its opening', async () => {
+    const { project, secretKey } = await pipeline.createProject({ name: 'Incident closed' });
+    const creation = await member.post<DestinationWithGeneratedSecrets>(
+      `/api/projects/${project.id}/destinations`,
+      {
+        type: 'webhook',
+        name: 'Closing receiver',
+        config: { url: `${receiver.url}/incident-closed` },
+        filter: null,
+        incidentFilter: { minimumLevel: 'info', environments: [], conditions: [] },
+      },
+    );
+    expect(creation.status).toBe(201);
+    const received = () => receiver.requests.filter((r) => r.path === '/incident-closed');
+    const occurrence = { title: 'Disk almost full', level: 'warning' };
+
+    const response = await pipeline.postIncident(secretKey, occurrence);
+    const { id } = (await response.json()) as { id: string };
+    await expect.poll(() => received().length).toBe(1);
+    await pipeline.postIncident(secretKey, { ...occurrence, resolved: true });
+    await expect.poll(() => received().length).toBe(2);
+
+    const [opened, closed] = received();
+    expect(closed!.headers['x-nudge-event']).toBe('incident.closed');
+    expect(closed!.headers['x-nudge-delivery']).toBe(opened!.headers['x-nudge-delivery']);
+    expect(validSignature(closed!, creation.body.generatedSecrets.signingSecret!)).toBe(true);
+    expect(JSON.parse(closed!.body)).toMatchObject({
+      event: 'incident.closed',
+      incident: { id, state: 'closed', occurrences: 2, closure: { cause: 'resolved' } },
+    });
+  });
 });

@@ -1,18 +1,26 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { readInstanceRetention, feedbacks, deleteFeedbacks, type Db } from '@nudge/database';
+import {
+  readInstanceRetention,
+  feedbacks,
+  deleteFeedbacks,
+  purgeEndedStorms,
+  purgeIncidents,
+  type Db,
+} from '@nudge/database';
 import { and, asc, lt, notInArray } from 'drizzle-orm';
 import type { WorkerOptions } from './options.js';
 import { DB, OPTIONS } from './tokens.js';
 
-/** Feedbacks deleted per batch: a purge chains batches until none is left. */
+/** Feedbacks (or Incidents) deleted per batch: a purge chains batches until none is left. */
 const BATCH = 100;
 
 const DAY_MS = 24 * 60 * 60_000;
 
 /**
  * Retention purge: deletes the Feedbacks older than the Instance retention period,
- * with their Captures. Without a period (the default), nothing is purged. The period
- * is read again on every run: changing it in the dashboard is enough.
+ * with their Captures, and the Incidents last seen before it, with their Deliveries
+ * and the storms that ended before it. Without a period (the default), nothing is
+ * purged. The period is read again on every run: changing it in the dashboard is enough.
  */
 @Injectable()
 export class PurgeProcessor {
@@ -27,6 +35,11 @@ export class PurgeProcessor {
     const days = await readInstanceRetention(this.db);
     if (days === null) return;
     const before = new Date(Date.now() - days * DAY_MS);
+    await this.purgeFeedbacks(days, before);
+    await this.purgeIncidents(days, before);
+  }
+
+  private async purgeFeedbacks(days: number, before: Date): Promise<void> {
     let total = 0;
     // Feedbacks kept during this run (Capture not deleted): the next batches skip them,
     // so that a Capture that resists does not block the purge of the others.
@@ -57,5 +70,17 @@ export class PurgeProcessor {
       if (batch.length < BATCH) break;
     }
     if (total > 0) this.logger.log(`Retention of ${days} d: ${total} Feedback(s) purged`);
+  }
+
+  private async purgeIncidents(days: number, before: Date): Promise<void> {
+    let total = 0;
+    for (;;) {
+      const deleted = await purgeIncidents(this.db, before, BATCH);
+      total += deleted;
+      if (deleted < BATCH) break;
+    }
+    const storms = await purgeEndedStorms(this.db, before);
+    if (total > 0) this.logger.log(`Retention of ${days} d: ${total} Incident(s) purged`);
+    if (storms > 0) this.logger.log(`Retention of ${days} d: ${storms} ended Storm(s) purged`);
   }
 }

@@ -46,6 +46,26 @@ export const fr: Messages = {
       active: 'Active',
       suspended: 'Suspendue',
     },
+    level: {
+      info: 'Info',
+      warning: 'Avertissement',
+      error: 'Erreur',
+      critical: 'Critique',
+    },
+    levelOrigin: {
+      declared: 'Déclaré par l’émetteur',
+      judge: 'Évalué par le Juge',
+      default: 'Niveau par défaut du Projet',
+    },
+    incidentState: {
+      open: 'Ouvert',
+      closed: 'Clos',
+    },
+    closeCause: {
+      resolved: 'Résolu par son émetteur',
+      member: 'Clos par un Membre',
+      quiet_period: 'Période de calme écoulée',
+    },
     failureClass: {
       transient: 'indisponibilité passagère',
       auth: 'identifiants refusés',
@@ -66,6 +86,7 @@ export const fr: Messages = {
   },
 
   apiErrors: {
+    incident_not_found: 'Cet Incident n’existe pas.',
     invalid_credentials: 'Email ou mot de passe incorrect.',
     setup_completed: 'Le premier compte existe déjà : connectez-vous.',
     email_already_used: 'Un Membre utilise déjà cet email.',
@@ -78,9 +99,11 @@ export const fr: Messages = {
     feedback_not_triaged: 'Ce Retour n’est pas encore trié : il n’a pas de Verdict à corriger.',
     delivery_not_found: 'Cet Envoi n’existe plus.',
     delivery_not_replayable:
-      'Cet Envoi est en cours ou retenu par sa Destination Suspendue : il ne se rejoue pas maintenant.',
+      'Cet Envoi est en cours, retenu par sa Destination Suspendue, ou est un Envoi d’Incident déjà livré : il ne se rejoue pas maintenant.',
     feedback_not_redispatchable:
       'Ce Retour ne peut pas être redispatché : seul un Retour Trié ou Dispatché se redispatche.',
+    incident_not_redispatchable:
+      'Cet Incident ne peut pas être redispatché : seul un Incident Ouvert se redispatche.',
     destination_not_found: 'Cette Destination n’existe plus.',
     unknown_destination_type: 'Ce type de Destination n’est pas pris en charge par cette Instance.',
     session_required: 'Votre session a expiré : reconnectez-vous.',
@@ -355,6 +378,7 @@ export const fr: Messages = {
       none: 'Aucun Envoi.',
       attempts: (count) => `${count} tentative${s(count)}`,
       replay: 'Rejouer',
+      replayLabel: (destination) => `Rejouer l’Envoi à ${destination}`,
       lastError: (error) => `Dernière erreur : ${error}`,
     },
     redispatch: {
@@ -388,6 +412,7 @@ export const fr: Messages = {
     fallbackTitle: 'Projet',
     sections: 'Sections du Projet',
     destinationsTab: 'Destinations',
+    incidentsTab: 'Incidents',
     settingsTab: 'Réglages',
     keys: 'Clés',
     publicKey: 'Clé publique',
@@ -411,14 +436,117 @@ export const fr: Messages = {
     originsHelp:
       'Le Widget n’est accepté que depuis ces origines (schéma://hôte[:port], sans chemin).',
     saveOrigins: 'Enregistrer les origines',
+    incidents: {
+      title: 'Incidents',
+      help: 'Votre application signale un Incident quand quelque chose se passe mal de son côté, depuis son serveur uniquement, avec la clé secrète.',
+      defaultLevel: 'Niveau par défaut',
+      defaultLevelHelp:
+        'Le Niveau d’un Incident dont l’émetteur n’en déclare aucun, quand le Juge n’en donne aucun à temps.',
+      quietPeriod: 'Période de calme (minutes)',
+      quietPeriodHelp:
+        'Un Incident sans nouvelle Occurrence pendant cette durée se clôt de lui-même. Vide : la valeur par défaut de l’Instance (une heure, sauf si NUDGE_INCIDENT_QUIET_PERIOD_MS en fixe une autre). Une Occurrence peut fixer la sienne avec quietPeriod, en secondes.',
+      openingCap: 'Plafond d’ouvertures (Incidents par minute)',
+      openingCapHelp:
+        'Au-delà de ce nombre d’Incidents ouverts en une minute, les suivants sont enregistrés mais Retenus : ils ne partent vers aucune Destination. La Destination des alertes est prévenue une fois par tempête, et chaque Destination concernée reçoit un seul récapitulatif une fois le Projet repassé sous son plafond. Vide : la valeur par défaut de l’Instance (20, sauf si NUDGE_INCIDENT_OPENING_CAP en fixe une autre).',
+      save: 'Enregistrer les réglages des Incidents',
+      example: 'Exemple de requête',
+      exampleHelp:
+        'Placez la clé secrète dans la variable d’environnement NUDGE_SECRET_KEY du serveur qui signale. Un même titre et un même Environnement sont regroupés en un seul Incident ; une empreinte regroupe des titres différents.',
+    },
+  },
+
+  incidents: {
+    views: 'Vues',
+    view: {
+      all: 'Tous',
+      open: 'Ouverts',
+      closed: 'Clos',
+    },
+    filters: 'Filtres',
+    filter: { level: 'Niveau', environment: 'Environnement', held: 'Dispatch' },
+    anyLevel: 'Tous',
+    anyEnvironment: 'Tous',
+    anyDispatch: 'Tous',
+    heldOnly: 'Retenus uniquement',
+    shown: (count: number, more: boolean) =>
+      `${count} Incident${s(count)} affiché${s(count)}${more ? ', d’autres à charger' : ''}.`,
+    noMatch: 'Aucun Incident ne correspond à ces filtres.',
+    noneInView: { open: 'Aucun Incident Ouvert.', closed: 'Aucun Incident Clos.' },
+    clearFilters: 'Effacer les filtres',
+    invalidFilters: 'Cette adresse porte des filtres que nudge ne connaît pas.',
+    emptyTitle: 'Aucun Incident signalé pour l’instant.',
+    emptyHelp:
+      'Les Incidents arrivent ici quand le serveur du Projet signale un problème, avec sa clé secrète.',
+    emptyAction: 'Voir comment en signaler un',
+    showMore: 'Afficher plus',
+    occurrences: (count: number) => `${count} Occurrence${s(count)}`,
+    noEnvironment: 'Aucun Environnement',
+    lastSeen: 'Vu pour la dernière fois',
+    held: 'Retenu',
+    heldTitle: 'Ouvert au-delà du Plafond d’ouvertures du Projet : non dispatché.',
+  },
+
+  incident: {
+    backToList: 'Retour aux Incidents',
+    properties: 'Incident',
+    state: 'État',
+    level: 'Niveau',
+    levelOrigin: 'Origine du Niveau',
+    environment: 'Environnement',
+    occurrences: 'Occurrences',
+    firstSeen: 'Vu pour la première fois',
+    lastSeen: 'Vu pour la dernière fois',
+    closed: 'Clos',
+    fingerprint: 'Empreinte',
+    firstReport: 'Première Occurrence',
+    lastReport: 'Dernière Occurrence',
+    onlyReport: 'Occurrence',
+    title: 'Titre',
+    message: 'Message',
+    declaredLevel: 'Niveau déclaré',
+    notDeclared: 'Non déclaré',
+    receivedAt: 'Reçue',
+    context: 'Contexte',
+    noContext: 'Aucun contexte.',
+    noMessage: 'Aucun message.',
+    deliveries: 'Envois',
+    heldHelp:
+      'Ouvert pendant que le Projet dépassait son Plafond d’ouvertures : enregistré, mais envoyé à aucune Destination. Redispatchez-le s’il compte ; les Destinations concernées reçoivent à la place un récapitulatif des Incidents retenus.',
+    heldClosedHelp:
+      'Ouvert pendant que le Projet dépassait son Plafond d’ouvertures : enregistré, mais envoyé à aucune Destination. Clos, il ne peut plus être Redispatché.',
+    close: {
+      action: 'Clore l’Incident',
+      help: 'Clore l’Incident quand vous savez que le problème est terminé : ses Destinations sont prévenues, et une nouvelle Occurrence ouvrira un nouvel Incident.',
+      question:
+        'L’Incident sera Clos définitivement et ses Destinations prévenues. Une nouvelle Occurrence ouvrira un nouvel Incident. Le clore ?',
+      done: 'Incident clos : ses Destinations sont en train d’être prévenues.',
+    },
+    deletion: {
+      title: 'Suppression',
+      help: 'Efface définitivement cet Incident et l’historique de ses Envois, par exemple quand des données personnelles se sont glissées dans un rapport. Ce qui a déjà été créé chez les Destinations (issues, messages) n’est pas touché, et une nouvelle Occurrence ouvrira un nouvel Incident.',
+      question: 'L’Incident sera effacé définitivement. Supprimer ?',
+    },
+    redispatch: {
+      help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
+      action: 'Redispatcher',
+      pending: 'Redispatch en cours…',
+      noneCreated: 'Aucune autre Destination ne retient cet Incident.',
+      created: (count) => `${count} Envoi${s(count)} créé${s(count)}.`,
+    },
   },
 
   destinations: {
     add: 'Ajouter une Destination',
-    intro: 'Chaque Retour Trié part vers toutes les Destinations dont le Filtre le retient.',
-    emptyTitle: 'Aucune Destination : les Retours Triés ne partent nulle part.',
+    intro:
+      'Chaque Retour Trié part vers toutes les Destinations dont le Filtre de Retours le retient, et chaque Incident vers toutes celles dont le Filtre d’Incidents le retient.',
+    noFeedback: 'Aucun Retour',
+    noIncident: 'Aucun Incident',
+    incidentLevelOrMore: (level) => `Incidents : ${level} ou plus`,
+    incidentEnvironments: (environments) => `en ${environments}`,
+    incidentConditions: (count) => `${count} condition${s(count)} de contexte`,
+    emptyTitle: 'Aucune Destination : les Retours Triés et les Incidents ne partent nulle part.',
     emptyHelp:
-      'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack ou Discord, ou votre propre webhook.',
+      'Ajoutez-en une ci-dessous : un dépôt GitHub, une équipe Linear, un salon Slack, Discord ou Telegram, ou votre propre webhook.',
     copySecretNow: (name) =>
       `Copiez maintenant le secret de « ${name} » : il ne sera plus jamais affiché.`,
     anySeverity: 'toute Gravité',
@@ -454,6 +582,28 @@ export const fr: Messages = {
       noMinimum: 'Aucune',
       minimumSeverityHelp:
         'Un Retour sans Gravité (nudge sans Juge) n’atteint aucune Gravité minimale.',
+      feedbackFilter: 'Filtre de Retours',
+      feedbackFilterOn: 'Recevoir les Retours',
+      incidentFilter: 'Filtre d’Incidents',
+      incidentFilterOn: 'Recevoir les Incidents',
+      incidentFilterOff: 'Désactivé : cette Destination ne reçoit aucun Incident.',
+      minimumLevel: 'Niveau minimal',
+      environments: 'Environnements',
+      environmentsHelp:
+        'Séparés par des virgules. Vide : tous les Environnements. Un Incident sans Environnement ne passe que si la liste est vide.',
+      conditions: 'Conditions sur le contexte',
+      conditionsHelp:
+        'Toutes les conditions doivent être remplies. Un Incident dont le contexte n’a pas la clé est refusé.',
+      noCondition: 'Aucune condition.',
+      conditionKey: 'Clé du contexte',
+      conditionValues: 'Vaut l’une de',
+      conditionValuesHelp: 'Séparées par des virgules.',
+      addCondition: 'Ajouter une condition',
+      removeCondition: 'Retirer',
+      removeConditionLabel: (key) => `Retirer la condition sur ${key}`,
+      environmentsPlaceholder: 'production, staging',
+      conditionKeyPlaceholder: 'service',
+      conditionValuesPlaceholder: 'checkout, billing',
     },
   },
 
@@ -473,21 +623,40 @@ export const fr: Messages = {
         title: 'Payload',
         show: 'Ce que reçoit votre récepteur',
         event: 'Évènement',
-        events: { feedback: 'Retour', alert: 'Alerte', ping: 'Ping' },
+        events: {
+          feedback: 'Retour',
+          'incident.opened': 'Incident ouvert',
+          'incident.raised': 'Incident aggravé',
+          'incident.closed': 'Incident clos',
+          'incidents.held': 'Incidents retenus',
+          alert: 'Alerte',
+          ping: 'Ping',
+        },
         eventHelp: {
           feedback:
             'Chaque Retour dispatché, et le bouton Tester avec isTest: true. Le texte est brut : encodez-le pour votre cible.',
+          'incident.opened':
+            'Un Incident qui s’ouvre, avec son identifiant stable : suivez l’Incident grâce à lui. Son titre, son message, son Environnement et son contexte sont bruts : encodez-les pour votre cible.',
+          'incident.raised':
+            'Un Incident dont le Niveau a assez monté pour atteindre cette Destination : elle ne l’avait pas reçu à son Niveau précédent. Chaque Destination reçoit un seul événement opened ou raised par Incident.',
+          'incident.closed':
+            'L’Incident est clos : résolu par son émetteur, clos par un Membre, ou silencieux au-delà de sa Période de calme (incident.closure). Il arrive sur l’Envoi de son ouverture. Un identifiant jamais vu est un Incident ouvert puis clos pendant que cette Destination était injoignable : il est envoyé une seule fois.',
+          'incidents.held':
+            'Le récapitulatif d’une tempête : le Projet a ouvert des Incidents plus vite que son Plafond d’ouvertures, et ceux au-delà ont été retenus. Une fois le Projet repassé sous son plafond, un seul récapitulatif (nombre, période, lien) arrive à la place des Incidents que cette Destination aurait reçus.',
           alert:
-            'Une alerte pour les Membres : un Retour En revue ou une Destination Suspendue. Elle ne porte jamais le texte d’un Retour.',
+            'Une alerte pour les Membres : un Retour En revue, une Destination Suspendue, ou un Projet qui ouvre des Incidents plus vite que son Plafond d’ouvertures. Elle ne porte jamais le texte d’un Retour.',
           ping: 'La vérification de santé, tant que la Destination est Suspendue : répondez par un 2xx pour reprendre ses Envois.',
         },
         request: 'Requête',
         headers: 'En-têtes',
         body: 'Exemple de corps',
         headerHelp: {
-          event: 'feedback, alert ou ping.',
+          event:
+            'feedback, incident.opened, incident.raised, incident.closed, incidents.held, alert ou ping.',
           delivery:
             'L’identifiant stable de l’Envoi : ignorez une nouvelle tentative déjà traitée.',
+          summary:
+            'L’identifiant stable du récapitulatif : ignorez une nouvelle tentative déjà traitée.',
           alert: 'L’identifiant stable de l’alerte : ignorez une nouvelle tentative déjà traitée.',
           timestamp:
             'Secondes Unix à la signature : refusez un appel vieux de plus de quelques minutes.',
@@ -540,6 +709,19 @@ export const fr: Messages = {
         'Le nom du label tel qu’il s’affiche dans Linear, de l’équipe ou de l’espace de travail. Laissé vide : aucun label. Un label introuvable suspend la Destination.',
       summary: (team) => `Équipe ${team}`,
     },
+    telegram: {
+      botToken: 'Jeton du bot',
+      botTokenHelp:
+        'Dans Telegram, envoyez /newbot à @BotFather et collez le jeton qu’il vous donne. Stocké chiffré, jamais réaffiché.',
+      chatId: 'Identifiant du chat',
+      chatIdHelp:
+        'Ajoutez le bot au groupe ou au canal (administrateur pour un canal), postez-y un message, puis ouvrez api.telegram.org/bot<jeton>/getUpdates : l’identifiant est chat.id, -100… pour un supergroupe ou un canal. Un canal public peut se donner en @nom ; une personne doit d’abord démarrer le bot.',
+      topicId: 'Sujet du forum (facultatif)',
+      topicIdHelp:
+        'Dans un groupe à sujets, l’identifiant du sujet : le dernier nombre d’un lien vers le sujet (t.me/c/…/7). Vide : le chat lui-même.',
+      summary: (chatId, topicId) =>
+        topicId === null ? `Chat ${chatId}` : `Chat ${chatId}, sujet ${topicId}`,
+    },
   },
 
   settings: {
@@ -553,19 +735,19 @@ export const fr: Messages = {
       retention: 'Rétention',
     },
     retention: {
-      title: 'Rétention des Retours',
+      title: 'Rétention',
       status: {
         unlimited: 'Illimitée',
         days: (days) => (days === 1 ? '1 jour' : `${days} jours`),
       },
-      unlimited: 'Rétention illimitée : aucun Retour n’est effacé automatiquement.',
+      unlimited: 'Rétention illimitée : aucun Retour ni Incident n’est effacé automatiquement.',
       limited: (days) =>
-        `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures.`,
+        `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures, de même que les Incidents vus pour la dernière fois il y a plus de ${days} jours.`,
       label: 'Durée de rétention (jours)',
       help: 'Vide : rétention illimitée. L’effacement est définitif.',
       save: 'Enregistrer la rétention',
       confirm: (days) =>
-        `Les Retours de plus de ${days} jours et leurs Captures seront effacés définitivement à la prochaine purge. Enregistrer ?`,
+        `Les Retours de plus de ${days} jours et leurs Captures, ainsi que les Incidents vus pour la dernière fois il y a plus de ${days} jours, seront effacés définitivement à la prochaine purge. Enregistrer ?`,
     },
     alertDestination: {
       title: 'Destination d’alerte',

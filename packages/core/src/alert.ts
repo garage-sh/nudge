@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { FailureClass } from '@nudge/shared';
+import type { PresentedMessage } from './presentation.js';
 
 /**
  * Member alerts: what a Destination adapter receives when the Instance's Alert
- * destination must warn that a Feedback awaits review or that a Destination is
- * Suspended. An alert never carries a Feedback's text: a Feedback In review is
- * suspected of Manipulation, it is read in the dashboard.
+ * destination must warn that a Feedback awaits review, that a Destination is
+ * Suspended, or that a Project opens Incidents faster than its Opening cap. An alert
+ * never carries a Feedback's text: a Feedback In review is suspected of Manipulation,
+ * it is read in the dashboard.
  */
 
 interface AlertBase {
@@ -39,31 +41,29 @@ export interface DestinationSuspendedAlert extends AlertBase {
   };
 }
 
-export type Alert = FeedbackInReviewAlert | DestinationSuspendedAlert;
-export type AlertEvent = Alert['event'];
-
-/** An alert put into words, shared by the adapters that write a message. */
-export interface PresentedAlert {
-  /** Short title, in plain text (the name of the Project or the Destination is in it). */
-  readonly title: string;
-  /** What happened and what is expected of the Member, in plain text written by nudge. */
-  readonly summary: string;
-  /**
-   * Details in plain text, to be encoded by each adapter for its target; `long`: a text
-   * that deserves the full width (the target's refusal).
-   */
-  readonly details: readonly {
-    readonly label: string;
-    readonly value: string;
-    readonly long?: boolean;
-  }[];
+/**
+ * A Project went past its Opening cap: the Incidents it opens are Held, not dispatched,
+ * until it is back under its cap. One alert per storm.
+ */
+export interface IncidentStormAlert extends AlertBase {
+  readonly event: 'incident_storm';
+  readonly storm: {
+    /** Incidents Held so far in this storm (at least the one that started it). */
+    readonly held: number;
+    /** The Opening cap the Project went past, in Incidents per minute. */
+    readonly cap: number;
+    readonly startedAt: Date;
+  };
 }
+
+export type Alert = FeedbackInReviewAlert | DestinationSuspendedAlert | IncidentStormAlert;
+export type AlertEvent = Alert['event'];
 
 /**
  * The text of an alert, identical for every target: each adapter only encodes it
  * (escaping, mentions, length limits).
  */
-export function presentAlert(alert: Alert): PresentedAlert {
+export function presentAlert(alert: Alert): PresentedMessage {
   const testPrefix = alert.isTest ? 'Test · ' : '';
   if (alert.event === 'feedback_in_review') {
     return {
@@ -73,6 +73,19 @@ export function presentAlert(alert: Alert): PresentedAlert {
       details: [
         { label: 'Project', value: alert.project.name },
         { label: 'Feedback', value: alert.feedback.id },
+      ],
+    };
+  }
+  if (alert.event === 'incident_storm') {
+    const { storm } = alert;
+    return {
+      title: `${testPrefix}Incident storm · ${alert.project.name}`,
+      summary:
+        'The Project opens Incidents faster than its Opening cap: the ones past it are recorded but Held, and go to no Destination. Each Destination concerned receives a single summary once the Project is back under its cap.',
+      details: [
+        { label: 'Project', value: alert.project.name },
+        { label: 'Opening cap', value: `${storm.cap} per minute` },
+        { label: 'Held so far', value: String(storm.held) },
       ],
     };
   }

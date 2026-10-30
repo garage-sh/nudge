@@ -3,6 +3,7 @@ import 'reflect-metadata';
 export {
   type CaptureSweepOptions,
   type ConcurrencyOptions,
+  type IncidentOptions,
   type SweepOptions,
   type PurgeOptions,
   type SuspensionOptions,

@@ -1166,6 +1166,147 @@ button.danger {
   }
 }
 
+/* An Incident's panels: a help text keeps its distance from the list it follows or explains */
+.incident .panel > .properties + .help,
+.incident .panel > .help + .muted {
+  margin-top: 0.75rem;
+}
+
+/* A Project's Incidents: the Level first, then what is going wrong */
+.incident-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 120px 110px 132px 100px;
+  gap: 0.9rem;
+  align-items: center;
+  min-height: 42px;
+  padding: 0.45rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-rows > .incident-row:first-child {
+  border-top: 0;
+}
+
+.incident-row .summary {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.incident-row .row-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.incident-row[data-state='closed'] .row-link {
+  color: var(--muted);
+}
+
+.incident-row .environment,
+.incident-row .occurrences {
+  color: var(--muted);
+  font-size: var(--t-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-row .occurrences,
+.incident-row time {
+  font-variant-numeric: tabular-nums;
+}
+
+.incident-row .states {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* Why a Closed Incident closed, under its state */
+.incident-row .close-cause {
+  max-width: 100%;
+  font-size: var(--t-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-row time {
+  color: var(--muted);
+  font-size: var(--t-s);
+  text-align: right;
+  white-space: nowrap;
+}
+
+@container list (max-width: 760px) {
+  /* The title takes the width left by the date; the rest shares the second line. */
+  .incident-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 1rem;
+  }
+
+  .incident-row .summary {
+    grid-column: 1 / 4;
+    grid-row: 1;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .incident-row time {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .incident-row .level {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .incident-row .environment {
+    grid-column: 2;
+    grid-row: 2;
+    max-width: 10rem;
+  }
+
+  .incident-row .occurrences {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .incident-row .states {
+    grid-column: 4;
+    grid-row: 2;
+  }
+}
+
+/* Critical is solid: it stands out from Error without relying on color alone. */
+.level[data-level='critical'] .badge {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.incident .page-header h1 {
+  overflow-wrap: anywhere;
+}
+
+.incident .report-text {
+  white-space: pre-wrap;
+}
+
+.incident code {
+  overflow-wrap: anywhere;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;
@@ -1669,8 +1810,55 @@ fieldset.field legend {
   color: var(--muted);
 }
 
+.destination-filters {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
 .destination .actions {
   gap: 0.4rem;
+}
+
+/* A Filter of the Destination form: a switch, then its settings. */
+fieldset.filter-group {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.75rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+fieldset.filter-group > legend {
+  padding: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+fieldset.filter-group > .check {
+  justify-self: start;
+}
+
+fieldset.conditions-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.conditions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.condition {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: 0.5rem;
+  align-items: end;
 }
 
 .problem {
@@ -2110,7 +2298,16 @@ fieldset.segmented {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .destination-filter {
+  .destination-filters {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .condition {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .condition > .field:nth-child(2) {
     grid-column: 1 / -1;
     grid-row: 2;
   }
@@ -2352,4 +2549,10 @@ kbd {
   margin-right: 0.4rem;
   font-size: 1.1em;
   line-height: 1;
+}
+
+/* Why and when an Incident closed, one under the other */
+.closure {
+  display: flex;
+  flex-direction: column;
 }

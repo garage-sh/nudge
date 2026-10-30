@@ -2,13 +2,19 @@ import {
   SEVERITIES,
   DESTINATION_TYPES,
   FEEDBACK_TYPES,
+  FILTER_ALL,
+  INCIDENT_FILTER_ALL,
+  LEVELS,
   type FilterInput,
   type FilterView,
+  type IncidentFilterInput,
+  type IncidentFilterView,
+  type Level,
   type Severity,
   type DestinationType,
   type FeedbackType,
 } from '@nudge/shared';
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useT } from '../../i18n/index.js';
 import { ErrorMessage, Field, PanelHeader } from '../../layout/ui.js';
 import { DESTINATION_FORMS, TypeIcon } from './types/index.js';
@@ -17,7 +23,10 @@ export interface DestinationValues {
   readonly type: DestinationType;
   readonly name: string;
   readonly config: Record<string, unknown>;
-  readonly filter: FilterInput;
+  /** `null`: the Feedback Filter is off. */
+  readonly filter: FilterInput | null;
+  /** `null`: the Incident Filter is off. */
+  readonly incidentFilter: IncidentFilterInput | null;
   /** Only the secrets typed in: missing, the saved ones are kept. */
   readonly secrets?: Record<string, string>;
 }
@@ -48,7 +57,10 @@ export function DestinationForm({
   headingId?: string;
   /** The saved state, beside the title (`PanelHeader`). */
   status?: ReactNode;
-  initial: Omit<DestinationValues, 'secrets' | 'filter'> & { readonly filter: FilterView };
+  initial: Omit<DestinationValues, 'secrets' | 'filter' | 'incidentFilter'> & {
+    readonly filter: FilterView | null;
+    readonly incidentFilter?: IncidentFilterView | null;
+  };
   typeEditable: boolean;
   savedSecrets?: readonly string[];
   submitLabel: string;
@@ -68,9 +80,13 @@ export function DestinationForm({
   const [name, setName] = useState(initial.name);
   const [config, setConfig] = useState<Record<string, unknown>>({ ...initial.config });
   const [secrets, setSecrets] = useState<Record<string, string>>({});
-  const [types, setTypes] = useState<readonly FeedbackType[]>(initial.filter.types);
+  const [feedbackOn, setFeedbackOn] = useState(initial.filter !== null);
+  const [types, setTypes] = useState<readonly FeedbackType[]>((initial.filter ?? FILTER_ALL).types);
   const [minimumSeverity, setMinimumSeverity] = useState<Severity | null>(
-    initial.filter.minimumSeverity,
+    (initial.filter ?? FILTER_ALL).minimumSeverity,
+  );
+  const [incidentFilter, setIncidentFilter] = useState<IncidentFilterDraft>(() =>
+    draftOf(initial.incidentFilter ?? null),
   );
   const { Fields } = DESTINATION_FORMS[type];
 
@@ -92,7 +108,8 @@ export function DestinationForm({
       type,
       name,
       config,
-      filter: { types: [...types], minimumSeverity },
+      filter: feedbackOn ? { types: [...types], minimumSeverity } : null,
+      incidentFilter: incidentFilterOf(incidentFilter),
       ...(Object.keys(typed).length > 0 ? { secrets: typed } : {}),
     });
   };
@@ -139,37 +156,57 @@ export function DestinationForm({
         purpose={withoutNameOrFilter ? 'alert' : 'feedback'}
       />
       {withoutNameOrFilter ? null : (
-        <>
-          <fieldset className="field">
-            <legend>{t.destinations.form.acceptedTypes}</legend>
-            {FEEDBACK_TYPES.map((feedbackType) => (
-              <label key={feedbackType} className="check">
-                <input
-                  type="checkbox"
-                  checked={types.includes(feedbackType)}
-                  onChange={() => toggle(feedbackType)}
-                />
-                {t.labels.feedbackType[feedbackType]}
-              </label>
-            ))}
-          </fieldset>
-          <div className="field">
-            <label htmlFor={`${id}-severity`}>{t.destinations.form.minimumSeverity}</label>
-            <select
-              id={`${id}-severity`}
-              value={minimumSeverity ?? ''}
-              onChange={(e) => setMinimumSeverity((e.target.value || null) as Severity | null)}
-            >
-              <option value="">{t.destinations.form.noMinimum}</option>
-              {SEVERITIES.map((severity) => (
-                <option key={severity} value={severity}>
-                  {t.labels.severity[severity]}
-                </option>
-              ))}
-            </select>
-            <p className="help">{t.destinations.form.minimumSeverityHelp}</p>
-          </div>
-        </>
+        <fieldset className="filter-group">
+          <legend>{t.destinations.form.feedbackFilter}</legend>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={feedbackOn}
+              onChange={(e) => setFeedbackOn(e.target.checked)}
+            />
+            {t.destinations.form.feedbackFilterOn}
+          </label>
+          {feedbackOn ? (
+            <>
+              <fieldset className="field">
+                <legend>{t.destinations.form.acceptedTypes}</legend>
+                {FEEDBACK_TYPES.map((feedbackType) => (
+                  <label key={feedbackType} className="check">
+                    <input
+                      type="checkbox"
+                      checked={types.includes(feedbackType)}
+                      onChange={() => toggle(feedbackType)}
+                    />
+                    {t.labels.feedbackType[feedbackType]}
+                  </label>
+                ))}
+              </fieldset>
+              <div className="field">
+                <label htmlFor={`${id}-severity`}>{t.destinations.form.minimumSeverity}</label>
+                <select
+                  id={`${id}-severity`}
+                  value={minimumSeverity ?? ''}
+                  onChange={(e) => setMinimumSeverity((e.target.value || null) as Severity | null)}
+                >
+                  <option value="">{t.destinations.form.noMinimum}</option>
+                  {SEVERITIES.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {t.labels.severity[severity]}
+                    </option>
+                  ))}
+                </select>
+                <p className="help">{t.destinations.form.minimumSeverityHelp}</p>
+              </div>
+            </>
+          ) : null}
+        </fieldset>
+      )}
+      {withoutNameOrFilter ? null : (
+        <IncidentFilterFields
+          idPrefix={`${id}-incident`}
+          draft={incidentFilter}
+          onChange={setIncidentFilter}
+        />
       )}
       <ErrorMessage error={error} />
       <div className="actions">
@@ -184,5 +221,177 @@ export function DestinationForm({
         {actions}
       </div>
     </form>
+  );
+}
+
+/** A value with at least one character other than a space or a comma. */
+const NOT_BLANK = '.*[^\\s,].*';
+
+/** The Incident Filter as the form edits it: lists typed as comma-separated text. */
+interface IncidentFilterDraft {
+  readonly on: boolean;
+  readonly minimumLevel: Level;
+  readonly environments: string;
+  readonly conditions: readonly { readonly key: string; readonly values: string }[];
+}
+
+const draftOf = (filter: IncidentFilterView | null): IncidentFilterDraft => {
+  const { minimumLevel, environments, conditions } = filter ?? INCIDENT_FILTER_ALL;
+  return {
+    on: filter !== null,
+    minimumLevel,
+    environments: environments.join(', '),
+    conditions: conditions.map(({ key, values }) => ({ key, values: values.join(', ') })),
+  };
+};
+
+/** Comma-separated text to a list; blanks dropped (the api validates the rest). */
+const listOf = (text: string): string[] =>
+  text
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+const incidentFilterOf = (draft: IncidentFilterDraft): IncidentFilterInput | null =>
+  draft.on
+    ? {
+        minimumLevel: draft.minimumLevel,
+        environments: listOf(draft.environments),
+        // A row left empty is no condition.
+        conditions: draft.conditions
+          .filter(({ key, values }) => key.trim() || values.trim())
+          .map(({ key, values }) => ({ key: key.trim(), values: listOf(values) })),
+      }
+    : null;
+
+/**
+ * The Incident Filter: off, or minimum Level, accepted Environments and context
+ * conditions "key is one of these values", all required.
+ */
+function IncidentFilterFields({
+  idPrefix,
+  draft,
+  onChange,
+}: {
+  idPrefix: string;
+  draft: IncidentFilterDraft;
+  onChange: (draft: IncidentFilterDraft) => void;
+}) {
+  const t = useT();
+  const f = t.destinations.form;
+  const set = (fields: Partial<IncidentFilterDraft>) => onChange({ ...draft, ...fields });
+  // A row added takes focus on its key; a row removed hands it to "Add a condition".
+  const [focusKey, setFocusKey] = useState<number | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusKey === null) return;
+    document.getElementById(`${idPrefix}-key-${focusKey}`)?.focus();
+    setFocusKey(null);
+  }, [focusKey, idPrefix]);
+  const setCondition = (
+    index: number,
+    fields: Partial<IncidentFilterDraft['conditions'][number]>,
+  ) =>
+    set({
+      conditions: draft.conditions.map((condition, other) =>
+        other === index ? { ...condition, ...fields } : condition,
+      ),
+    });
+  return (
+    <fieldset className="filter-group">
+      <legend>{f.incidentFilter}</legend>
+      <label className="check">
+        <input type="checkbox" checked={draft.on} onChange={(e) => set({ on: e.target.checked })} />
+        {f.incidentFilterOn}
+      </label>
+      {draft.on ? (
+        <>
+          <div className="field">
+            <label htmlFor={`${idPrefix}-level`}>{f.minimumLevel}</label>
+            <select
+              id={`${idPrefix}-level`}
+              value={draft.minimumLevel}
+              onChange={(e) => set({ minimumLevel: e.target.value as Level })}
+            >
+              {LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {t.labels.level[level]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Field
+            id={`${idPrefix}-environments`}
+            label={f.environments}
+            value={draft.environments}
+            placeholder={f.environmentsPlaceholder}
+            help={f.environmentsHelp}
+            onChange={(e) => set({ environments: e.target.value })}
+          />
+          <fieldset className="field conditions-field">
+            <legend>{f.conditions}</legend>
+            <p className="help">{f.conditionsHelp}</p>
+            {draft.conditions.length === 0 ? <p className="muted">{f.noCondition}</p> : null}
+            <ul className="conditions">
+              {draft.conditions.map((condition, index) => (
+                <li key={index} className="condition">
+                  {/* A row left empty is no condition; a row half filled is refused here. */}
+                  <Field
+                    id={`${idPrefix}-key-${index}`}
+                    label={f.conditionKey}
+                    value={condition.key}
+                    placeholder={f.conditionKeyPlaceholder}
+                    required={condition.values.trim() !== ''}
+                    pattern={NOT_BLANK}
+                    onChange={(e) => setCondition(index, { key: e.target.value })}
+                  />
+                  <Field
+                    id={`${idPrefix}-values-${index}`}
+                    label={f.conditionValues}
+                    value={condition.values}
+                    placeholder={f.conditionValuesPlaceholder}
+                    required={condition.key.trim() !== ''}
+                    pattern={NOT_BLANK}
+                    aria-describedby={`${idPrefix}-values-help`}
+                    onChange={(e) => setCondition(index, { values: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="ghost"
+                    aria-label={f.removeConditionLabel(condition.key || f.conditionKey)}
+                    onClick={() => {
+                      set({ conditions: draft.conditions.filter((_, other) => other !== index) });
+                      addButton.current?.focus();
+                    }}
+                  >
+                    {f.removeCondition}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {draft.conditions.length > 0 ? (
+              <p className="help" id={`${idPrefix}-values-help`}>
+                {f.conditionValuesHelp}
+              </p>
+            ) : null}
+            <div className="actions">
+              <button
+                ref={addButton}
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  set({ conditions: [...draft.conditions, { key: '', values: '' }] });
+                  setFocusKey(draft.conditions.length);
+                }}
+              >
+                {f.addCondition}
+              </button>
+            </div>
+          </fieldset>
+        </>
+      ) : (
+        <p className="help">{f.incidentFilterOff}</p>
+      )}
+    </fieldset>
   );
 }

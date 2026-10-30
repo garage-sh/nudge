@@ -1,17 +1,25 @@
-import type { TriageAnswers } from '@nudge/core';
+import type { IncidentCondition, TriageAnswers } from '@nudge/core';
 import {
   AUTHOR_TRUST_LEVELS,
   DELIVERY_STATUSES,
+  DELIVERY_SUBJECTS,
   DESTINATION_STATES,
   FEEDBACK_STATES,
   FEEDBACK_TYPES,
+  DEFAULT_LEVEL,
+  INCIDENT_CLOSE_CAUSES,
+  INCIDENT_DISPATCH_MOMENTS,
+  INCIDENT_STATES,
   JUDGE_PROVIDERS,
+  LEVEL_ORIGINS,
+  LEVELS,
   SEVERITIES,
   SOURCES,
   type Author,
   type SmtpSecurity,
   type CaptureType,
   type Context,
+  type IncidentReport,
 } from '@nudge/shared';
 import { relations, sql } from 'drizzle-orm';
 import {
@@ -26,6 +34,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -36,7 +45,17 @@ export const feedbackStateEnum = pgEnum('feedback_state', FEEDBACK_STATES);
 export const authorTrustEnum = pgEnum('author_trust', AUTHOR_TRUST_LEVELS);
 export const destinationStateEnum = pgEnum('destination_state', DESTINATION_STATES);
 export const deliveryStatusEnum = pgEnum('delivery_status', DELIVERY_STATUSES);
+export const deliverySubjectEnum = pgEnum('delivery_subject', DELIVERY_SUBJECTS);
 export const judgeProviderEnum = pgEnum('judge_provider', JUDGE_PROVIDERS);
+/** Declared in order, from least to most serious: Postgres compares the values that way. */
+export const levelEnum = pgEnum('level', LEVELS);
+export const levelOriginEnum = pgEnum('level_origin', LEVEL_ORIGINS);
+export const incidentStateEnum = pgEnum('incident_state', INCIDENT_STATES);
+export const incidentCloseCauseEnum = pgEnum('incident_close_cause', INCIDENT_CLOSE_CAUSES);
+export const incidentDispatchMomentEnum = pgEnum(
+  'incident_dispatch_moment',
+  INCIDENT_DISPATCH_MOMENTS,
+);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -55,6 +74,18 @@ export const projects = pgTable('projects', {
   secretKeyHash: text('secret_key_hash').notNull().unique(),
   /** Origins (`https://example.com`) from which the public key is accepted, normalized. */
   allowedOrigins: text('allowed_origins').array().notNull().default([]),
+  /** The Level of an Incident whose sender declared none. */
+  defaultLevel: levelEnum('default_level').notNull().default(DEFAULT_LEVEL),
+  /**
+   * Seconds an Incident stays Open without a new Occurrence, unless the Occurrence sets
+   * its own; `null`: the Instance default (`NUDGE_INCIDENT_QUIET_PERIOD_MS`).
+   */
+  quietPeriod: integer('quiet_period'),
+  /**
+   * Incidents the Project may open per minute and still dispatch; past it, they are
+   * Held. `null`: the Instance default (`NUDGE_INCIDENT_OPENING_CAP`).
+   */
+  openingCap: integer('opening_cap'),
   ...timestamps,
 });
 
@@ -132,6 +163,110 @@ export const feedbacks = pgTable(
 );
 
 /**
+ * An Incident: one row whatever the number of its Occurrences, which are not stored.
+ * It keeps their counter, the first and last instants, and the first and last reports
+ * in full, so the rows an Incident costs stay bounded whatever its sender does.
+ */
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    state: incidentStateEnum('state').notNull().default('open'),
+    /** Declared by the sender, or derived from the Project, the title and the Environment. */
+    fingerprint: text('fingerprint').notNull(),
+    /** Title and Environment of the Occurrence that opened the Incident. */
+    title: text('title').notNull(),
+    environment: text('environment'),
+    level: levelEnum('level').notNull(),
+    levelOrigin: levelOriginEnum('level_origin').notNull(),
+    /**
+     * Opened without a declared Level, the Incident waits for the worker to settle it
+     * (the Judge's, within a bounded wait, otherwise the default one, already in `level`):
+     * its Dispatch `opened` has not run yet.
+     */
+    awaitingLevel: boolean('awaiting_level').notNull().default(false),
+    /**
+     * Opened past its Project's Opening cap: recorded but not dispatched (no Delivery
+     * is created for it), until a Member Redispatches it, which releases it.
+     */
+    held: boolean('held').notNull().default(false),
+    /** Occurrences absorbed, the first one included. */
+    occurrences: integer('occurrences').notNull().default(1),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+    firstReport: jsonb('first_report').$type<IncidentReport>().notNull(),
+    lastReport: jsonb('last_report').$type<IncidentReport>().notNull(),
+    /**
+     * The Quiet period the last Occurrence set, in seconds; `null`: the Project's
+     * applies (failing that, the Instance default).
+     */
+    quietPeriod: integer('quiet_period'),
+    /** Why and when it closed: set exactly when the Incident is Closed. */
+    closeCause: incidentCloseCauseEnum('close_cause'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    check(
+      'incidents_closure',
+      sql`(${t.state} = 'closed') = (${t.closedAt} is not null) and (${t.closedAt} is null) = (${t.closeCause} is null)`,
+    ),
+    // The sweep of the Incidents whose Level was never settled (assessment not queued).
+    index('incidents_awaiting_level_idx')
+      .on(t.firstSeenAt)
+      .where(sql`${t.awaitingLevel}`),
+    // The sweep of the Open Incidents silent past their Quiet period.
+    index('incidents_open_last_seen_at_idx')
+      .on(t.lastSeenAt)
+      .where(sql`${t.state} = 'open'`),
+    // At most one Open Incident per (Project, Fingerprint): the Occurrence that matches it
+    // is absorbed; one that matches only Closed Incidents opens a new one.
+    uniqueIndex('incidents_open_fingerprint_uniq')
+      .on(t.projectId, t.fingerprint)
+      .where(sql`${t.state} = 'open'`),
+    // A Project's Incident list, newest opened first.
+    index('incidents_project_created_at_idx').on(t.projectId, t.createdAt, t.id),
+    // The openings of a Project in the last minute, against its Opening cap.
+    index('incidents_project_first_seen_at_idx').on(t.projectId, t.firstSeenAt),
+    // The Retention purge: the Incidents last seen before its duration, oldest first.
+    index('incidents_last_seen_at_idx').on(t.lastSeenAt),
+  ],
+);
+
+/**
+ * A storm: a Project opening Incidents past its Opening cap. It starts with the first
+ * Held Incident, alerts the Members once, and ends once a whole window has gone by
+ * without a Held Incident; each Destination concerned then receives one summary of the
+ * Incidents it held. Its Held Incidents are those of the Project opened between
+ * `startedAt` and `lastHeldAt`.
+ */
+export const incidentStorms = pgTable(
+  'incident_storms',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** The Opening cap the Project went past when the storm started. */
+    cap: integer('cap').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastHeldAt: timestamp('last_held_at', { withTimezone: true }).notNull(),
+    /** `null` while the storm goes on. */
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // At most one storm going on per Project.
+    uniqueIndex('incident_storms_ongoing_uniq')
+      .on(t.projectId)
+      .where(sql`${t.endedAt} is null`),
+  ],
+);
+
+/**
  * The Capture attached to a Feedback: the image lives in the Capture storage under
  * `key`, the database keeps only the reference. Deleting the Feedback deletes this row,
  * not the image: whoever deletes also deletes the image under `key` from the storage.
@@ -176,13 +311,28 @@ export const destinations = pgTable('destinations', {
    * the Instance key (`destinationSecretsContext`); `null`: no secret.
    */
   encryptedSecrets: text('encrypted_secrets'),
-  /** Filter: accepted Types… */
+  /** Feedback Filter: on (`true`) or off, whatever the Types and Severity below… */
+  filterEnabled: boolean('filter_enabled').notNull().default(true),
+  /** … accepted Types… */
   filterTypes: feedbackTypeEnum('filter_types')
     .array()
     .notNull()
     .default([...FEEDBACK_TYPES]),
   /** … and optional minimum Severity (`null`: no requirement). */
   filterMinimumSeverity: severityEnum('filter_minimum_severity'),
+  /**
+   * Incident Filter: off by default, so a Destination receives no Incident until a
+   * Member turns it on. Its minimum Level…
+   */
+  incidentFilterEnabled: boolean('incident_filter_enabled').notNull().default(false),
+  incidentFilterMinimumLevel: levelEnum('incident_filter_minimum_level').notNull().default('info'),
+  /** … accepted Environments (empty: every Environment, and none)… */
+  incidentFilterEnvironments: text('incident_filter_environments').array().notNull().default([]),
+  /** … and context conditions, all required. */
+  incidentFilterConditions: jsonb('incident_filter_conditions')
+    .$type<IncidentCondition[]>()
+    .notNull()
+    .default([]),
   state: destinationStateEnum('state').notNull().default('active'),
   /** Consecutive transient failures: reset by a delivery or a permanent failure. */
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
@@ -199,9 +349,18 @@ export const deliveries = pgTable(
   'deliveries',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    feedbackId: uuid('feedback_id')
-      .notNull()
-      .references(() => feedbacks.id, { onDelete: 'cascade' }),
+    /**
+     * What the Delivery delivers. Each subject has its own reference column, set exactly
+     * when the Delivery is of that subject (`deliveries_subject_reference`); see
+     * `subject.ts` for how a subject is written and matched.
+     */
+    subject: deliverySubjectEnum('subject').notNull(),
+    /** The Feedback delivered, when `subject = 'feedback'`. */
+    feedbackId: uuid('feedback_id').references(() => feedbacks.id, { onDelete: 'cascade' }),
+    /** The Incident delivered, when `subject = 'incident'`… */
+    incidentId: uuid('incident_id').references(() => incidents.id, { onDelete: 'cascade' }),
+    /** … and the Dispatch moment that created the Delivery. */
+    incidentMoment: incidentDispatchMomentEnum('incident_moment'),
     destinationId: uuid('destination_id')
       .notNull()
       .references(() => destinations.id, { onDelete: 'cascade' }),
@@ -224,12 +383,24 @@ export const deliveries = pgTable(
     ...timestamps,
   },
   (t) => [
-    // Idempotence: one Delivery per (Feedback, Destination) pair.
+    // A Delivery references its subject, and only its subject. Written with the `feedback`
+    // value only: a migration cannot use an enum value it adds in the same transaction.
+    check(
+      'deliveries_subject_reference',
+      sql`(${t.subject} = 'feedback') = (${t.feedbackId} is not null) and (${t.subject} = 'feedback') = (${t.incidentId} is null) and (${t.incidentId} is null) = (${t.incidentMoment} is null)`,
+    ),
+    // Idempotence: one Delivery per (subject, Destination) pair, one constraint per subject.
     unique('deliveries_feedback_destination_uniq').on(t.feedbackId, t.destinationId),
+    unique('deliveries_incident_destination_uniq').on(t.incidentId, t.destinationId),
     // Release of the held Deliveries of a Destination that is active again.
     index('deliveries_held_idx')
       .on(t.destinationId)
       .where(sql`${t.status} = 'held'`),
+    // The delivered openings of Incidents: the Quiet period sweep looks among them for
+    // a closing to re-arm.
+    index('deliveries_delivered_opening_idx')
+      .on(t.incidentId)
+      .where(sql`${t.status} = 'delivered' and ${t.incidentMoment} <> 'closed'`),
   ],
 );
 
@@ -258,8 +429,8 @@ export const instanceSettings = pgTable(
     /** … and secrets as one JSON object encrypted with the Instance key (`ALERT_DESTINATION_SECRETS_CONTEXT`). */
     alertDestinationEncryptedSecrets: text('alert_destination_encrypted_secrets'),
     /**
-     * Retention period of Feedback, in days: the scheduled purge erases older Feedback
-     * (and its Captures). `null`: unlimited retention.
+     * Retention period, in days: the scheduled purge erases older Feedback (and its
+     * Captures), and the Incidents last seen before it. `null`: unlimited retention.
      */
     retentionDays: integer('retention_days'),
     /**
@@ -287,7 +458,13 @@ export const instanceSettings = pgTable(
 
 export const projectsRelations = relations(projects, ({ many }) => ({
   feedbacks: many(feedbacks),
+  incidents: many(incidents),
   destinations: many(destinations),
+}));
+
+export const incidentsRelations = relations(incidents, ({ one, many }) => ({
+  project: one(projects, { fields: [incidents.projectId], references: [projects.id] }),
+  deliveries: many(deliveries),
 }));
 
 export const feedbacksRelations = relations(feedbacks, ({ one, many }) => ({
@@ -312,6 +489,7 @@ export const destinationsRelations = relations(destinations, ({ one, many }) => 
 
 export const deliveriesRelations = relations(deliveries, ({ one }) => ({
   feedback: one(feedbacks, { fields: [deliveries.feedbackId], references: [feedbacks.id] }),
+  incident: one(incidents, { fields: [deliveries.incidentId], references: [incidents.id] }),
   destination: one(destinations, {
     fields: [deliveries.destinationId],
     references: [destinations.id],

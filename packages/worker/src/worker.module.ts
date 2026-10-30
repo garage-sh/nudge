@@ -11,17 +11,22 @@ import {
   jobOptions,
   ALERTS_QUEUE,
   SWEEP_CAPTURES_JOB,
+  SWEEP_QUIET_INCIDENTS_JOB,
   SWEEP_DELIVERIES_JOB,
   SWEEP_RECEIVED_JOB,
   PURGE_RETENTION_JOB,
   PROBE_SUSPENDED_JOB,
   DISPATCH_QUEUE,
+  HELD_SUMMARY_QUEUE,
+  INCIDENT_LEVEL_QUEUE,
   MAINTENANCE_QUEUE,
   TRIAGE_QUEUE,
   DEFAULT_QUEUE_PREFIX,
   alertJobId,
   type AlertJob,
   type DispatchJob,
+  type HeldSummaryJob,
+  type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
 import { connectDb, type DbConnection } from '@nudge/database';
@@ -29,6 +34,10 @@ import { Queue, Worker, type DefaultJobOptions, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import { AlertsService } from './alerts.service.js';
 import { DispatchProcessor } from './dispatch.processor.js';
+import { FeedbackDispatcher } from './feedback-dispatcher.js';
+import { HeldSummaryService } from './held-summary.service.js';
+import { IncidentDispatcher } from './incident-dispatcher.js';
+import { IncidentLevelProcessor } from './incident-level.processor.js';
 import { PurgeProcessor } from './purge.processor.js';
 import { SweepProcessor } from './sweep.processor.js';
 import {
@@ -38,6 +47,8 @@ import {
   SECRET_CIPHER,
   DISPATCH_QUEUE_TOKEN,
   DESTINATION_ADAPTER_RESOLVER,
+  HELD_SUMMARY_QUEUE_TOKEN,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
   TRIAGE_QUEUE_TOKEN,
   ON_SUSPENSION,
 } from './tokens.js';
@@ -48,6 +59,7 @@ import {
   DEFAULT_SWEEP,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
+  incidentOptionsOf,
   type OnSuspension,
   type WorkerOptions,
 } from './options.js';
@@ -70,6 +82,12 @@ const queueProvider = (
   inject: [REDIS],
 });
 
+/** Fails like the first of `results` that failed, once all of them have settled. */
+const rethrowFirstRejection = (results: readonly PromiseSettledResult<unknown>[]): void => {
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) throw failed.reason;
+};
+
 /** BullMQ will not run this job again if it fails. */
 const isLastAttempt = (job: Job): boolean => job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
@@ -83,14 +101,18 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue,
+    @Inject(INCIDENT_LEVEL_QUEUE_TOKEN) private readonly incidentLevelQueue: Queue,
     @Inject(MAINTENANCE_QUEUE_TOKEN) private readonly maintenanceQueue: Queue,
     @Inject(ALERTS_QUEUE_TOKEN) private readonly alertsQueue: Queue,
+    @Inject(HELD_SUMMARY_QUEUE_TOKEN) private readonly heldSummaryQueue: Queue,
     private readonly triage: TriageProcessor,
     private readonly dispatch: DispatchProcessor,
+    private readonly incidentLevel: IncidentLevelProcessor,
     private readonly sweep: SweepProcessor,
     private readonly purge: PurgeProcessor,
     private readonly suspension: SuspensionService,
     private readonly alerts: AlertsService,
+    private readonly heldSummaries: HeldSummaryService,
   ) {}
 
   static forRoot(options: WorkerOptions): DynamicModule {
@@ -134,7 +156,19 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           jobOptions(options.retryPolicy),
         ),
         queueProvider(TRIAGE_QUEUE_TOKEN, TRIAGE_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(
+          INCIDENT_LEVEL_QUEUE_TOKEN,
+          INCIDENT_LEVEL_QUEUE,
+          prefix,
+          jobOptions(options.retryPolicy),
+        ),
         queueProvider(ALERTS_QUEUE_TOKEN, ALERTS_QUEUE, prefix, jobOptions(options.retryPolicy)),
+        queueProvider(
+          HELD_SUMMARY_QUEUE_TOKEN,
+          HELD_SUMMARY_QUEUE,
+          prefix,
+          jobOptions(options.retryPolicy),
+        ),
         queueProvider(MAINTENANCE_QUEUE_TOKEN, MAINTENANCE_QUEUE, prefix, {
           removeOnComplete: 100,
           removeOnFail: 1000,
@@ -142,10 +176,14 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
         JudgeResolver,
         TriageProcessor,
         DispatchProcessor,
+        FeedbackDispatcher,
+        IncidentDispatcher,
+        IncidentLevelProcessor,
         SweepProcessor,
         PurgeProcessor,
         SuspensionService,
         AlertsService,
+        HeldSummaryService,
       ],
     };
   }
@@ -182,6 +220,12 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
       { every: captureSweep.intervalMs },
       { name: SWEEP_CAPTURES_JOB },
     );
+    const incidents = incidentOptionsOf(this.options);
+    await this.maintenanceQueue.upsertJobScheduler(
+      SWEEP_QUIET_INCIDENTS_JOB,
+      { every: incidents.sweepIntervalMs },
+      { name: SWEEP_QUIET_INCIDENTS_JOB },
+    );
     const concurrency = this.options.concurrency ?? DEFAULT_CONCURRENCY;
     this.workers = [
       new Worker<TriageJob>(TRIAGE_QUEUE, (job) => this.triage.handle(job.data), {
@@ -197,6 +241,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           }),
         { connection: this.redis, prefix, concurrency: concurrency.dispatch },
       ),
+      new Worker<IncidentLevelJob>(
+        INCIDENT_LEVEL_QUEUE,
+        (job) => this.incidentLevel.handle(job.data),
+        { connection: this.redis, prefix, concurrency: concurrency.incidentLevel },
+      ),
       new Worker<AlertJob>(
         ALERTS_QUEUE,
         (job) =>
@@ -207,6 +256,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           }),
         { connection: this.redis, prefix },
       ),
+      new Worker<HeldSummaryJob>(
+        HELD_SUMMARY_QUEUE,
+        (job) => this.heldSummaries.send(job.data, { lastAttempt: isLastAttempt(job) }),
+        { connection: this.redis, prefix },
+      ),
       new Worker(
         MAINTENANCE_QUEUE,
         async (job) => {
@@ -215,6 +269,14 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
           if (job.name === PROBE_SUSPENDED_JOB) await this.suspension.probe();
           if (job.name === PURGE_RETENTION_JOB) await this.purge.handle();
           if (job.name === SWEEP_CAPTURES_JOB) await this.sweep.sweepCaptures();
+          if (job.name === SWEEP_QUIET_INCIDENTS_JOB) {
+            // Independent: a failure of the one does not hold the other's Incidents.
+            await Promise.allSettled([
+              this.sweep.sweepQuietIncidents(),
+              this.sweep.sweepIncidentLevels(),
+              this.sweep.sweepStorms(),
+            ]).then(rethrowFirstRejection);
+          }
         },
         { connection: this.redis, prefix },
       ),
@@ -226,8 +288,10 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await Promise.all([
       this.dispatchQueue.close(),
       this.triageQueue.close(),
+      this.incidentLevelQueue.close(),
       this.maintenanceQueue.close(),
       this.alertsQueue.close(),
+      this.heldSummaryQueue.close(),
     ]);
     await this.redis.quit();
     await this.connection.close();

@@ -21,8 +21,26 @@ describe('Worker configuration from environment variables', () => {
       judgeTimeoutMs: 30_000,
       suspension: { failureThreshold: 5, cooldownMs: 300_000, probeIntervalMs: 60_000 },
       purge: { intervalMs: 3_600_000 },
-      concurrency: { triage: 2, dispatch: 10 },
+      incidents: { quietPeriodMs: 3_600_000, sweepIntervalMs: 60_000, judgeWaitMs: 10_000 },
+      concurrency: { triage: 2, dispatch: 10, incidentLevel: 10 },
     });
+  });
+
+  it('reads the Instance default Quiet period, the period of its sweep and the Judge wait', () => {
+    const config = workerConfigFromEnv({
+      ...MINIMAL,
+      NUDGE_INCIDENT_QUIET_PERIOD_MS: '900000',
+      NUDGE_INCIDENT_SWEEP_INTERVAL_MS: '30000',
+      NUDGE_INCIDENT_JUDGE_WAIT_MS: '5000',
+    });
+    expect(config.incidents).toEqual({
+      quietPeriodMs: 900_000,
+      sweepIntervalMs: 30_000,
+      judgeWaitMs: 5_000,
+    });
+    expect(() => workerConfigFromEnv({ ...MINIMAL, NUDGE_INCIDENT_QUIET_PERIOD_MS: '0' })).toThrow(
+      /NUDGE_INCIDENT_QUIET_PERIOD_MS/,
+    );
   });
 
   it('reads the Triage thresholds, the Judge timeout, the Suspension, the purge, the concurrency and the dashboard', () => {
@@ -38,6 +56,7 @@ describe('Worker configuration from environment variables', () => {
       NUDGE_PURGE_INTERVAL_MS: '900000',
       NUDGE_TRIAGE_CONCURRENCY: '4',
       NUDGE_DISPATCH_CONCURRENCY: '25',
+      NUDGE_INCIDENT_LEVEL_CONCURRENCY: '5',
       NUDGE_DASHBOARD_URL: 'https://nudge.example.com',
     });
 
@@ -46,7 +65,7 @@ describe('Worker configuration from environment variables', () => {
       judgeTimeoutMs: 45_000,
       suspension: { failureThreshold: 3, cooldownMs: 600_000, probeIntervalMs: 30_000 },
       purge: { intervalMs: 900_000 },
-      concurrency: { triage: 4, dispatch: 25 },
+      concurrency: { triage: 4, dispatch: 25, incidentLevel: 5 },
       dashboardUrl: 'https://nudge.example.com',
     });
   });
@@ -68,6 +87,8 @@ describe('Worker configuration from environment variables', () => {
     ['NUDGE_PURGE_INTERVAL_MS', '-1'],
     ['NUDGE_DISPATCH_CONCURRENCY', '0'],
     ['NUDGE_TRIAGE_CONCURRENCY', '1.5'],
+    ['NUDGE_INCIDENT_LEVEL_CONCURRENCY', '0'],
+    ['NUDGE_INCIDENT_JUDGE_WAIT_MS', '0'],
     ['NUDGE_DASHBOARD_URL', 'nudge.example.com'],
     ['NUDGE_OUTBOUND_ALLOWED_HOSTS', '10.0.0.0/40'],
   ])('refuses to start with %s=%s', (variable, value) => {

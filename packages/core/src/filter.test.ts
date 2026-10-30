@@ -6,6 +6,10 @@ const severeBugs: Filter = { types: ['bug'], minimumSeverity: 'major' };
 const allOpinions: Filter = { types: ['opinion'], minimumSeverity: null };
 
 describe('A Destination’s Filter', () => {
+  it('turned off, accepts no Feedback', () => {
+    expect(filterAccepts(null, { resolvedType: 'bug', severity: 'blocking' })).toBe(false);
+  });
+
   it('accepts a Feedback of an accepted Type whose Severity reaches the minimum Severity', () => {
     expect(filterAccepts(severeBugs, { resolvedType: 'bug', severity: 'major' })).toBe(true);
     expect(filterAccepts(severeBugs, { resolvedType: 'bug', severity: 'blocking' })).toBe(true);

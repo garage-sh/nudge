@@ -11,7 +11,14 @@ import {
   type TriageAnswers,
   type TriageJob,
 } from '@nudge/core';
-import { createMissingDeliveries, deliveries, feedbacks, verdicts, type Db } from '@nudge/database';
+import {
+  createMissingDeliveries,
+  feedbackSubject,
+  feedbacks,
+  pendingDeliveriesOf,
+  verdicts,
+  type Db,
+} from '@nudge/database';
 import {
   JudgeRefusedError,
   JudgeTransientError,
@@ -149,10 +156,7 @@ export class TriageProcessor {
   ): Promise<void> {
     const toSend = await this.db.transaction(async (tx) => {
       if (state === 'triaged') await createMissingDeliveries(tx, feedbackId, projectId);
-      return tx
-        .select({ id: deliveries.id })
-        .from(deliveries)
-        .where(and(eq(deliveries.feedbackId, feedbackId), eq(deliveries.status, 'pending')));
+      return pendingDeliveriesOf(tx, feedbackSubject(feedbackId));
     });
 
     // After the commit: the dispatch job reads a Delivery that exists.

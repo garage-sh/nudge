@@ -1,26 +1,27 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   failureFromException,
-  buildDashboardUrl,
-  type CaptureToDispatch,
+  type DestinationAdapter,
   type DestinationAdapterResolver,
   type DispatchJob,
-  type OutgoingDelivery,
   type DeliveryResult,
   type SecretCipher,
 } from '@nudge/core';
 import {
   deliveries,
+  subjectOf,
   toConfiguredDestination,
-  type captures,
   type Db,
   type DestinationRow,
 } from '@nudge/database';
+import type { DeliverySubjectKind } from '@nudge/shared';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import type { SubjectDispatcher } from './subject-dispatcher.js';
+import { FeedbackDispatcher } from './feedback-dispatcher.js';
+import { IncidentDispatcher } from './incident-dispatcher.js';
 import { TransientFailure } from './transient-failure.js';
-import type { WorkerOptions } from './options.js';
 import { SuspensionService } from './suspension.service.js';
-import { DB, DESTINATION_ADAPTER_RESOLVER, OPTIONS, SECRET_CIPHER } from './tokens.js';
+import { DB, DESTINATION_ADAPTER_RESOLVER, SECRET_CIPHER } from './tokens.js';
 
 /**
  * Beyond this, the claim of a Delivery belongs to a job that died while sending it (a
@@ -38,9 +39,15 @@ export class DispatchProcessor {
     @Inject(DESTINATION_ADAPTER_RESOLVER)
     private readonly resolveDestinationAdapter: DestinationAdapterResolver,
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
-    @Inject(OPTIONS) private readonly options: WorkerOptions,
     private readonly suspension: SuspensionService,
-  ) {}
+    feedbackDispatcher: FeedbackDispatcher,
+    incidentDispatcher: IncidentDispatcher,
+  ) {
+    this.subjects = { feedback: feedbackDispatcher, incident: incidentDispatcher };
+  }
+
+  /** What each subject of a Delivery adds to Dispatch: one dispatcher per kind. */
+  private readonly subjects: Record<DeliverySubjectKind, SubjectDispatcher>;
 
   /**
    * `lastAttempt`: BullMQ will not run this job again; a transient failure then marks
@@ -49,13 +56,10 @@ export class DispatchProcessor {
   async handle({ deliveryId }: DispatchJob, { lastAttempt = false } = {}): Promise<void> {
     const delivery = await this.db.query.deliveries.findFirst({
       where: eq(deliveries.id, deliveryId),
-      with: {
-        destination: true,
-        feedback: { with: { project: true, verdict: true, capture: true } },
-      },
+      with: { destination: true },
     });
     if (!delivery) return;
-    const { destination, feedback } = delivery;
+    const { destination } = delivery;
     if (delivery.status === 'held') {
       // Release job: the Delivery goes again if its Destination is active.
       if (destination.state === 'suspended') {
@@ -70,21 +74,17 @@ export class DispatchProcessor {
       await this.suspension.hold(deliveryId);
       return;
     }
-    if (!feedback.verdict) {
-      this.logger.error(`Delivery ${deliveryId} without a Verdict, ignored`);
+    const subject = subjectOf(delivery);
+    const prepared = await this.subjects[subject.kind].prepare(deliveryId, subject);
+    if (prepared.status === 'ignored') {
+      this.logger.error(`Delivery ${deliveryId}: ${prepared.reason}, ignored`);
       return;
     }
-    // Deliveries are only created for a Triaged or Dispatched Feedback: one of a
-    // Feedback that is not (any more) is never sent.
-    if (feedback.state !== 'triaged' && feedback.state !== 'dispatched') {
-      this.logger.error(`Delivery ${deliveryId} of a Feedback ${feedback.state}: not sent`);
+    if (prepared.status === 'not_dispatchable') {
+      this.logger.error(`Delivery ${deliveryId}: ${prepared.reason}, not sent`);
       await this.db
         .update(deliveries)
-        .set({
-          status: 'failed',
-          lastError: `permanent: Feedback ${feedback.state}, not dispatchable`,
-          claimedAt: null,
-        })
+        .set({ status: 'failed', lastError: `permanent: ${prepared.reason}`, claimedAt: null })
         .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, 'pending')));
       return;
     }
@@ -93,42 +93,16 @@ export class DispatchProcessor {
       throw new TransientFailure(`Delivery ${deliveryId} is being sent by another job`);
     }
 
-    let captureUnreadable = false;
-    const outgoing: OutgoingDelivery = {
-      deliveryId,
-      isTest: false,
-      project: { id: feedback.project.id, name: feedback.project.name },
-      feedback: {
-        id: feedback.id,
-        text: feedback.text,
-        source: feedback.source,
-        resolvedType: feedback.verdict.resolvedType,
-        severity: feedback.verdict.severity,
-        uncertain: feedback.verdict.uncertain,
-        author:
-          feedback.author && feedback.authorTrust
-            ? { ...feedback.author, trust: feedback.authorTrust }
-            : null,
-        context: feedback.context,
-        capture: feedback.capture
-          ? this.captureToDispatch(feedback.capture, () => {
-              captureUnreadable = true;
-            })
-          : null,
-        receivedAt: feedback.createdAt,
-        dashboardUrl: buildDashboardUrl(this.options.dashboardUrl, `/feedbacks/${feedback.id}`),
-      },
-    };
-
-    const { result, exception } = await this.send(destination, outgoing);
+    const { result, exception } = await this.send(destination, prepared.send);
 
     if (result.status === 'delivered') {
-      await this.suspension.afterDelivery(delivery, result.externalUrl);
+      await this.suspension.afterDelivery(delivery, result.externalUrl, prepared.deliveredAs);
+      await prepared.delivered?.();
       return;
     }
     const outcome = await this.suspension.afterFailure(delivery, result, {
       lastAttempt,
-      internal: exception || captureUnreadable,
+      internal: exception || prepared.failedInternally(),
     });
     if (outcome === 'retry') throw new TransientFailure(result.message);
   }
@@ -168,37 +142,15 @@ export class DispatchProcessor {
    */
   private async send(
     destination: DestinationRow,
-    outgoing: OutgoingDelivery,
+    send: (adapter: DestinationAdapter) => Promise<DeliveryResult>,
   ): Promise<{ result: DeliveryResult; exception: boolean }> {
     try {
       const adapter = this.resolveDestinationAdapter(
         toConfiguredDestination(destination, this.cipher),
       );
-      return { result: await adapter.send(outgoing), exception: false };
+      return { result: await send(adapter), exception: false };
     } catch (error) {
       return { result: failureFromException(error), exception: true };
     }
-  }
-
-  /**
-   * A Feedback's Capture, read from storage only if the adapter attaches it.
-   * `onFailure` reports a storage that does not return it: a failure internal to nudge.
-   */
-  private captureToDispatch(
-    { key, contentType, bytes }: typeof captures.$inferSelect,
-    onFailure: () => void,
-  ): CaptureToDispatch {
-    return {
-      contentType,
-      bytes,
-      read: async () => {
-        try {
-          return await this.options.captureStorage.read(key);
-        } catch (error) {
-          onFailure();
-          throw error;
-        }
-      },
-    };
   }
 }

@@ -4,12 +4,12 @@ A webhook Destination receives a JSON `POST` per event. Its signing secret is ge
 
 ## Headers
 
-| Header                               | Content                                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `X-Nudge-Event`                      | `feedback`, `alert` (when the webhook is the Alert destination) or `ping` (health probe) |
-| `X-Nudge-Delivery` / `X-Nudge-Alert` | stable id of the Delivery or the alert: use it to ignore a retried delivery              |
-| `X-Nudge-Timestamp`                  | Unix time, in seconds                                                                    |
-| `X-Nudge-Signature`                  | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret          |
+| Header                                                   | Content                                                                                                                                                                                         |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Nudge-Event`                                          | `feedback`, `incident.opened`, `incident.raised`, `incident.closed`, `incidents.held`, `alert` (when the webhook is the Alert destination) or `ping` (health probe)                             |
+| `X-Nudge-Delivery` / `X-Nudge-Summary` / `X-Nudge-Alert` | stable id of the Delivery, the summary of Held Incidents or the alert: with `X-Nudge-Event`, use it to ignore a retried delivery (an Incident's Delivery carries its opening, then its closing) |
+| `X-Nudge-Timestamp`                                      | Unix time, in seconds                                                                                                                                                                           |
+| `X-Nudge-Signature`                                      | `sha256=<hex>`: HMAC-SHA256 of `<timestamp>.<raw body>` with the signing secret                                                                                                                 |
 
 ## Payload
 
@@ -37,7 +37,71 @@ A `feedback` event looks like this (`isTest` is `true` for the dashboard's test 
 }
 ```
 
-`capture` is `{ contentType, data }` (base64) when the Feedback has one. An `alert` event carries `alert: { id, type, at, title, summary, project, dashboardUrl }`, plus `feedback: { id }` for `feedback_in_review` or `destination: { id, name, failureClass, message }` for `destination_suspended`. The text is sent raw, as the Author wrote it: encode it for wherever you display it.
+`capture` is `{ contentType, data }` (base64) when the Feedback has one. An `alert` event carries `alert: { id, type, at, title, summary, project, dashboardUrl }`, plus `feedback: { id }` for `feedback_in_review`, `destination: { id, name, failureClass, message }` for `destination_suspended`, or `storm: { held, cap, startedAt }` for `incident_storm` (a Project went past its Opening cap: `held` Incidents held so far, `cap` per minute; sent once per storm, its `dashboardUrl` lists the Held Incidents). The text is sent raw, as the Author wrote it: encode it for wherever you display it.
+
+## Incident events
+
+A Destination whose Incident Filter is on receives the Incidents it accepts (see the Incident Filter in [CONTEXT.md](../CONTEXT.md)). Each Destination gets **a single Delivery per Incident**: its opening, sent as one of two events, then its closing, `incident.closed`.
+
+- `incident.opened`: the Incident opened and this Destination's Incident Filter accepts it, or a Member redispatched it to this Destination;
+- `incident.raised`: an Occurrence raised the Incident's Level, and this Destination, not reached yet, accepts the Incident at its new Level (usually because of the higher Level; also when its Incident Filter was turned on since the opening). A Destination already reached receives nothing new;
+- `incident.closed`: the Incident closed, sent on the same Delivery (same `X-Nudge-Delivery`) to every Destination that received its opening: deduplicate on `X-Nudge-Delivery` and `X-Nudge-Event` together, or you drop the closing. `incident.closure` says why and when: `cause` is `resolved` (its sender reported it over), `member` (a Member closed it in the dashboard) or `quiet_period` (no new Occurrence for its Quiet period), and `closedAt`. A Closed Incident never reopens: a later Occurrence opens a new Incident, with a new id.
+
+An Incident that opened and closed while this Destination was Suspended, or whose opening failed and is replayed after it closed, is delivered **once**, in its final state, as `incident.closed`: an `incident.closed` whose id you never saw is such an Incident.
+
+`incident.id` is stable for the Incident's whole life: track the Incident by it. `X-Nudge-Delivery` is the id of this Destination's Delivery, as for `feedback`.
+
+```json
+{
+  "event": "incident.raised",
+  "delivery": { "id": "…" },
+  "project": { "id": "…", "name": "Shop" },
+  "title": "Critical · Payment provider timed out",
+  "summary": "An Incident of Shop rose to Critical.",
+  "incident": {
+    "id": "…",
+    "state": "open",
+    "title": "Payment provider timed out",
+    "message": "POST /charges took 30 s",
+    "environment": "production",
+    "context": { "service": "checkout", "version": "3.1.0" },
+    "level": "critical",
+    "levelOrigin": "declared",
+    "fingerprint": "payments-timeout",
+    "occurrences": 14,
+    "firstSeenAt": "2026-10-29T08:00:00.000Z",
+    "lastSeenAt": "2026-10-29T08:12:41.000Z",
+    "closure": null,
+    "dashboardUrl": "https://nudge.example.com/projects/…/incidents/…"
+  }
+}
+```
+
+`title`, `message`, `environment` and `context` are those of the Occurrence that opened the Incident; `state`, `level`, `occurrences`, `lastSeenAt` and `closure` are the Incident's when the event is sent (`closure` is `null` while it is Open, `{ "cause": "quiet_period", "closedAt": "…" }` once Closed). `title` and `summary` at the top level are the Incident in plain text, for a receiver that relays it as is. Every text comes from the application that reported the Incident: encode it for wherever you display it.
+
+## Held Incidents
+
+A Project may open a number of Incidents per minute, its Opening cap (set in its settings, otherwise `NUDGE_INCIDENT_OPENING_CAP`, 20 by default). Past it, the Incidents it opens are recorded but **Held**: no event is sent for them, not even when their Level rises or when they close. The Alert destination receives one `incident_storm` alert when the storm starts.
+
+Once a whole minute goes by without a Held Incident, the Project is back under its cap: each Destination whose Incident Filter accepts at least one of the Held Incidents receives a single `incidents.held` event, in place of the Incidents themselves. A Member can still Redispatch a Held Incident that is Open: it is then delivered as `incident.opened`, and no longer counted in the summary.
+
+```json
+{
+  "event": "incidents.held",
+  "id": "held-…",
+  "project": { "id": "…", "name": "Shop" },
+  "title": "Incidents held · Shop",
+  "summary": "The Project opened Incidents faster than its Opening cap: 37 Incidents were held and not sent here. They are listed in nudge, where a Member can Redispatch the ones still Open.",
+  "held": {
+    "count": 37,
+    "firstOpenedAt": "2026-10-29T08:00:04.000Z",
+    "lastOpenedAt": "2026-10-29T08:03:51.000Z"
+  },
+  "dashboardUrl": "https://nudge.example.com/projects/…/incidents?held=true"
+}
+```
+
+`held.count` counts the Held Incidents this Destination's Incident Filter accepts, `firstOpenedAt` and `lastOpenedAt` when the first and the last of them opened. `id` (also in `X-Nudge-Summary`) is stable: a retried summary carries the same one.
 
 ## Verifying the signature
 

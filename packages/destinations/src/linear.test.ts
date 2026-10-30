@@ -3,10 +3,14 @@ import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { resolveDestinationAdapter } from './index.js';
 import { linearAdapter } from './linear.js';
-import { IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { HELD_SUMMARY, IN_REVIEW_ALERT, SUSPENSION_ALERT } from './test/alerts.js';
+import { incidentClosing, incidentOpenedThenClosed, incidentOpening } from './test/incidents.js';
 import {
   API_KEY,
   ASSET_URL,
+  DONE_STATE_ID,
+  ISSUE_ID,
+  ISSUE_IDENTIFIER,
   ISSUE_URL,
   LABEL_BUG_ID,
   LABEL_URGENT_ID,
@@ -437,6 +441,31 @@ describe('Linear adapter', () => {
     });
   });
 
+  describe('summarizeHeld', () => {
+    const md = new MarkdownIt({ html: true });
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
+
+    it('creates an issue for the summary in the team, without labels, the Project name literal', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+
+      expect(await adapter(fetch).summarizeHeld(HELD_SUMMARY)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      const input = creationInput(requests[1]);
+      expect(input.teamId).toBe(TEAM_ID);
+      expect(input.labelIds).toEqual([]);
+      expect(input.title).toBe('Incidents held · @everyone *Shop* <b>');
+      expect(input.description).toContain('37 Incidents were held');
+      const types = tokens(input.description).map((j) => j.type);
+      expect(types).not.toContain('html_inline');
+      const links = tokens(input.description).filter((j) => j.type === 'link_open');
+      expect(links.map((j) => j.attrGet('href'))).toEqual([HELD_SUMMARY.dashboardUrl]);
+    });
+  });
+
   describe('healthCheck', () => {
     it('reads the team and its labels with the key, creating nothing; all found, makes it reachable', async () => {
       const { fetch, requests } = linear(LINEAR.team);
@@ -648,6 +677,173 @@ describe('Linear adapter', () => {
       'team',
       'input',
     ]);
+  });
+
+  describe('Incidents', () => {
+    const OPENING = incidentOpening(DESTINATION.projectId!);
+    const CLOSING = incidentClosing(DESTINATION.projectId!, ISSUE_URL);
+    const md = new MarkdownIt({ html: true, linkify: true });
+    const tokens = (body: string) =>
+      md.parse(body, {}).flatMap((token) => [token, ...(token.children ?? [])]);
+
+    it('creates an issue in the team, without labels, for an opened Incident and returns its link', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+
+      expect(await adapter(fetch).deliverIncident(OPENING)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      expect(requests).toHaveLength(2);
+      expect(requests[1]?.query).toMatch(/issueCreate\(/);
+      const input = creationInput(requests[1]);
+      expect(Object.keys(input).sort()).toEqual(['description', 'labelIds', 'teamId', 'title']);
+      expect(input.teamId).toBe(TEAM_ID);
+      expect(input.labelIds).toEqual([]);
+      expect(input.title).toBe('Error · @everyone <b>Payment</b> timed out');
+      expect(input.description).toContain('An Incident opened in Shop \\(production\\)\\.');
+      expect(input.description).toContain('**Occurrences**: 3');
+      const links = tokens(input.description).filter((t) => t.type === 'link_open');
+      expect(links.map((t) => t.attrGet('href'))).toEqual([OPENING.incident.dashboardUrl]);
+    });
+
+    it('lets no text of the sender make a link, an image or HTML', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+      const hostile = '[login](https://trap.test) ![p](https://trap.test/p.png) <img src=x>';
+
+      await adapter(fetch).deliverIncident({
+        ...OPENING,
+        incident: {
+          ...OPENING.incident,
+          message: hostile,
+          environment: hostile,
+          context: { service: hostile },
+        },
+      });
+
+      const types = tokens(creationInput(requests[1]).description).map((t) => t.type);
+      expect(types).not.toContain('image');
+      expect(types).not.toContain('html_inline');
+      expect(types).not.toContain('html_block');
+      expect(types.filter((type) => type === 'link_open')).toHaveLength(1);
+    });
+
+    it("closes the issue its opening created: moved to the team's completed state, then commented", async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueUpdated, LINEAR.commentCreated);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toEqual({
+        status: 'delivered',
+        externalUrl: ISSUE_URL,
+      });
+
+      expect(requests).toHaveLength(3);
+      expect(requests[1]?.query).toMatch(/issueUpdate\(/);
+      expect(requests[1]?.variables).toEqual({
+        id: ISSUE_IDENTIFIER,
+        input: { stateId: DONE_STATE_ID },
+      });
+      expect(requests[2]?.query).toMatch(/commentCreate\(/);
+      const comment = requests[2]?.variables.input as { issueId: string; body: string };
+      expect(comment.issueId).toBe(ISSUE_ID);
+      expect(comment.body).toContain('An Incident of Shop was resolved by its sender\\.');
+    });
+
+    it('a team read once costs no new read to close', async () => {
+      const teams = new Map();
+      const { fetch, requests } = linear(
+        LINEAR.team,
+        LINEAR.issueCreated,
+        LINEAR.issueUpdated,
+        LINEAR.commentCreated,
+      );
+
+      await linearAdapter(DESTINATION, { fetch, teams }).deliverIncident(OPENING);
+      await linearAdapter(DESTINATION, { fetch, teams }).closeIncident(CLOSING);
+
+      expect(requests).toHaveLength(4);
+    });
+
+    it.each([
+      ['key rejected', 'auth', LINEAR.keyRejected],
+      ['access denied', 'auth', LINEAR.accessDenied],
+      ['rate limited', 'transient', LINEAR.rateLimited],
+      ['invalid input (issue deleted)', 'permanent', LINEAR.invalidInput],
+    ] as const)(
+      'classifies a closing refused with %s like a Delivery: %s, nothing commented',
+      async (_, failureClass, recording) => {
+        const { fetch, requests } = linear(LINEAR.team, recording, LINEAR.commentCreated);
+
+        expect(await adapter(fetch).closeIncident(CLOSING)).toMatchObject({
+          status: 'failed',
+          failureClass,
+        });
+        expect(requests).toHaveLength(2);
+      },
+    );
+
+    it('after a refused closing, reads the team again: a completed state deleted since shows up', async () => {
+      const teams = new Map();
+      const { fetch, requests } = linear(
+        LINEAR.team,
+        LINEAR.invalidInput,
+        LINEAR.team,
+        LINEAR.issueUpdated,
+        LINEAR.commentCreated,
+      );
+
+      await linearAdapter(DESTINATION, { fetch, teams }).closeIncident(CLOSING);
+      await linearAdapter(DESTINATION, { fetch, teams }).closeIncident(CLOSING);
+
+      expect(requests.map((r) => Object.keys(r.variables)[0])).toEqual([
+        'team',
+        'id',
+        'team',
+        'id',
+        'input',
+      ]);
+    });
+
+    it('a team without a completed state rejects the Destination (auth), closing nothing', async () => {
+      const { fetch, requests } = linear(LINEAR.teamWithoutCompletedState, LINEAR.issueUpdated);
+
+      expect(await adapter(fetch).closeIncident(CLOSING)).toMatchObject({
+        status: 'failed',
+        failureClass: 'auth',
+        message: expect.stringContaining('completed'),
+      });
+      expect(requests).toHaveLength(1);
+    });
+
+    it.each([
+      ['no link', null],
+      ['a link that is not an issue', 'https://linear.app/shop/project/payments'],
+      ['a link outside Linear', `https://trap.test/shop/issue/${ISSUE_IDENTIFIER}`],
+    ])(
+      'never creates a second issue: an opening with %s fails the closing permanently',
+      async (_, link) => {
+        const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+
+        expect(
+          await adapter(fetch).closeIncident(incidentClosing(DESTINATION.projectId!, link)),
+        ).toMatchObject({ status: 'failed', failureClass: 'permanent' });
+        expect(requests).toHaveLength(0);
+      },
+    );
+
+    it('"opened then closed" after a suspension creates the issue already in the completed state', async () => {
+      const { fetch, requests } = linear(LINEAR.team, LINEAR.issueCreated);
+
+      expect(
+        await adapter(fetch).deliverIncident(incidentOpenedThenClosed(DESTINATION.projectId!)),
+      ).toEqual({ status: 'delivered', externalUrl: ISSUE_URL });
+
+      expect(requests).toHaveLength(2);
+      const input = creationInput(requests[1]) as ReturnType<typeof creationInput> & {
+        stateId?: string;
+      };
+      expect(input.stateId).toBe(DONE_STATE_ID);
+      expect(input.title).toMatch(/^Closed · Error · /);
+    });
   });
 
   it('is registered for the "linear" type in the adapter registry', () => {

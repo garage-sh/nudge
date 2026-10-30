@@ -1,6 +1,5 @@
 import {
   allowedReviewActions,
-  isDeliveryReplayable,
   isFeedbackRedispatchable,
   SEVERITIES,
   FEEDBACK_TYPES,
@@ -9,7 +8,6 @@ import {
   type AuthorView,
   type CaptureView,
   type Context,
-  type DeliveryView,
   type Severity,
   type FeedbackDetailView,
   type FeedbackType,
@@ -28,19 +26,16 @@ import {
 import { useI18n, useT } from '../i18n/index.js';
 import {
   ConfirmAction,
+  DetailSection,
   ErrorMessage,
   ExternalLink,
   Loading,
   Pill,
+  Properties,
   useReturnFocus,
 } from '../layout/ui.js';
-import {
-  DeliveryStatusPill,
-  DestinationStatePill,
-  SeverityGauge,
-  StatePill,
-  UncertainBadge,
-} from './feedback-badges.js';
+import { SeverityGauge, StatePill, UncertainBadge } from './feedback-badges.js';
+import { DeliveryList } from './DeliveryList.js';
 import { FeedbackPane, type ListState } from './Feedbacks.js';
 
 /**
@@ -55,6 +50,7 @@ export function Feedback() {
   const [pollUntil, setPollUntil] = useState(0);
   const poll = () => setPollUntil(Date.now() + POLL_AFTER_ACTION_MS);
   const feedback = useFeedback(id, { pollUntil });
+  const replay = useReplay(id);
   const location = useLocation();
   const list = (location.state as ListState | null)?.list;
   const pane = useContext(FeedbackPane);
@@ -110,7 +106,12 @@ export function Feedback() {
             </Section>
           ) : null}
           <Section id="deliveries" title={s.deliveries}>
-            <Deliveries feedbackId={detail.id} deliveries={detail.deliveries} afterReplay={poll} />
+            <DeliveryList
+              subject="feedback"
+              deliveries={detail.deliveries}
+              replay={replay}
+              afterReplay={poll}
+            />
             {isFeedbackRedispatchable(detail.state) ? (
               <Redispatch feedbackId={detail.id} afterRedispatch={poll} />
             ) : null}
@@ -302,24 +303,9 @@ const CAPTURE_FORMATS: Record<CaptureView['contentType'], string> = {
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section className="panel" aria-labelledby={`feedback-${id}`}>
-      <h2 id={`feedback-${id}`}>{title}</h2>
+    <DetailSection headingId={`feedback-${id}`} title={title}>
       {children}
-    </section>
-  );
-}
-
-/** A list of label / value pairs, values rendered as text. */
-function Properties({ rows }: { rows: readonly (readonly [string, ReactNode])[] }) {
-  return (
-    <dl className="properties">
-      {rows.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
+    </DetailSection>
   );
 }
 
@@ -492,74 +478,6 @@ function FeedbackContext({ context }: { context: Context }) {
         </>
       ) : null}
     </>
-  );
-}
-
-/**
- * The Deliveries, with their status and the link to the object created. A delivered or
- * failed Delivery can be replayed, with the current Verdict: to recover a failure or
- * pass on a correction.
- */
-function Deliveries({
-  feedbackId,
-  deliveries,
-  afterReplay,
-}: {
-  feedbackId: string;
-  deliveries: readonly DeliveryView[];
-  afterReplay: () => void;
-}) {
-  const t = useT();
-  const replay = useReplay(feedbackId);
-  if (deliveries.length === 0) {
-    return <p className="muted">{t.feedback.deliveries.none}</p>;
-  }
-  return (
-    <ul className="list deliveries">
-      {deliveries.map((delivery) => (
-        <li key={delivery.id}>
-          <div className="delivery">
-            <div className="delivery-destination">
-              <strong>{delivery.destination.name}</strong>
-              <span className="muted">
-                {delivery.destination.type}
-                {delivery.destination.state !== 'active' ? (
-                  <>
-                    {' '}
-                    <DestinationStatePill state={delivery.destination.state} />
-                  </>
-                ) : null}
-              </span>
-            </div>
-            <DeliveryStatusPill status={delivery.status} />
-            <span className="muted delivery-attempts">
-              {t.feedback.deliveries.attempts(delivery.attempts)}
-            </span>
-            {isDeliveryReplayable(delivery.status) ? (
-              <button
-                type="button"
-                className="secondary"
-                disabled={replay.isPending}
-                onClick={() => replay.mutate(delivery.id, { onSuccess: afterReplay })}
-              >
-                {t.feedback.deliveries.replay}
-              </button>
-            ) : (
-              <span />
-            )}
-          </div>
-          {delivery.externalUrl ? (
-            <p className="delivery-link">
-              <ExternalLink href={delivery.externalUrl} />
-            </p>
-          ) : null}
-          {delivery.lastError ? (
-            <p className="alert">{t.feedback.deliveries.lastError(delivery.lastError)}</p>
-          ) : null}
-          {replay.variables === delivery.id ? <ErrorMessage error={replay.error} /> : null}
-        </li>
-      ))}
-    </ul>
   );
 }
 

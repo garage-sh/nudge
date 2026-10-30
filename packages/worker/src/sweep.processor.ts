@@ -1,23 +1,49 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   CAPTURE_KEY_PREFIX,
+  closingJobId,
   DISPATCH_JOB,
+  HELD_SUMMARY_JOB,
+  heldSummaryJobId,
+  INCIDENT_LEVEL_JOB,
+  incidentLevelSweepJobId,
+  queueDeliveries,
   sweepJobId,
   triageJobId,
   TRIAGE_JOB,
   type DispatchJob,
+  type HeldSummaryJob,
+  type IncidentLevelJob,
   type TriageJob,
 } from '@nudge/core';
-import { captures, deliveries, feedbacks, type Db } from '@nudge/database';
+import {
+  captures,
+  closeQuietIncidents,
+  deliveries,
+  endCalmStorms,
+  feedbacks,
+  incidentsLeftAwaitingLevel,
+  rearmForClosing,
+  type Db,
+} from '@nudge/database';
 import type { JobType, Queue } from 'bullmq';
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
   DEFAULT_CAPTURE_SWEEP,
   DEFAULT_SWEEP,
+  incidentOptionsOf,
   MAX_TRIAGE_SWEEP_BACKOFF_MS,
+  type IncidentOptions,
   type WorkerOptions,
 } from './options.js';
-import { DB, DISPATCH_QUEUE_TOKEN, OPTIONS, TRIAGE_QUEUE_TOKEN } from './tokens.js';
+import {
+  DB,
+  DISPATCH_QUEUE_TOKEN,
+  HELD_SUMMARY_QUEUE_TOKEN,
+  INCIDENT_LEVEL_QUEUE_TOKEN,
+  OPTIONS,
+  TRIAGE_QUEUE_TOKEN,
+} from './tokens.js';
 
 /** Items handled per run (or per page): the next run picks up the rest. */
 const BATCH = 100;
@@ -35,22 +61,29 @@ const LIVE_JOBS: JobType[] = [
 const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 
 /**
- * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26) and
- * of the Capture storage. Without an outbox, a Feedback or a Delivery can be stored
- * without its queueing succeeding; its job can also have exhausted its retries without
- * moving it forward (Judge away for long, Postgres unavailable). The sweep queues them
- * again, without doubling a job still waiting or running.
+ * Sweeps of the Feedbacks left Received (D18), of the Deliveries left pending (D26), of
+ * the Capture storage, and of the Open Incidents past their Quiet period. Without an
+ * outbox, a Feedback or a Delivery can be stored without its queueing succeeding; its job
+ * can also have exhausted its retries without moving it forward (Judge away for long,
+ * Postgres unavailable). The sweep queues them again, without doubling a job still
+ * waiting or running.
  */
 @Injectable()
 export class SweepProcessor {
   private readonly logger = new Logger(SweepProcessor.name);
+  private readonly incidents: Required<IncidentOptions>;
 
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(TRIAGE_QUEUE_TOKEN) private readonly triageQueue: Queue<TriageJob>,
     @Inject(DISPATCH_QUEUE_TOKEN) private readonly dispatchQueue: Queue<DispatchJob>,
+    @Inject(INCIDENT_LEVEL_QUEUE_TOKEN)
+    private readonly incidentLevelQueue: Queue<IncidentLevelJob>,
+    @Inject(HELD_SUMMARY_QUEUE_TOKEN) private readonly heldSummaryQueue: Queue<HeldSummaryJob>,
     @Inject(OPTIONS) private readonly options: WorkerOptions,
-  ) {}
+  ) {
+    this.incidents = incidentOptionsOf(options);
+  }
 
   /**
    * Sends back to Triage the Feedbacks Received for longer than the delay, the ones due
@@ -142,6 +175,86 @@ export class SweepProcessor {
     );
     for (const id of batch) {
       this.logger.warn(`Delivery ${id} left pending without a job: sent back to dispatch`);
+    }
+  }
+
+  /**
+   * Queues again the Level assessment of the Incidents still awaiting their Level past
+   * the Judge wait: their job was lost (queueing failed, retries exhausted).
+   * Past the wait, the assessment no longer asks the Judge: the default Level applies and
+   * the Incident is dispatched. A job still on its way does no harm: the first one to
+   * settle the Level wins, the other does nothing.
+   */
+  async sweepIncidentLevels(): Promise<void> {
+    const { judgeWaitMs } = this.incidents;
+    const due = await incidentsLeftAwaitingLevel(
+      this.db,
+      new Date(Date.now() - judgeWaitMs),
+      BATCH,
+    );
+    if (due.length === 0) return;
+    const run = Date.now();
+    await this.incidentLevelQueue.addBulk(
+      due.map((incidentId) => ({
+        name: INCIDENT_LEVEL_JOB,
+        data: { incidentId },
+        opts: { jobId: incidentLevelSweepJobId(incidentId, run) },
+      })),
+    );
+    for (const id of due) {
+      this.logger.warn(`Incident ${id} left awaiting its Level: its assessment queued again`);
+    }
+  }
+
+  /**
+   * Closes the Open Incidents silent past their Quiet period, the longest silent first,
+   * and queues the closing their delivered openings carry. It also re-arms the closing
+   * of an opening delivered while its Incident closed and missed by the dispatch job
+   * (a race with the closing, a worker stop). If the queueing fails, the sweep of the
+   * Deliveries left pending sends them.
+   */
+  async sweepQuietIncidents(): Promise<void> {
+    const { quietPeriodMs } = this.incidents;
+    const closed = await closeQuietIncidents(this.db, quietPeriodMs, BATCH);
+    for (const { id } of closed) this.logger.log(`Incident ${id} closed: Quiet period over`);
+    const missed = await rearmForClosing(this.db, 'all');
+    for (const { id } of missed) {
+      this.logger.warn(`Delivery ${id} delivered its opening without its closing: re-armed`);
+    }
+    const closings = [...closed.flatMap((incident) => incident.deliveries), ...missed];
+    try {
+      await queueDeliveries(this.dispatchQueue, closings, closingJobId);
+    } catch (error) {
+      this.logger.error(
+        `Closings of quiet Incidents not queued, the sweep of pending Deliveries will send them: ${String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Ends the storms during which no Incident was Held for a whole window (their Project
+   * is back under its Opening cap), and queues one summary per Destination concerned.
+   * The storm ends before its summaries are queued: if the queueing fails, they are lost
+   * (logged), never sent twice.
+   */
+  async sweepStorms(): Promise<void> {
+    const { openingWindowMs } = this.incidents;
+    const ended = await endCalmStorms(this.db, openingWindowMs, BATCH);
+    const summaries = ended.flatMap(({ id, destinationIds }) =>
+      destinationIds.map((destinationId) => ({ stormId: id, destinationId })),
+    );
+    for (const { id } of ended) this.logger.log(`Incident storm ${id} over`);
+    if (summaries.length === 0) return;
+    try {
+      await this.heldSummaryQueue.addBulk(
+        summaries.map((job) => ({
+          name: HELD_SUMMARY_JOB,
+          data: job,
+          opts: { jobId: heldSummaryJobId(job) },
+        })),
+      );
+    } catch (error) {
+      this.logger.error(`Summaries of the Held Incidents not queued: ${String(error)}`);
     }
   }
 

@@ -12,6 +12,7 @@ import { judgeConfigFromEnv } from '@nudge/judge';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import {
   DEFAULT_CONCURRENCY,
+  DEFAULT_INCIDENTS,
   DEFAULT_JUDGE_TIMEOUT_MS,
   DEFAULT_PURGE,
   DEFAULT_SUSPENSION,
@@ -31,6 +32,7 @@ export type WorkerConfig = Required<
     | 'judgeTimeoutMs'
     | 'suspension'
     | 'purge'
+    | 'incidents'
     | 'concurrency'
   >
 > & { readonly storage: StorageConfig; readonly outbound: OutboundPolicy };
@@ -105,6 +107,26 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
         durationBounds,
       ),
     },
+    incidents: {
+      quietPeriodMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_QUIET_PERIOD_MS',
+        DEFAULT_INCIDENTS.quietPeriodMs,
+        durationBounds,
+      ),
+      sweepIntervalMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_SWEEP_INTERVAL_MS',
+        DEFAULT_INCIDENTS.sweepIntervalMs,
+        durationBounds,
+      ),
+      judgeWaitMs: integerEnv(
+        env,
+        'NUDGE_INCIDENT_JUDGE_WAIT_MS',
+        DEFAULT_INCIDENTS.judgeWaitMs,
+        durationBounds,
+      ),
+    },
     concurrency: {
       triage: integerEnv(env, 'NUDGE_TRIAGE_CONCURRENCY', DEFAULT_CONCURRENCY.triage, {
         min: 1,
@@ -112,6 +134,12 @@ export function workerConfigFromEnv(env: Env): WorkerConfig {
       dispatch: integerEnv(env, 'NUDGE_DISPATCH_CONCURRENCY', DEFAULT_CONCURRENCY.dispatch, {
         min: 1,
       }),
+      incidentLevel: integerEnv(
+        env,
+        'NUDGE_INCIDENT_LEVEL_CONCURRENCY',
+        DEFAULT_CONCURRENCY.incidentLevel,
+        { min: 1 },
+      ),
     },
   };
 }

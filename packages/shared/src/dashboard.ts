@@ -7,7 +7,15 @@ import {
   SEVERITIES,
   SOURCES,
   FEEDBACK_TYPES,
+  INCIDENT_STATES,
+  OPENING_CAP_BOUNDS,
+  QUIET_PERIOD_BOUNDS,
+  LEVELS,
   type AuthorTrust,
+  type IncidentCloseCause,
+  type IncidentState,
+  type Level,
+  type LevelOrigin,
   type DestinationState,
   type FeedbackState,
   type JudgeProvider,
@@ -17,6 +25,7 @@ import {
   type FeedbackType,
 } from './domain.js';
 import type { Context, CaptureType } from './feedback-input.js';
+import { INCIDENT_LIMITS, type IncidentReport } from './incident-input.js';
 
 /**
  * Contract of the dashboard API (`/api/…`): accepted bodies (zod schemas, validated
@@ -38,6 +47,8 @@ export const DASHBOARD_LIMITS = {
   feedbacksPerPageMax: 100,
   /** Characters of a Feedback's text shown in the inbox. */
   feedbackPreview: 280,
+  incidentsPerPage: 50,
+  incidentsPerPageMax: 100,
   judgeModel: 200,
   judgeUrl: 2048,
   judgeKey: 1000,
@@ -148,6 +159,24 @@ export const projectUpdateSchema = z.strictObject({
   name: projectName.optional(),
   description: projectDescription.optional(),
   allowedOrigins: allowedOrigins.optional(),
+  /** The Level of an Incident whose sender declared none. */
+  defaultLevel: z.enum(LEVELS).optional(),
+  /** The Quiet period of the Project's Incidents, in seconds; `null`: the Instance default. */
+  quietPeriod: z
+    .number()
+    .int()
+    .min(QUIET_PERIOD_BOUNDS.min)
+    .max(QUIET_PERIOD_BOUNDS.max)
+    .nullable()
+    .optional(),
+  /** Incidents the Project may open per minute and still dispatch; `null`: the Instance default. */
+  openingCap: z
+    .number()
+    .int()
+    .min(OPENING_CAP_BOUNDS.min)
+    .max(OPENING_CAP_BOUNDS.max)
+    .nullable()
+    .optional(),
 });
 export type ProjectUpdate = z.input<typeof projectUpdateSchema>;
 
@@ -334,6 +363,18 @@ export interface ProjectView {
   readonly description: string | null;
   readonly publicKey: string;
   readonly allowedOrigins: readonly string[];
+  /** The Level of an Incident whose sender declared none. */
+  readonly defaultLevel: Level;
+  /**
+   * Seconds an Incident of the Project stays Open without a new Occurrence, unless the
+   * Occurrence sets its own; `null`: the Instance default.
+   */
+  readonly quietPeriod: number | null;
+  /**
+   * Incidents the Project may open per minute and still dispatch: past it, they are
+   * Held. `null`: the Instance default.
+   */
+  readonly openingCap: number | null;
   readonly createdAt: string;
 }
 
@@ -506,3 +547,79 @@ export const verdictCorrectionSchema = z
     },
   );
 export type VerdictCorrection = z.input<typeof verdictCorrectionSchema>;
+
+/**
+ * Filters and pagination of a Project's Incidents (`GET /api/incidents?…`), newest
+ * opened first. `environment` is matched exactly.
+ */
+export const incidentFiltersSchema = z.strictObject({
+  project: z.uuid(),
+  state: z.enum(INCIDENT_STATES).optional(),
+  level: z.enum(LEVELS).optional(),
+  environment: z.string().max(INCIDENT_LIMITS.environment).optional(),
+  /** `true`: only the Held Incidents (opened past the Opening cap, not dispatched). */
+  held: z.literal('true').optional(),
+  /** The `next` of the previous page. */
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(DASHBOARD_LIMITS.incidentsPerPageMax)
+    .default(DASHBOARD_LIMITS.incidentsPerPage),
+});
+
+/** The Project whose Environments are listed (`GET /api/incidents/environments?project=…`). */
+export const incidentEnvironmentsSchema = z.strictObject({ project: z.uuid() });
+
+/** A row of a Project's Incident list. Every text comes from the sender: render it as text. */
+export interface IncidentSummaryView {
+  readonly id: string;
+  readonly project: ProjectRefView;
+  readonly state: IncidentState;
+  /** The title of the Occurrence that opened the Incident. */
+  readonly title: string;
+  readonly level: Level;
+  readonly levelOrigin: LevelOrigin;
+  /** The Environment of the Occurrence that opened it; `null`: none. */
+  readonly environment: string | null;
+  /** Occurrences absorbed, the first one included. */
+  readonly occurrences: number;
+  readonly firstSeenAt: string;
+  readonly lastSeenAt: string;
+  /** Why and when the Incident closed; `null` while it is Open. */
+  readonly closeCause: IncidentCloseCause | null;
+  readonly closedAt: string | null;
+  /**
+   * Opened past its Project's Opening cap: recorded, not dispatched, until a Member
+   * Redispatches it.
+   */
+  readonly held: boolean;
+}
+
+/** A page of a Project's Incidents, newest opened first. */
+export interface IncidentPage {
+  readonly incidents: readonly IncidentSummaryView[];
+  /** Cursor of the next page, `null` on the last one. */
+  readonly next: string | null;
+}
+
+/** The details of an Incident (`GET /api/incidents/:id`). */
+export interface IncidentDetailView extends IncidentSummaryView {
+  /** Declared by the sender, or derived by nudge (a digest). */
+  readonly fingerprint: string;
+  readonly firstReport: IncidentReport;
+  readonly lastReport: IncidentReport;
+  /** At most one per Destination, oldest first. */
+  readonly deliveries: readonly DeliveryView[];
+}
+
+/**
+ * Redispatch of an Open Incident by a Member (`POST /api/incidents/:id/redispatch`): the
+ * Deliveries created to the Destinations whose Incident Filter now accepts it, and the
+ * updated Incident. `deliveriesCreated` is 0 when no further Destination accepts it.
+ */
+export interface IncidentRedispatchView {
+  readonly deliveriesCreated: number;
+  readonly incident: IncidentDetailView;
+}

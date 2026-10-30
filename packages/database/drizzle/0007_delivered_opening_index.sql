@@ -1,0 +1,1 @@
+CREATE INDEX "deliveries_delivered_opening_idx" ON "deliveries" USING btree ("incident_id") WHERE "deliveries"."status" = 'delivered' and "deliveries"."incident_moment" <> 'closed';

@@ -6,8 +6,9 @@ import {
   useSyncExternalStore,
   type InputHTMLAttributes,
   type ReactNode,
+  type RefObject,
 } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ApiError } from '../api/client.js';
 import { useT, type Messages } from '../i18n/index.js';
 
@@ -234,7 +235,11 @@ export function Field({
           e.preventDefault();
           const field = e.currentTarget;
           setError(validityMessage(field, t));
-          if (field.form?.querySelector(':invalid') === field) field.focus();
+          // A fieldset holding an invalid field is :invalid too: only fields are compared.
+          const first = field.form?.querySelector(
+            'input:invalid, select:invalid, textarea:invalid',
+          );
+          if (first === field) field.focus();
           onInvalid?.(e);
         }}
         onChange={(e) => {
@@ -451,5 +456,54 @@ export function ExternalLink({ href }: { href: string }) {
     <a href={href} target="_blank" rel="noopener noreferrer" className="raw-link">
       {href}
     </a>
+  );
+}
+
+/** A list of label / value pairs (`.properties`), values rendered as text. */
+export function Properties({ rows }: { rows: readonly (readonly [string, ReactNode])[] }) {
+  return (
+    <dl className="properties">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A link to a panel (`/settings#settings-smtp`, `/projects/:id#project-incidents`)
+ * lands on it once the panels are drawn: the router does not scroll to a hash by itself.
+ */
+export function useScrollToHash(ready: boolean) {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!ready || !hash) return;
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+  }, [ready, hash]);
+}
+
+/** A titled `.panel` section of a detail screen, labelled by its heading (`headingId`). */
+export function DetailSection({
+  headingId,
+  title,
+  headingRef,
+  children,
+}: {
+  headingId: string;
+  title: string;
+  /** To move focus to the heading, after an action removed the control that had it. */
+  headingRef?: RefObject<HTMLHeadingElement | null>;
+  children: ReactNode;
+}) {
+  return (
+    <section className="panel" aria-labelledby={headingId}>
+      <h2 id={headingId} ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }

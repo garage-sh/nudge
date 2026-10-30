@@ -1,6 +1,17 @@
 import { z } from 'zod';
-import type { AuthorTrust, FailureClass, FeedbackType, Severity, Source } from '../domain.js';
+import type {
+  AuthorTrust,
+  FailureClass,
+  FeedbackType,
+  IncidentCloseCause,
+  IncidentState,
+  Level,
+  LevelOrigin,
+  Severity,
+  Source,
+} from '../domain.js';
 import type { CaptureType, Context } from '../feedback-input.js';
+import type { IncidentContext } from '../incident-input.js';
 import { httpUrlSchema, type DestinationDefinition } from './definition.js';
 
 /**
@@ -25,7 +36,17 @@ export type WebhookSecrets = Readonly<
  * so the documented payload cannot drift from the one sent.
  */
 
-export type WebhookEventName = 'feedback' | 'alert' | 'ping';
+export type WebhookEventName =
+  | 'feedback'
+  | 'incident.opened'
+  | 'incident.raised'
+  | 'incident.closed'
+  | 'incidents.held'
+  | 'alert'
+  | 'ping';
+
+/** The events of an Incident's life, as `X-Nudge-Event` and the body's `event` name them. */
+export type WebhookIncidentEventName = Extract<WebhookEventName, `incident.${string}`>;
 
 /** A dispatched Feedback (`isTest: true` for the "test" button). */
 export interface WebhookFeedbackEvent {
@@ -55,6 +76,67 @@ export interface WebhookFeedbackEvent {
   };
 }
 
+/**
+ * An Incident that opened (`incident.opened`), whose Level rose to reach this Destination
+ * (`incident.raised`), or that closed (`incident.closed`, with `incident.closure`).
+ * `incident.id` is stable for the Incident's whole life: the receiver tracks the Incident
+ * by it. Each Destination gets one `incident.opened` or `incident.raised` per Incident,
+ * then one `incident.closed`. An `incident.closed` for an id the receiver never saw is an
+ * Incident that opened and closed while the Destination could not be reached: it is
+ * delivered once, in its final state.
+ */
+export interface WebhookIncidentEvent {
+  readonly event: WebhookIncidentEventName;
+  readonly delivery: { readonly id: string };
+  readonly project: { readonly id: string; readonly name: string };
+  /** The Incident in plain text, for a receiver that relays it as is. */
+  readonly title: string;
+  readonly summary: string;
+  readonly incident: {
+    readonly id: string;
+    readonly state: IncidentState;
+    /** Title, message, Environment and context of the Occurrence that opened the Incident: raw, as sent. */
+    readonly title: string;
+    readonly message: string | null;
+    readonly environment: string | null;
+    readonly context: IncidentContext;
+    /** The Incident's current Level, and where it came from. */
+    readonly level: Level;
+    readonly levelOrigin: LevelOrigin;
+    readonly fingerprint: string;
+    readonly occurrences: number;
+    readonly firstSeenAt: string;
+    readonly lastSeenAt: string;
+    /** Why and when it closed; `null` while it is Open. */
+    readonly closure: { readonly cause: IncidentCloseCause; readonly closedAt: string } | null;
+    readonly dashboardUrl: string | null;
+  };
+}
+
+/**
+ * The summary of the Incidents a storm held (`incidents.held`): the Project opened
+ * Incidents faster than its Opening cap, those past it were recorded but not dispatched.
+ * Sent once the Project is back under its cap, once per storm, to each Destination whose
+ * Incident Filter accepts at least one of them, in place of the Incidents themselves.
+ * `id` is stable: a receiver uses it to ignore a retried summary.
+ */
+export interface WebhookHeldSummaryEvent {
+  readonly event: 'incidents.held';
+  readonly id: string;
+  readonly project: { readonly id: string; readonly name: string };
+  /** The summary in plain text, for a receiver that relays it as is. */
+  readonly title: string;
+  readonly summary: string;
+  /** The Held Incidents this Destination's Incident Filter accepts, and when they opened. */
+  readonly held: {
+    readonly count: number;
+    readonly firstOpenedAt: string;
+    readonly lastOpenedAt: string;
+  };
+  /** The Project's Held Incidents in the dashboard; `null` without `NUDGE_DASHBOARD_URL`. */
+  readonly dashboardUrl: string | null;
+}
+
 interface WebhookAlertBase {
   readonly id: string;
   readonly at: string;
@@ -82,6 +164,11 @@ export interface WebhookAlertEvent {
           readonly failureClass: Exclude<FailureClass, 'permanent'>;
           readonly message: string;
         };
+      })
+    | (WebhookAlertBase & {
+        readonly type: 'incident_storm';
+        /** Incidents Held so far in this storm, and the Opening cap it went past. */
+        readonly storm: { readonly held: number; readonly cap: number; readonly startedAt: string };
       });
 }
 
@@ -93,6 +180,10 @@ export interface WebhookPingEvent {
 /** A sample of each event's body, as a receiver gets it. */
 export const WEBHOOK_EXAMPLES: {
   readonly feedback: WebhookFeedbackEvent;
+  readonly 'incident.opened': WebhookIncidentEvent;
+  readonly 'incident.raised': WebhookIncidentEvent;
+  readonly 'incident.closed': WebhookIncidentEvent;
+  readonly 'incidents.held': WebhookHeldSummaryEvent;
   readonly alert: WebhookAlertEvent;
   readonly ping: WebhookPingEvent;
 } = {
@@ -119,6 +210,93 @@ export const WEBHOOK_EXAMPLES: {
       receivedAt: '2026-10-24T09:29:58.000Z',
       dashboardUrl: 'https://nudge.example.com/feedbacks/c4e7a912-3f5b-4e80-b1d6-9a2c8e0f5b64',
     },
+  },
+  'incident.opened': {
+    event: 'incident.opened',
+    delivery: { id: '3a7d1e94-6b2c-4f08-8d5e-1c9b7a2f4e60' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Error · Payment provider timed out',
+    summary: 'An Incident opened in Shop (production).',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'open',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'error',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 1,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:00:00.000Z',
+      closure: null,
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+    },
+  },
+  'incident.raised': {
+    event: 'incident.raised',
+    delivery: { id: '8c2f5a17-3e9d-4b60-a4c8-7d1e9f3b5a02' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Critical · Payment provider timed out',
+    summary: 'An Incident of Shop rose to Critical.',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'open',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'critical',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 14,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:12:41.000Z',
+      closure: null,
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+    },
+  },
+  'incident.closed': {
+    event: 'incident.closed',
+    delivery: { id: '8c2f5a17-3e9d-4b60-a4c8-7d1e9f3b5a02' },
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Closed · Critical · Payment provider timed out',
+    summary: 'An Incident of Shop closed: its Quiet period went by without a new Occurrence.',
+    incident: {
+      id: 'e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+      state: 'closed',
+      title: 'Payment provider timed out',
+      message: 'POST /charges took 30 s',
+      environment: 'production',
+      context: { service: 'checkout', version: '3.1.0' },
+      level: 'critical',
+      levelOrigin: 'declared',
+      fingerprint: 'payments-timeout',
+      occurrences: 14,
+      firstSeenAt: '2026-10-29T08:00:00.000Z',
+      lastSeenAt: '2026-10-29T08:12:41.000Z',
+      closure: { cause: 'quiet_period', closedAt: '2026-10-29T09:12:41.000Z' },
+      dashboardUrl:
+        'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents/e1b5c8a3-7d24-4f6e-9a01-5c3d8b2e7f49',
+    },
+  },
+  'incidents.held': {
+    event: 'incidents.held',
+    id: 'held-5b0e2c7a-4f19-4d83-9e6a-1c2b3d4e5f60-3a7d1e94-6b2c-4f08-8d5e-1c9b7a2f4e60',
+    project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
+    title: 'Incidents held · Shop',
+    summary:
+      'The Project opened Incidents faster than its Opening cap: 37 Incidents were held and not sent here. They are listed in nudge, where a Member can Redispatch the ones still Open.',
+    held: {
+      count: 37,
+      firstOpenedAt: '2026-10-29T08:00:04.000Z',
+      lastOpenedAt: '2026-10-29T08:03:51.000Z',
+    },
+    dashboardUrl:
+      'https://nudge.example.com/projects/6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18/incidents?held=true',
   },
   alert: {
     event: 'alert',
