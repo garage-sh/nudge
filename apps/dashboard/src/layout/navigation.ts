@@ -1,3 +1,4 @@
+import { Inbox, Settings, Users, type LucideIcon } from 'lucide-react';
 import type { Messages } from '../i18n/index.js';
 
 /**
@@ -8,11 +9,14 @@ import type { Messages } from '../i18n/index.js';
 export interface NavigationEntry {
   readonly path: string;
   readonly label: keyof Messages['layout'];
+  readonly icon: LucideIcon;
 }
 
-export const MAIN_NAVIGATION: readonly NavigationEntry[] = [{ path: '/feedbacks', label: 'inbox' }];
+export const MAIN_NAVIGATION: readonly NavigationEntry[] = [
+  { path: '/feedbacks', label: 'inbox', icon: Inbox },
+];
 
 export const INSTANCE_NAVIGATION: readonly NavigationEntry[] = [
-  { path: '/members', label: 'members' },
-  { path: '/settings', label: 'settings' },
+  { path: '/members', label: 'members', icon: Users },
+  { path: '/settings', label: 'settings', icon: Settings },
 ];

@@ -196,6 +196,7 @@ export const en = {
     members: 'Members',
     settings: 'Settings',
     signOut: 'Sign out',
+    accountMenu: 'Account',
     inReviewTitle: 'Feedback in review',
     inReviewHidden: ', Feedback in review: ',
     thisWeekTitle: 'Feedback received in the last seven days',
@@ -339,7 +340,7 @@ export const en = {
     text: 'Feedback text',
     declaredType: (type: string) => `Type declared by the Author: ${type}`,
     trail: 'Trail',
-    backToInbox: '← Inbox',
+    crumb: 'Feedback',
     position: (position: number, total: number) => `${position} of ${total}`,
     previous: 'Previous',
     next: 'Next',
@@ -513,7 +514,7 @@ export const en = {
   },
 
   incident: {
-    backToList: 'Back to Incidents',
+    backToList: 'Incidents',
     properties: 'Incident',
     state: 'State',
     level: 'Level',

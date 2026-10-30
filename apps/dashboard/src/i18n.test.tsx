@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { fr } from './i18n/fr.js';
 import { LOCALE_STORAGE_KEY } from './i18n/index.js';
-import { SIGNED_IN, fakeApi } from './test/fake-api.js';
+import { MEMBER, SIGNED_IN, fakeApi } from './test/fake-api.js';
 import { renderDashboard } from './test/render.js';
 
 const routes = () => ({
@@ -17,12 +17,13 @@ const routes = () => ({
 });
 
 describe('Dashboard language', () => {
-  it('switches to French from the sidebar, and remembers it for the next visit', async () => {
+  it('switches to French from the account menu, and remembers it for the next visit', async () => {
     fakeApi(routes());
     const { unmount } = renderDashboard('/feedbacks');
 
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeTruthy();
     expect(document.documentElement.lang).toBe('en');
+    await userEvent.click(await screen.findByRole('button', { name: MEMBER.email }));
     await userEvent.selectOptions(screen.getByLabelText('Language'), 'fr');
 
     expect(await screen.findByRole('heading', { name: fr.inbox.title })).toBeTruthy();

@@ -1,3 +1,4 @@
+import { CircleDot, TriangleAlert } from 'lucide-react';
 import { Link } from 'react-router';
 import { useAlerts } from '../api/alerts.js';
 import { useT } from '../i18n/index.js';
@@ -18,6 +19,7 @@ export function Alerts() {
     <section className="sidebar-alerts" aria-label={t.alerts.region}>
       {feedbacksInReview > 0 ? (
         <Link className="alert-review" to="/feedbacks?state=in_review">
+          <CircleDot className="icon" aria-hidden="true" />
           {t.alerts.inReview(feedbacksInReview)}
         </Link>
       ) : null}
@@ -27,6 +29,7 @@ export function Alerts() {
           className="alert-suspended"
           to={`/projects/${encodeURIComponent(project.id)}/destinations`}
         >
+          <TriangleAlert className="icon" aria-hidden="true" />
           {t.alerts.suspended(name, project.name)}
         </Link>
       ))}

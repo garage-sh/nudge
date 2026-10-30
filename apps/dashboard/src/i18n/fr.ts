@@ -172,6 +172,7 @@ export const fr: Messages = {
     members: 'Membres',
     settings: 'Paramètres',
     signOut: 'Se déconnecter',
+    accountMenu: 'Compte',
     inReviewTitle: 'Retours En revue',
     inReviewHidden: ', Retours En revue : ',
     thisWeekTitle: 'Retours reçus ces sept derniers jours',
@@ -313,7 +314,7 @@ export const fr: Messages = {
     text: 'Texte du Retour',
     declaredType: (type) => `Type déclaré par l’Auteur : ${type}`,
     trail: 'Fil',
-    backToInbox: '← Boîte de réception',
+    crumb: 'Retour',
     position: (position, total) => `${position} sur ${total}`,
     previous: 'Précédent',
     next: 'Suivant',
@@ -487,7 +488,7 @@ export const fr: Messages = {
   },
 
   incident: {
-    backToList: 'Retour aux Incidents',
+    backToList: 'Incidents',
     properties: 'Incident',
     state: 'État',
     level: 'Niveau',

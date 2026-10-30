@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import { ApiError } from '../api/client.js';
 import { useT, type Messages } from '../i18n/index.js';
@@ -74,6 +75,7 @@ export function Loading() {
       <span aria-hidden="true" />
       <span aria-hidden="true" />
       <span aria-hidden="true" />
+      <span aria-hidden="true" />
     </div>
   );
 }
@@ -89,8 +91,9 @@ export function useDocumentTitle(title: string) {
 }
 
 /**
- * A screen's header: the title (the screen's only `h1`), an optional back link above
- * it, a description, and the screen's actions on the right.
+ * A screen's header: a top bar that stays at the top of the sheet, with where the
+ * screen sits (`back`, its parent), the title (the screen's only `h1`) and the
+ * screen's actions on the right; the description follows under it.
  */
 export function PageHeader({
   title,
@@ -105,18 +108,23 @@ export function PageHeader({
 }) {
   useDocumentTitle(title);
   return (
-    <header className="page-header">
-      <div>
-        {back ? (
-          <Link to={back.to} className="back-link">
-            <span aria-hidden="true">←</span> {back.label}
-          </Link>
-        ) : null}
-        <h1>{title}</h1>
-        {description ? <p className="description">{description}</p> : null}
-      </div>
-      {actions ? <div className="actions">{actions}</div> : null}
-    </header>
+    <>
+      <header className="page-header">
+        <div className="crumbs">
+          {back ? (
+            <>
+              <Link to={back.to} className="crumb">
+                {back.label}
+              </Link>
+              <ChevronRight className="crumb-separator" aria-hidden="true" />
+            </>
+          ) : null}
+          <h1>{title}</h1>
+        </div>
+        {actions ? <div className="actions">{actions}</div> : null}
+      </header>
+      {description ? <p className="page-description">{description}</p> : null}
+    </>
   );
 }
 
@@ -146,13 +154,21 @@ export function EmptyState({
   title,
   children,
   action,
+  icon: Icon,
 }: {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** What would be here (the Inbox, a Destination…), drawn above the title. */
+  icon?: LucideIcon;
 }) {
   return (
     <div className="empty">
+      {Icon ? (
+        <span className="empty-icon">
+          <Icon className="icon" aria-hidden="true" />
+        </span>
+      ) : null}
       <p>
         <strong>{title}</strong>
       </p>

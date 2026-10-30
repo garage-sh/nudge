@@ -246,7 +246,7 @@ describe('An Incident’s detail', () => {
     const last = within(screen.getByRole('region', { name: 'Last Occurrence' }));
     expect(last.getByText('Payment provider timed out again')).toBeTruthy();
     expect(last.getByText('web-3')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to Incidents' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Incidents' })).toBeTruthy();
   });
 
   it('shows its Deliveries, replays a failed one but not a delivered one, and redispatches the Open Incident', async () => {
