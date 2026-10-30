@@ -4,6 +4,7 @@ All configuration goes through environment variables. [`.env.example`](../.env.e
 
 - [Variables](#variables)
 - [Judge](#judge)
+- [Incidents](#incidents)
 - [Outbound calls](#outbound-calls)
 - [Captures](#captures)
 
@@ -40,6 +41,18 @@ Without a Judge, nudge runs in degraded mode: it detects neither Severity, nor J
 Only the Feedback text, its non-personal context and the Project description are sent to the Judge, and only as data. The Capture is never sent to it.
 
 The Judge also assesses the Level of an Incident whose sender declares none. The Incident's Dispatch waits for it at most `NUDGE_INCIDENT_JUDGE_WAIT_MS` (10 s) from the Occurrence that opened it, never retries it, and otherwise applies the Project's default Level; reporting the Incident never waits for it. The title, message, Environment and context of that Occurrence and the Project description are sent to the Judge, only as data. Without a Judge, an undeclared Level is the Project's default Level.
+
+## Incidents
+
+The Instance defaults of [Incidents](incidents.md), each one overridden per Project in its settings (**Incidents** panel):
+
+| Default      | Value                   | Variable                         | Project setting                                                                             |
+| ------------ | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------- |
+| Quiet period | 1 hour                  | `NUDGE_INCIDENT_QUIET_PERIOD_MS` | Quiet period, in minutes; an Occurrence can also set its own with `quietPeriod`, in seconds |
+| Opening cap  | 20 Incidents per minute | `NUDGE_INCIDENT_OPENING_CAP`     | Opening cap                                                                                 |
+| Judge wait   | 10 seconds              | `NUDGE_INCIDENT_JUDGE_WAIT_MS`   | none; the Project sets the default Level (`error`) that applies past the wait               |
+
+The worker closes the Incidents silent past their Quiet period every `NUDGE_INCIDENT_SWEEP_INTERVAL_MS` (1 min), so an Incident may close up to that much later than its Quiet period.
 
 ## Outbound calls
 
