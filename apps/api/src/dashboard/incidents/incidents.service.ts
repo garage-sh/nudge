@@ -70,7 +70,6 @@ export class IncidentsService {
     return this.read(id);
   }
 
-  /** A page of the Project's Incidents, newest opened first. */
   /**
    * Deletion: erases the Incident and its Deliveries, for example when personal data
    * leaked into a report. What the Destinations already created remains.
@@ -79,6 +78,7 @@ export class IncidentsService {
     if (!isUuid(id) || !(await deleteIncident(this.db, id))) throw incidentNotFound();
   }
 
+  /** A page of the Project's Incidents, newest opened first. */
   async list(filters: IncidentFilters): Promise<IncidentPage> {
     const conditions: SQL[] = [eq(incidents.projectId, filters.project)];
     if (filters.state) conditions.push(eq(incidents.state, filters.state));

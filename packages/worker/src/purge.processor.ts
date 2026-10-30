@@ -79,7 +79,8 @@ export class PurgeProcessor {
       total += deleted;
       if (deleted < BATCH) break;
     }
-    await purgeEndedStorms(this.db, before);
+    const storms = await purgeEndedStorms(this.db, before);
     if (total > 0) this.logger.log(`Retention of ${days} d: ${total} Incident(s) purged`);
+    if (storms > 0) this.logger.log(`Retention of ${days} d: ${storms} ended Storm(s) purged`);
   }
 }

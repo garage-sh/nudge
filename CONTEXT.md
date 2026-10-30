@@ -179,5 +179,5 @@ The permanent removal of a Feedback and its Capture, or of an Incident, by a Mem
 _Avoid_: Archiving, rejection
 
 **Retention**:
-The optional duration, at the Instance level, after which Feedback, its Captures and Incidents are purged automatically. Unlimited by default.
+The optional duration, at the Instance level, after which Feedback, its Captures and Incidents are purged automatically. An Incident's age counts from its last Occurrence, so one still reporting is kept. Unlimited by default.
 _Avoid_: Expiration, TTL, archiving
