@@ -16,12 +16,14 @@ import {
   createMissingIncidentDeliveries,
   recordOccurrence,
   type CreatedDelivery,
+  type OpeningCap,
   type RecordedOccurrence,
   type Db,
   type Project,
 } from '@nudge/database';
 import {
   DEFAULT_OPENING_CAP,
+  OPENING_CAP_WINDOW_MS,
   type IncidentReport,
   type ReceivedIncident,
   type ValidatedIncident,
@@ -39,15 +41,12 @@ import {
  * The Instance's Opening cap: how many Incidents a Project without a cap of its own may
  * open per window and still dispatch. The window is one minute; tests shorten it.
  */
-export interface OpeningCapOptions {
-  readonly limit: number;
-  readonly windowMs: number;
-}
+export type OpeningCapOptions = OpeningCap;
 
 /** 20 Incidents per minute (`NUDGE_INCIDENT_OPENING_CAP` sets another number). */
 export const DEFAULT_OPENING_CAP_OPTIONS: OpeningCapOptions = {
   limit: DEFAULT_OPENING_CAP,
-  windowMs: 60_000,
+  windowMs: OPENING_CAP_WINDOW_MS,
 };
 
 /**
@@ -110,8 +109,8 @@ export class IncidentsIngestionService {
       resolved: occurrence.resolved ?? false,
       receivedAt: new Date().toISOString(),
     };
-    const { received, created, jobId, awaitsAssessment, stormStarted } = await this.db.transaction(
-      async (tx) => {
+    const { received, created, jobId, awaitsAssessment, startedStormId } =
+      await this.db.transaction(async (tx) => {
         const recorded = await recordOccurrence(tx, {
           projectId: project.id,
           fingerprint:
@@ -129,18 +128,18 @@ export class IncidentsIngestionService {
             created: [],
             jobId: dispatchJobId,
             awaitsAssessment: false,
-            stormStarted: null,
+            startedStormId: null,
           };
         }
         const awaitsAssessment = recorded.opened && recorded.awaitingLevel;
-        const { stormStarted } = recorded;
+        const { startedStormId } = recorded;
         if (report.resolved) {
           return {
             received: { id: recorded.id, state: 'closed' as const, opened: recorded.opened },
             created: (await closeIncident(tx, recorded.id, 'resolved')) ?? [],
             jobId: closingJobId,
             awaitsAssessment,
-            stormStarted,
+            startedStormId,
           };
         }
         const moment = dispatchMomentOf(recorded);
@@ -149,11 +148,10 @@ export class IncidentsIngestionService {
           created: moment ? await createMissingIncidentDeliveries(tx, recorded.id, moment) : [],
           jobId: dispatchJobId,
           awaitsAssessment,
-          stormStarted,
+          startedStormId,
         };
-      },
-    );
-    if (stormStarted) await this.alertStorm(stormStarted);
+      });
+    if (startedStormId) await this.alertStorm(startedStormId);
     if (awaitsAssessment && received.id) await this.assessLevel(received.id);
     await this.queue(received.id, created, jobId);
     return received;

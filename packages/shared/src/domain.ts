@@ -73,6 +73,9 @@ export const OPENING_CAP_BOUNDS = { min: 1, max: 10_000 } as const;
 /** The Instance default Opening cap, unless the Self-hoster sets another one. */
 export const DEFAULT_OPENING_CAP = 20;
 
+/** The window the Opening cap counts a Project's openings in: one minute. */
+export const OPENING_CAP_WINDOW_MS = 60_000;
+
 /** `extension` is reserved for the future QA module. */
 export const SOURCES = ['widget', 'api', 'extension'] as const;
 export type Source = (typeof SOURCES)[number];

@@ -152,6 +152,10 @@ _Avoid_: Rate limit, quota, throttle
 An Incident opened past its Project's Opening cap: recorded, but not dispatched. Once the Project is back under its cap, each Destination concerned receives a single summary of the Held Incidents; a Member may Redispatch any of them that is still Open.
 _Avoid_: Dropped, throttled, queued
 
+**Storm**:
+The time a Project spends past its Opening cap: it starts with its first Held Incident, warns the Members once through the Alert destination, and ends once a whole minute goes by without a Held Incident. Its end sends each Destination concerned the summary of its Held Incidents.
+_Avoid_: Burst, flood, spike
+
 ### Instance
 
 **Instance**:

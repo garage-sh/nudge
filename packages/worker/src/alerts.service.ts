@@ -31,7 +31,8 @@ import {
 
 /**
  * Member alerts: an event (Feedback moved to In review, Destination Suspended, Incident
- * storm started) is queued, then sent to the Instance's Alert destination by the adapter of its type.
+ * storm started) is queued, then sent to the Instance's Alert destination by the adapter
+ * of its type.
  * Without an Alert destination, the job does nothing: the dashboard always shows these
  * states through its badges, read from the database.
  *

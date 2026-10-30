@@ -289,7 +289,7 @@ export const WEBHOOK_EXAMPLES: {
     project: { id: '6f1c2a40-8e3b-4d21-a5c9-2b7e0d4f9a18', name: 'Shop' },
     title: 'Incidents held · Shop',
     summary:
-      'Shop opened Incidents faster than its Opening cap: 37 of them were held and not sent here. They are listed in nudge.',
+      'The Project opened Incidents faster than its Opening cap: 37 Incidents were held and not sent here. They are listed in nudge, where a Member can Redispatch the ones still Open.',
     held: {
       count: 37,
       firstOpenedAt: '2026-10-29T08:00:04.000Z',

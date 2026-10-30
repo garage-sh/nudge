@@ -5,7 +5,7 @@ import type {
   RetryPolicy,
   TriageThresholds,
 } from '@nudge/core';
-import { DEFAULT_QUIET_PERIOD_MS } from '@nudge/shared';
+import { DEFAULT_QUIET_PERIOD_MS, OPENING_CAP_WINDOW_MS } from '@nudge/shared';
 import type { JudgeConfig, Judge } from '@nudge/judge';
 import type { CaptureStorage } from '@nudge/storage';
 
@@ -132,7 +132,7 @@ export interface IncidentOptions {
 }
 
 /** The Opening cap counts the openings of the last minute. */
-export const DEFAULT_OPENING_WINDOW_MS = 60_000;
+export const DEFAULT_OPENING_WINDOW_MS = OPENING_CAP_WINDOW_MS;
 
 /**
  * One hour of silence closes an Incident; the sweep runs every minute; the Judge gets

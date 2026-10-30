@@ -84,12 +84,12 @@ export async function endCalmStorms(
   const ended: EndedStorm[] = [];
   for (const { id } of due) {
     const storm = await db.transaction(async (tx) => {
-      const [still] = await tx
+      const [calmed] = await tx
         .update(incidentStorms)
         .set({ endedAt: new Date() })
         .where(and(eq(incidentStorms.id, id), calm()))
         .returning();
-      return still ?? null;
+      return calmed ?? null;
     });
     if (!storm) continue;
     const held = await heldOf(db, storm);

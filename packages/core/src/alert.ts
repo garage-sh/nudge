@@ -4,8 +4,9 @@ import type { FailureClass } from '@nudge/shared';
 /**
  * Member alerts: what a Destination adapter receives when the Instance's Alert
  * destination must warn that a Feedback awaits review, that a Destination is
- * Suspended, or that a Project opens Incidents faster than its Opening cap. An alert never carries a Feedback's text: a Feedback In review is
- * suspected of Manipulation, it is read in the dashboard.
+ * Suspended, or that a Project opens Incidents faster than its Opening cap. An alert
+ * never carries a Feedback's text: a Feedback In review is suspected of Manipulation,
+ * it is read in the dashboard.
  */
 
 interface AlertBase {

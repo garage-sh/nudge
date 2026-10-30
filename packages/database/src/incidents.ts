@@ -36,7 +36,13 @@ export interface Occurrence {
    * The Project's Opening cap (its own, failing that the Instance's): how many Incidents
    * it may open per `windowMs` and still dispatch.
    */
-  readonly openingCap: { readonly limit: number; readonly windowMs: number };
+  readonly openingCap: OpeningCap;
+}
+
+/** An Opening cap: how many Incidents a Project may open per `windowMs` and still dispatch. */
+export interface OpeningCap {
+  readonly limit: number;
+  readonly windowMs: number;
 }
 
 /** The Open Incident an Occurrence landed in, and what this Occurrence did to it. */
@@ -54,7 +60,7 @@ export interface RecordedOccurrence {
   /** `true` when the Incident was opened past the Opening cap: it is not dispatched. */
   readonly held: boolean;
   /** The storm this Occurrence started, by opening the first Held Incident; else `null`. */
-  readonly stormStarted: string | null;
+  readonly startedStormId: string | null;
 }
 
 /**
@@ -77,7 +83,7 @@ export interface RecordedOccurrence {
  *
  * An Incident opened past its Project's Opening cap is Held: it is recorded, but no
  * Dispatch ever creates a Delivery for it (`createMissingIncidentDeliveries`), until a
- * Member Redispatches it. The first Held opening of a storm starts it (`stormStarted`).
+ * Member Redispatches it. The first Held opening of a storm starts it (`startedStormId`).
  */
 export async function recordOccurrence(
   tx: Transaction,
@@ -86,7 +92,7 @@ export async function recordOccurrence(
   const { report } = occurrence;
   const receivedAt = new Date(report.receivedAt);
   const declared = report.level !== null;
-  let opening: { held: boolean; stormStarted: string | null } | null = null;
+  let opening: { held: boolean; startedStormId: string | null } | null = null;
   for (;;) {
     const [open] = await tx
       .select({
@@ -128,7 +134,7 @@ export async function recordOccurrence(
         raised,
         awaitingLevel: open.awaitingLevel,
         held: open.held,
-        stormStarted: null,
+        startedStormId: null,
       };
     }
     if (report.resolved) return null;
@@ -160,7 +166,7 @@ export async function recordOccurrence(
         raised: false,
         awaitingLevel: !declared,
         held: opening.held,
-        stormStarted: opening.stormStarted,
+        startedStormId: opening.startedStormId,
       };
     }
     // Another Occurrence opened the Incident meanwhile: this one is absorbed by it.
@@ -177,8 +183,8 @@ async function openingPastCap(
   tx: Transaction,
   projectId: string,
   openedAt: Date,
-  { limit, windowMs }: Occurrence['openingCap'],
-): Promise<{ held: boolean; stormStarted: string | null }> {
+  { limit, windowMs }: OpeningCap,
+): Promise<{ held: boolean; startedStormId: string | null }> {
   await tx
     .select({ id: projects.id })
     .from(projects)
@@ -193,18 +199,23 @@ async function openingPastCap(
         gt(incidents.firstSeenAt, new Date(openedAt.getTime() - windowMs)),
       ),
     );
-  if ((recent?.openings ?? 0) < limit) return { held: false, stormStarted: null };
+  if ((recent?.openings ?? 0) < limit) return { held: false, startedStormId: null };
   const [ongoing] = await tx
     .update(incidentStorms)
-    .set({ lastHeldAt: openedAt })
+    // Openings are counted one after the other, not in the order of their reception
+    // time: the storm only ever widens, so that it covers each of its Held Incidents.
+    .set({
+      startedAt: sql`least(${incidentStorms.startedAt}, ${openedAt})`,
+      lastHeldAt: sql`greatest(${incidentStorms.lastHeldAt}, ${openedAt})`,
+    })
     .where(and(eq(incidentStorms.projectId, projectId), isNull(incidentStorms.endedAt)))
     .returning({ id: incidentStorms.id });
-  if (ongoing) return { held: true, stormStarted: null };
+  if (ongoing) return { held: true, startedStormId: null };
   const [started] = await tx
     .insert(incidentStorms)
     .values({ projectId, cap: limit, startedAt: openedAt, lastHeldAt: openedAt })
     .returning({ id: incidentStorms.id });
-  return { held: true, stormStarted: started?.id ?? null };
+  return { held: true, startedStormId: started?.id ?? null };
 }
 
 /**
