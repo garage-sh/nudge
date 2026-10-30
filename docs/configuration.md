@@ -44,15 +44,9 @@ The Judge also assesses the Level of an Incident whose sender declares none. The
 
 ## Incidents
 
-The Instance defaults of [Incidents](incidents.md), each one overridden per Project in its settings (**Incidents** panel):
+Of the Instance defaults of [Incidents](incidents.md) listed under [Variables](#variables), a Project overrides two in its settings (**Incidents** panel): the Quiet period, in minutes, and the Opening cap. An Occurrence can also set its own Quiet period with `quietPeriod`, in seconds. The Judge wait has no Project setting: past it, the Project's default Level (`error` unless a Member changes it) applies.
 
-| Default      | Value                   | Variable                         | Project setting                                                                             |
-| ------------ | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------- |
-| Quiet period | 1 hour                  | `NUDGE_INCIDENT_QUIET_PERIOD_MS` | Quiet period, in minutes; an Occurrence can also set its own with `quietPeriod`, in seconds |
-| Opening cap  | 20 Incidents per minute | `NUDGE_INCIDENT_OPENING_CAP`     | Opening cap                                                                                 |
-| Judge wait   | 10 seconds              | `NUDGE_INCIDENT_JUDGE_WAIT_MS`   | none; the Project sets the default Level (`error`) that applies past the wait               |
-
-The worker closes the Incidents silent past their Quiet period every `NUDGE_INCIDENT_SWEEP_INTERVAL_MS` (1 min), so an Incident may close up to that much later than its Quiet period.
+The sweep runs every `NUDGE_INCIDENT_SWEEP_INTERVAL_MS`, so an Incident may close up to that much later than its Quiet period.
 
 ## Outbound calls
 

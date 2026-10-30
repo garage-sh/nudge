@@ -100,7 +100,7 @@ The coding agent skill is `integrate-nudge-incidents`. Read [Reporting Incidents
 | Read                                             | For                                                                                    |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | [Integrating a Project](docs/integration.md)     | Widget (identity, language, page URL, Captures), React, JS SDK, HTTP API, coding agent |
-| [Reporting Incidents](docs/incidents.md)         | Incidents from an application's server: grouping, Level, closing, routing, storms      |
+| [Reporting Incidents](docs/incidents.md)         | Incidents from an application's server: grouping, Level, closing, routing, Storms      |
 | [Webhooks](docs/webhooks.md)                     | Webhook Destination: headers, payload, signature verification                          |
 | [Self-hosting](docs/self-hosting.md)             | HTTPS and proxies, updating, verifying images, backing up, scaling                     |
 | [Configuration](docs/configuration.md)           | Every environment variable, the Judge, outbound calls, Capture storage                 |

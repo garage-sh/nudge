@@ -7,9 +7,9 @@ description: Report an application's Incidents to nudge, the self-hosted feedbac
 
 nudge routes what an application reports going wrong on its side. Each application is a **Project** of a self-hosted **Instance**. One request is one **Occurrence**; nudge groups the Occurrences that share a **Fingerprint** into one Open **Incident**, gives it a **Level**, and dispatches it to the Project's Destinations whose Incident Filter accepts it. The Incident closes when the sender reports it `resolved`, when a Member closes it, or on its own after a **Quiet period** without a new Occurrence. A Closed Incident never reopens: the next Occurrence opens a new one.
 
-What users say about the application is Feedback, the job of the sibling skill `integrate-nudge` (`npx skills add garage-sh/nudge --skill integrate-nudge`).
-
 The contract of `POST /v1/incidents` is the OpenAPI document, the single source of truth for fields, bounds and error codes: <https://github.com/garage-sh/nudge/releases/latest/download/openapi.json>. Fetch it before writing a payload by hand.
+
+What users say about the application is Feedback, the job of the sibling skill `integrate-nudge` (`npx skills add garage-sh/nudge --skill integrate-nudge`).
 
 ## 1. Collect the Instance values
 
@@ -73,12 +73,12 @@ Done when `reportIncident` exists, reads both values from the environment, and c
 These are the decisions agents get wrong; the OpenAPI document has every bound.
 
 - **`title`** (required, 300 characters) — what is going wrong, stable across Occurrences of the same problem: `Payment provider timed out`, not `Charge ch_8f2k timed out`.
-- **`fingerprint`** (255 characters) — set it whenever the title must carry a variable part (an id, a count, a duration). Without it, nudge derives one from the title and the Environment, so every distinct title opens its own Incident: a flood, and past the Project's Opening cap the Incidents are Held instead of dispatched. Name the problem, not the instance: `payments:charge-timeout`.
+- **`fingerprint`** (255 characters) — set it whenever the title must carry a variable part (an id, a count, a duration). Without it, nudge derives one from the title and the Environment, so every distinct title opens its own Incident; past the Project's Opening cap, a Storm starts and the Incidents are Held instead of dispatched. Name the problem, not the instance: `payments:charge-timeout`.
 - **`level`** — `info`, `warning`, `error` or `critical`. Declare it whenever the code knows how serious the failure is: an undeclared Level waits up to about ten seconds for the Judge, then falls back to the Project's default Level. A higher Level on a later Occurrence raises the Incident; a lower one never lowers it. Destinations route by minimum Level, so agree the mapping with the human.
 - **`environment`** (100 characters) — always send it, from the deployment's own variable (`production`, `staging`…). An Incident without an Environment passes only the Incident Filters that accept every Environment.
 - **`message`** (5,000 characters) — the detail: the error message, the failing step. Bound it; a stack trace fits if trimmed.
 - **`context`** — what whoever reads the Incident needs to act: `service`, `version`, `host`, `jobId`, a trace link. Flat: 50 keys at most, values strings (1,000 characters), numbers, booleans or `null`. Destinations can route on its values. It never changes the Fingerprint.
-- **`quietPeriod`** — seconds (1 to 2,592,000) the Incident stays Open without a new Occurrence. The default is the Project's (one hour unless the human changed it). Set it when the failing thing reports at its own rhythm: a job that runs hourly reports at most once an hour, so give it more than its interval (`7200`). The last Occurrence's value counts, so send it on every Occurrence of that hook.
+- **`quietPeriod`** — seconds (1 to 2,592,000) the Incident stays Open without a new Occurrence. The default is the Project's Quiet period, or the Instance's (one hour unless the Self-hoster changed it). Set it when the failing thing reports at its own rhythm: a job that runs hourly reports at most once an hour, so give it more than its interval (`7200`). The last Occurrence's value counts, so send it on every Occurrence of that hook.
 - **`resolved: true`** — send it when the code itself sees the recovery: the healthcheck passes again, the job succeeds after failing. Use the same `title` and `environment` (or the same `fingerprint`) as the failure, so it matches the Open Incident and closes it. Matching nothing records nothing (`id: null`), so a hook that keeps no state may send it on every success.
 - **Strict object.** An unknown field (`severity`, `tags`, `user`, `stack`…) refuses the Occurrence with `400 invalid_incident`. Anything specific to the application goes in `context`.
 

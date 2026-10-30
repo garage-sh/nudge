@@ -69,16 +69,16 @@ The fields, their bounds and the error codes are described in [`docs/api/openapi
 
 ## Shaping a report
 
-| Field         | Set it                                                                                                                                                                                          |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`       | Always (300 characters). Keep it stable across Occurrences of the same problem: without a Fingerprint, the title and the Environment decide the grouping.                                       |
-| `fingerprint` | When the title carries a variable part (an id, a duration): `payments:charge-timeout` groups every timeout into one Incident, whatever its title. 255 characters.                               |
-| `level`       | Whenever the code knows how serious the failure is: the Incident is then dispatched at once, without waiting for the Judge.                                                                     |
-| `environment` | Always, if the application runs in several (`production`, `staging`…). An Incident without an Environment passes only the Incident Filters that accept every Environment. 100 characters.       |
-| `message`     | The detail of what went wrong, 5,000 characters.                                                                                                                                                |
-| `context`     | What whoever reads the Incident needs to act: version, host, service, trace link. Flat scalar values, 50 keys at most. Destinations can route on it; it never changes the Fingerprint.          |
-| `quietPeriod` | For a report with its own rhythm: seconds the Incident stays Open without a new Occurrence (1 to 30 days). The last Occurrence's value counts; without one, the Project's Quiet period applies. |
-| `resolved`    | `true` when the application sees the recovery (a healthcheck passing again). It closes the Open Incident with the same Fingerprint, and opens none.                                             |
+| Field         | Set it (bounds in the [OpenAPI document](api/openapi.json))                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`       | Always. Keep it stable across Occurrences of the same problem: without a Fingerprint, the title and the Environment decide the grouping.                                         |
+| `fingerprint` | When the title carries a variable part (an id, a duration): `payments:charge-timeout` groups every timeout into one Incident, whatever its title.                                |
+| `level`       | Whenever the code knows how serious the failure is: the Incident is then dispatched at once, without waiting for the Judge.                                                      |
+| `environment` | Always, if the application runs in several (`production`, `staging`…). An Incident without an Environment passes only the Incident Filters that accept every Environment.        |
+| `message`     | The detail of what went wrong.                                                                                                                                                   |
+| `context`     | What whoever reads the Incident needs to act: version, host, service, trace link. Flat scalar values. Destinations can route on it; it never changes the Fingerprint.            |
+| `quietPeriod` | For a report with its own rhythm: seconds the Incident stays Open without a new Occurrence. The last Occurrence's value counts; without one, the Project's Quiet period applies. |
+| `resolved`    | `true` when the application sees the recovery (a healthcheck passing again). It closes the Open Incident with the same Fingerprint, and opens none.                              |
 
 Title, message and context reach chat channels, issues and emails: keep secrets and personal data out of them.
 
@@ -92,9 +92,9 @@ The webhook events and their payloads are in [Webhooks](webhooks.md).
 
 ## Storms
 
-The **Opening cap** bounds how many Incidents a Project may open per minute and still dispatch (20 by default). Past it, Incidents are recorded but **Held**: they go to no Destination. The Alert destination is warned once per storm (`incident_storm`), and once the Project has gone a full minute without a Held opening, each Destination whose Incident Filter accepts at least one Held Incident receives a single summary instead. A Member can Redispatch a Held Incident that is still Open.
+The **Opening cap** bounds how many Incidents a Project may open per minute and still dispatch (20 by default). Past it, Incidents are recorded but **Held**: they go to no Destination. The Alert destination is warned once per Storm (`incident_storm`), and once the Project has gone a full minute without a Held opening, each Destination whose Incident Filter accepts at least one Held Incident receives a single summary instead. A Member can Redispatch a Held Incident that is still Open.
 
-A storm usually means titles that vary without a Fingerprint: fix the integration rather than raise the cap.
+A Storm usually means titles that vary without a Fingerprint: fix the integration rather than raise the cap.
 
 ## In the dashboard
 
