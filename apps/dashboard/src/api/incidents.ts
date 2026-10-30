@@ -106,3 +106,21 @@ export function useCloseIncident(id: string) {
     },
   });
 }
+
+/**
+ * Delete the Incident and its Deliveries (Deletion). `leave` takes the Member off the
+ * Incident's screen before it leaves the cache (the screen would read it again: 404);
+ * the lists are read again.
+ */
+export function useDeleteIncident(id: string, leave: () => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<void>(incidentPath(id)),
+    onSuccess: () => {
+      leave();
+      client.removeQueries({ queryKey: incidentKey(id) });
+      void client.invalidateQueries({ queryKey: ['incidents', 'list'] });
+      void client.invalidateQueries({ queryKey: ['incidents', 'environments'] });
+    },
+  });
+}

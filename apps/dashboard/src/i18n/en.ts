@@ -544,6 +544,11 @@ export const en = {
       question:
         'The Incident will be Closed for good and its Destinations told. A new Occurrence will open a new Incident. Close it?',
     },
+    deletion: {
+      title: 'Deletion',
+      help: 'Permanently erases this Incident and the history of its Deliveries, for example when personal data leaked into a report. What was already created in the Destinations (issues, messages) is not touched, and a new Occurrence will open a new Incident.',
+      question: 'The Incident will be permanently erased. Delete?',
+    },
     redispatch: {
       help: 'Redispatching sends the Incident, at its current Level, to the Destinations whose Incident Filter accepts it and that have not received it yet. Existing Deliveries are not touched.',
       action: 'Redispatch',
@@ -731,19 +736,19 @@ export const en = {
       retention: 'Retention',
     },
     retention: {
-      title: 'Feedback retention',
+      title: 'Retention',
       status: {
         unlimited: 'Unlimited',
         days: (days: number) => (days === 1 ? '1 day' : `${days} days`),
       },
-      unlimited: 'Unlimited retention: no Feedback is erased automatically.',
+      unlimited: 'Unlimited retention: no Feedback or Incident is erased automatically.',
       limited: (days: number) =>
-        `Feedback older than ${days} days is erased automatically, with its Captures.`,
+        `Feedback older than ${days} days is erased automatically, with its Captures, and so are Incidents last seen more than ${days} days ago.`,
       label: 'Retention period (days)',
       help: 'Empty: unlimited retention. Erasure is permanent.',
       save: 'Save retention',
       confirm: (days: number) =>
-        `Feedback older than ${days} days and its Captures will be permanently erased at the next purge. Save?`,
+        `Feedback older than ${days} days and its Captures, and Incidents last seen more than ${days} days ago, will be permanently erased at the next purge. Save?`,
     },
     alertDestination: {
       title: 'Alert destination',

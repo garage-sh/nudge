@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, Logger, NotFoundException } from
 import { closingJobId, DISPATCH_JOB, type DispatchJob } from '@nudge/core';
 import {
   closeIncidentByMember,
+  deleteIncident,
   incidents,
   projects,
   type Db,
@@ -70,6 +71,14 @@ export class IncidentsService {
   }
 
   /** A page of the Project's Incidents, newest opened first. */
+  /**
+   * Deletion: erases the Incident and its Deliveries, for example when personal data
+   * leaked into a report. What the Destinations already created remains.
+   */
+  async delete(id: string): Promise<void> {
+    if (!isUuid(id) || !(await deleteIncident(this.db, id))) throw incidentNotFound();
+  }
+
   async list(filters: IncidentFilters): Promise<IncidentPage> {
     const conditions: SQL[] = [eq(incidents.projectId, filters.project)];
     if (filters.state) conditions.push(eq(incidents.state, filters.state));

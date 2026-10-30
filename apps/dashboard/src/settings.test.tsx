@@ -154,7 +154,7 @@ describe('Instance settings: retention', () => {
     const api = fakeApi(routes(null));
     renderDashboard('/settings');
 
-    const panel = await screen.findByRole('region', { name: 'Feedback retention' });
+    const panel = await screen.findByRole('region', { name: 'Retention' });
     expect(panel.textContent).toMatch(/Unlimited/);
     const period = within(panel).getByLabelText('Retention period (days)') as HTMLInputElement;
     expect(period.value).toBe('');
@@ -162,7 +162,7 @@ describe('Instance settings: retention', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Save retention' }));
     // Going from unlimited to a period erases Feedback: confirmation first.
     expect(within(panel).getByRole('group').textContent).toMatch(
-      /older than 90 days .* permanently erased/,
+      /older than 90 days .*Incidents last seen more than 90 days ago.* permanently erased/,
     );
     await userEvent.click(within(panel).getByRole('button', { name: 'Confirm' }));
 
@@ -171,13 +171,14 @@ describe('Instance settings: retention', () => {
       days: 90,
     });
     expect(panel.textContent).toMatch(/older than 90 days is erased automatically/);
+    expect(panel.textContent).toMatch(/Incidents last seen more than 90 days ago/);
   });
 
   it('goes back to unlimited retention by clearing the field', async () => {
     const api = fakeApi(routes(30));
     renderDashboard('/settings');
 
-    const panel = await screen.findByRole('region', { name: 'Feedback retention' });
+    const panel = await screen.findByRole('region', { name: 'Retention' });
     const period = within(panel).getByLabelText('Retention period (days)') as HTMLInputElement;
     expect(period.value).toBe('30');
     await userEvent.clear(period);
@@ -194,7 +195,7 @@ describe('Instance settings: retention', () => {
     const api = fakeApi(routes(90));
     renderDashboard('/settings');
 
-    const panel = await screen.findByRole('region', { name: 'Feedback retention' });
+    const panel = await screen.findByRole('region', { name: 'Retention' });
     const period = within(panel).getByLabelText('Retention period (days)') as HTMLInputElement;
     await userEvent.clear(period);
     await userEvent.type(period, '7');
@@ -209,7 +210,7 @@ describe('Instance settings: retention', () => {
     const api = fakeApi(routes(30));
     renderDashboard('/settings');
 
-    const panel = await screen.findByRole('region', { name: 'Feedback retention' });
+    const panel = await screen.findByRole('region', { name: 'Retention' });
     const period = within(panel).getByLabelText('Retention period (days)') as HTMLInputElement;
     await userEvent.clear(period);
     await userEvent.type(period, '90');

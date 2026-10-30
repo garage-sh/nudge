@@ -4,7 +4,7 @@ import type { RetentionView } from '@nudge/shared';
 import { DB } from '../../infra/tokens.js';
 
 /**
- * Retention period of the Instance's Feedbacks. The worker's scheduled purge reads it
+ * Retention period of the Instance's Feedbacks and Incidents. The worker's scheduled purge reads it
  * again on every run: changing it here is enough.
  */
 @Injectable()

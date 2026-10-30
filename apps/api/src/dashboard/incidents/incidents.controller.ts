@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -22,7 +23,7 @@ import { RedispatchService } from '../feedbacks/redispatch.service.js';
 import { parseBody } from '../../validation.js';
 import { incidentNotFound, IncidentsService } from './incidents.service.js';
 
-/** A Project's Incidents, and the Redispatch and closing of an Open one. */
+/** A Project's Incidents, the Redispatch and closing of an Open one, and their Deletion. */
 @Controller('api/incidents')
 @UseGuards(SessionGuard)
 export class IncidentsController {
@@ -46,6 +47,13 @@ export class IncidentsController {
   @Get(':id')
   read(@Param('id') id: string): Promise<IncidentDetailView> {
     return this.incidents.read(id);
+  }
+
+  /** Erases the Incident and its Deliveries: 204, 404 `incident_not_found`. */
+  @Delete(':id')
+  @HttpCode(204)
+  delete(@Param('id') id: string): Promise<void> {
+    return this.incidents.delete(id);
   }
 
   /**

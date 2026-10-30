@@ -71,6 +71,13 @@
       "when": 1793317813086,
       "tag": "0009_incident_opening_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793319020374,
+      "tag": "0010_incident_retention",
+      "breakpoints": true
     }
   ]
 }

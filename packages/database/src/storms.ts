@@ -181,3 +181,15 @@ function accepted(destination: DestinationRow, held: readonly HeldIncident[]): H
     }),
   );
 }
+
+/**
+ * Retention: erases the storms that ended before `before`. One still going on is kept,
+ * whatever its age: it ends, and sends its summaries, first. Returns how many were erased.
+ */
+export async function purgeEndedStorms(db: Db, before: Date): Promise<number> {
+  const deleted = await db
+    .delete(incidentStorms)
+    .where(lt(incidentStorms.endedAt, before))
+    .returning({ id: incidentStorms.id });
+  return deleted.length;
+}

@@ -361,6 +361,40 @@ describe('An Incident’s detail', () => {
     expect(within(properties).getByText('Quiet period over')).toBeTruthy();
   });
 
+  it('a Member deletes the Incident after confirming, then goes back to the list', async () => {
+    const api = fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: TIMEOUT_DETAIL },
+      'DELETE /api/incidents/incident-1': { status: 204 },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deletion = await screen.findByRole('region', { name: 'Deletion' });
+    expect(deletion.textContent).toMatch(/personal data/);
+    await userEvent.click(within(deletion).getByRole('button', { name: 'Delete' }));
+    expect(api.calls.map((c) => c.route)).not.toContain('DELETE /api/incidents/incident-1');
+    await userEvent.click(within(deletion).getByRole('button', { name: 'Confirm' }));
+
+    expect(await screen.findByRole('link', { name: 'Payment provider timed out' })).toBeTruthy();
+    expect(api.calls.map((c) => c.route)).toContain('DELETE /api/incidents/incident-1');
+  });
+
+  it('explains a failed deletion and keeps the Incident shown', async () => {
+    fakeApi({
+      ...routes(),
+      'GET /api/incidents/incident-1': { status: 200, body: TIMEOUT_DETAIL },
+      'DELETE /api/incidents/incident-1': { status: 500, body: { error: 'internal' } },
+    });
+    renderDashboard('/projects/project-1/incidents/incident-1');
+
+    const deletion = await screen.findByRole('region', { name: 'Deletion' });
+    await userEvent.click(within(deletion).getByRole('button', { name: 'Delete' }));
+    await userEvent.click(within(deletion).getByRole('button', { name: 'Confirm' }));
+
+    expect(await within(deletion).findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Payment provider timed out' })).toBeTruthy();
+  });
+
   it('says when the Incident does not exist', async () => {
     fakeApi({
       ...routes(),

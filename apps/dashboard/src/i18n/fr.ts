@@ -518,6 +518,11 @@ export const fr: Messages = {
       question:
         'L’Incident sera Clos définitivement et ses Destinations prévenues. Une nouvelle Occurrence ouvrira un nouvel Incident. Le clore ?',
     },
+    deletion: {
+      title: 'Suppression',
+      help: 'Efface définitivement cet Incident et l’historique de ses Envois, par exemple quand des données personnelles se sont glissées dans un rapport. Ce qui a déjà été créé chez les Destinations (issues, messages) n’est pas touché, et une nouvelle Occurrence ouvrira un nouvel Incident.',
+      question: 'L’Incident sera effacé définitivement. Supprimer ?',
+    },
     redispatch: {
       help: 'Redispatcher envoie l’Incident, à son Niveau actuel, aux Destinations dont le Filtre d’Incidents le retient et qui ne l’ont pas encore reçu. Les Envois existants ne sont pas touchés.',
       action: 'Redispatcher',
@@ -713,19 +718,19 @@ export const fr: Messages = {
       retention: 'Rétention',
     },
     retention: {
-      title: 'Rétention des Retours',
+      title: 'Rétention',
       status: {
         unlimited: 'Illimitée',
         days: (days) => (days === 1 ? '1 jour' : `${days} jours`),
       },
-      unlimited: 'Rétention illimitée : aucun Retour n’est effacé automatiquement.',
+      unlimited: 'Rétention illimitée : aucun Retour ni Incident n’est effacé automatiquement.',
       limited: (days) =>
-        `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures.`,
+        `Les Retours plus anciens que ${days} jours sont effacés automatiquement, avec leurs Captures, de même que les Incidents vus pour la dernière fois il y a plus de ${days} jours.`,
       label: 'Durée de rétention (jours)',
       help: 'Vide : rétention illimitée. L’effacement est définitif.',
       save: 'Enregistrer la rétention',
       confirm: (days) =>
-        `Les Retours de plus de ${days} jours et leurs Captures seront effacés définitivement à la prochaine purge. Enregistrer ?`,
+        `Les Retours de plus de ${days} jours et leurs Captures, ainsi que les Incidents vus pour la dernière fois il y a plus de ${days} jours, seront effacés définitivement à la prochaine purge. Enregistrer ?`,
     },
     alertDestination: {
       title: 'Destination d’alerte',

@@ -231,6 +231,8 @@ export const incidents = pgTable(
     index('incidents_project_created_at_idx').on(t.projectId, t.createdAt, t.id),
     // The openings of a Project in the last minute, against its Opening cap.
     index('incidents_project_first_seen_at_idx').on(t.projectId, t.firstSeenAt),
+    // The Retention purge: the Incidents last seen before its duration, oldest first.
+    index('incidents_last_seen_at_idx').on(t.lastSeenAt),
   ],
 );
 
@@ -427,8 +429,8 @@ export const instanceSettings = pgTable(
     /** … and secrets as one JSON object encrypted with the Instance key (`ALERT_DESTINATION_SECRETS_CONTEXT`). */
     alertDestinationEncryptedSecrets: text('alert_destination_encrypted_secrets'),
     /**
-     * Retention period of Feedback, in days: the scheduled purge erases older Feedback
-     * (and its Captures). `null`: unlimited retention.
+     * Retention period, in days: the scheduled purge erases older Feedback (and its
+     * Captures), and the Incidents last seen before it. `null`: unlimited retention.
      */
     retentionDays: integer('retention_days'),
     /**

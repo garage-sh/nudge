@@ -1,9 +1,10 @@
 import type { IncidentReport } from '@nudge/shared';
 import { useState, type ReactNode } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { ApiError } from '../api/client.js';
 import {
   useCloseIncident,
+  useDeleteIncident,
   useIncident,
   useRedispatchIncident,
   useReplayIncidentDelivery,
@@ -129,6 +130,9 @@ export function Incident() {
             />
             {detail.state === 'open' ? <Close incidentId={detail.id} afterClose={poll} /> : null}
           </Section>
+          <Section id="deletion" title={t.incident.deletion.title}>
+            <Deletion incidentId={detail.id} leaveTo={back.to} />
+          </Section>
         </aside>
       </div>
     </article>
@@ -188,6 +192,30 @@ function Close({ incidentId, afterClose }: { incidentId: string; afterClose: () 
         />
       </div>
       <ErrorMessage error={close.error} />
+    </>
+  );
+}
+
+/**
+ * Erase the Incident, for example when personal data leaked into a report; the Member
+ * goes back to the list. Objects already created in the Destinations remain.
+ */
+function Deletion({ incidentId, leaveTo }: { incidentId: string; leaveTo: string }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const deletion = useDeleteIncident(incidentId, () => void navigate(leaveTo));
+  return (
+    <>
+      <p className="help">{t.incident.deletion.help}</p>
+      <div className="actions">
+        <ConfirmAction
+          label={t.common.delete}
+          question={t.incident.deletion.question}
+          pending={deletion.isPending}
+          onConfirm={() => deletion.mutate()}
+        />
+      </div>
+      <ErrorMessage error={deletion.error} />
     </>
   );
 }

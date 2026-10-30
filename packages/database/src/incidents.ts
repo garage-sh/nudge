@@ -12,6 +12,7 @@ import {
   eq,
   exists,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -419,4 +420,37 @@ export async function incidentsLeftAwaitingLevel(
     .orderBy(asc(incidents.firstSeenAt))
     .limit(limit);
   return rows.map(({ id }) => id);
+}
+
+/**
+ * Deletion: erases the Incident and, with it, its Deliveries (personal data may have
+ * leaked into a report). What the Destinations already created remains. `false` if
+ * there was no such Incident.
+ */
+export async function deleteIncident(db: Db, id: string): Promise<boolean> {
+  const deleted = await db
+    .delete(incidents)
+    .where(eq(incidents.id, id))
+    .returning({ id: incidents.id });
+  return deleted.length > 0;
+}
+
+/**
+ * Retention: erases, oldest first, up to `limit` Incidents whose last Occurrence was
+ * received before `before`, Open or Closed, with their Deliveries. An Incident opened
+ * long ago but still reporting is kept: its last report is recent. Returns how many
+ * were erased; fewer than `limit`, none is left.
+ */
+export async function purgeIncidents(db: Db, before: Date, limit: number): Promise<number> {
+  const expired = db
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(lt(incidents.lastSeenAt, before))
+    .orderBy(asc(incidents.lastSeenAt))
+    .limit(limit);
+  const deleted = await db
+    .delete(incidents)
+    .where(inArray(incidents.id, expired))
+    .returning({ id: incidents.id });
+  return deleted.length;
 }

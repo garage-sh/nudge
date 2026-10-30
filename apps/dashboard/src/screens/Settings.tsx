@@ -101,8 +101,8 @@ export function Settings() {
 }
 
 /**
- * Feedback retention period: a scheduled task erases older Feedback, with its
- * Captures. Empty field: unlimited retention.
+ * Retention period: a scheduled task erases older Feedback, with its Captures, and the
+ * Incidents last seen before it. Empty field: unlimited retention.
  */
 function Retention({ retention }: { retention: RetentionView }) {
   const t = useT();

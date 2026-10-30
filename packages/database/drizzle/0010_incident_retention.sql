@@ -1,0 +1,1 @@
+CREATE INDEX "incidents_last_seen_at_idx" ON "incidents" USING btree ("last_seen_at");

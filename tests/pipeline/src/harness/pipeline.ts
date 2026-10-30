@@ -33,6 +33,7 @@ import {
   instanceSettings,
   readFeedback,
   feedbacks,
+  incidents,
   runMigrations,
   undoReview,
   type DestinationRow,
@@ -203,6 +204,11 @@ export interface Pipeline {
   insertDeliveryWithoutDispatch(feedbackId: string, destinationId: string): Promise<string>;
   /** Moves a Feedback's creation date back by `days` days, as if it were old. */
   ageFeedback(feedbackId: string, days: number): Promise<void>;
+  /**
+   * Moves every instant of an Incident (opened, first and last seen, closed) back by
+   * `days` days, as if its Occurrences were that old.
+   */
+  ageIncident(incidentId: string, days: number): Promise<void>;
   /** POST /v1/feedbacks with the Project's secret key. */
   postFeedback(secretKey: string, body: FeedbackInput | Record<string, unknown>): Promise<Response>;
   /** POST /v1/incidents with the Project's secret key: one Occurrence. */
@@ -470,6 +476,19 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
         .update(feedbacks)
         .set({ createdAt: sql`${feedbacks.createdAt} - make_interval(days => ${days})` })
         .where(eq(feedbacks.id, feedbackId));
+    },
+    async ageIncident(incidentId, days) {
+      const back = sql`make_interval(days => ${days})`;
+      await db
+        .update(incidents)
+        .set({
+          createdAt: sql`${incidents.createdAt} - ${back}`,
+          updatedAt: sql`${incidents.updatedAt} - ${back}`,
+          firstSeenAt: sql`${incidents.firstSeenAt} - ${back}`,
+          lastSeenAt: sql`${incidents.lastSeenAt} - ${back}`,
+          closedAt: sql`${incidents.closedAt} - ${back}`,
+        })
+        .where(eq(incidents.id, incidentId));
     },
     postFeedback: (secretKey, body) =>
       fetch(`${url}/v1/feedbacks`, {
