@@ -383,6 +383,17 @@ describe('OpenRouter Judge (Decisions API)', () => {
     expect((requests[0]!.body as { model: string }).model).toBe('perplexity/pplx-decider-v1.2');
   });
 
+  it('calls a base URL that already ends with the endpoint path as is', async () => {
+    const { fetch, requests } = server(OPENROUTER.triage);
+    await openRouterJudge({
+      apiKey: 'or-fake-key',
+      baseUrl: 'https://openrouter.ai/api/alpha/decisions/',
+      fetch,
+    }).judge(triageRequest);
+
+    expect(requests[0]!.url).toBe('https://openrouter.ai/api/alpha/decisions');
+  });
+
   it("sends exactly the documentation's example request and reads its response", async () => {
     const { fetch, requests } = server(OPENROUTER.mixed);
     const questions = {

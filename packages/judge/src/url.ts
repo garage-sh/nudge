@@ -8,5 +8,12 @@ export interface AdapterOptions {
   readonly fetch?: typeof globalThis.fetch;
 }
 
-/** `https://host/prefix/` + `/v1/x` → `https://host/prefix/v1/x`. */
-export const joinUrl = (base: string, path: string): string => `${base.replace(/\/+$/, '')}${path}`;
+/**
+ * `https://host/prefix/` + `/v1/x` → `https://host/prefix/v1/x`. A base URL that already
+ * ends with the endpoint's path (the full URL copied from the provider's docs) is kept
+ * as is, rather than calling `/v1/x/v1/x`.
+ */
+export const joinUrl = (base: string, path: string): string => {
+  const trimmed = base.replace(/\/+$/, '');
+  return trimmed.endsWith(path) ? trimmed : `${trimmed}${path}`;
+};
