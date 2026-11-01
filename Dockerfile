@@ -13,7 +13,7 @@
 # Dependabot proposes the new digest when Alpine or Node are patched.
 
 # --- Build: full dependencies, then builds of all the apps and the Widget ----------------
-FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
+FROM node:26-alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS build
 WORKDIR /app
 ENV YARN_ENABLE_TELEMETRY=0 TURBO_TELEMETRY_DISABLED=1
 
@@ -60,7 +60,7 @@ RUN --mount=type=cache,target=/root/.yarn/berry/cache \
 # --- server: the api and the worker, in one or more processes ------------------------
 # NUDGE_ROLES picks the role: `api`, `worker`, or both (the default). The compose
 # `migrate` service runs `node apps/api/dist/migrate.js` in it.
-FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS server
+FROM node:26-alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS server
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="nudge" \
       org.opencontainers.image.description="Collects user Feedback and application Incidents, triages and dispatches them: api and worker." \
