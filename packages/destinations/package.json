@@ -31,7 +31,7 @@
     "@nudge/tsup-config": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
     "@types/markdown-it": "^14.1.2",
-    "@types/node": "^24.10.0",
+    "@types/node": "^26.6.6",
     "@types/nodemailer": "^8.0.2",
     "eslint": "^10.13.0",
     "markdown-it": "^15.0.3",
