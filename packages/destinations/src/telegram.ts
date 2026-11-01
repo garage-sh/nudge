@@ -135,7 +135,9 @@ export function telegramAdapter(
     form.set('caption', caption);
     form.set('parse_mode', 'HTML');
     const extension = image.contentType === 'image/png' ? 'png' : 'jpg';
-    form.set('photo', new Blob([image.bytes], { type: image.contentType }), `capture.${extension}`);
+    // A Blob takes bytes backed by an ArrayBuffer only; the copy guarantees it.
+    const photo = new Blob([new Uint8Array(image.bytes)], { type: image.contentType });
+    form.set('photo', photo, `capture.${extension}`);
     return asDeliveryResult(await request('sendPhoto', form));
   }
 
