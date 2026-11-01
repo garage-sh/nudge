@@ -232,12 +232,24 @@ export const judgeChoiceSchema = z
   });
 export type JudgeChoice = z.input<typeof judgeChoiceSchema>;
 
+/**
+ * The Judge the `NUDGE_JUDGE_*` variables set, as the dashboard reads it: it triages
+ * as long as the Instance chooses none. Its key is never returned.
+ */
+export interface EnvironmentJudgeView {
+  readonly provider: JudgeProvider;
+  readonly model: string | null;
+  readonly baseUrl: string | null;
+}
+
 /** The Instance's Judge as the dashboard reads it: the key is never returned. */
 export interface InstanceJudgeView {
   readonly provider: JudgeProvider | null;
   readonly model: string | null;
   readonly baseUrl: string | null;
   readonly keyConfigured: boolean;
+  /** The `NUDGE_JUDGE_*` Judge; `null`: those variables set none. */
+  readonly environment: EnvironmentJudgeView | null;
 }
 
 /**

@@ -11,19 +11,21 @@ import {
 import {
   requiresApiKey,
   type ApiErrorBody,
+  type EnvironmentJudgeView,
   type InstanceJudgeView,
   type judgeChoiceSchema,
 } from '@nudge/shared';
 import type { z } from 'zod';
-import { DB, SECRET_CIPHER } from '../../infra/tokens.js';
+import { DB, ENVIRONMENT_JUDGE, SECRET_CIPHER } from '../../infra/tokens.js';
 
 type JudgeChoice = z.output<typeof judgeChoiceSchema>;
 
-const view = (judge: StoredJudge): InstanceJudgeView => ({
+const view = (judge: StoredJudge, environment: EnvironmentJudgeView | null): InstanceJudgeView => ({
   provider: judge.provider,
   model: judge.model,
   baseUrl: judge.baseUrl,
   keyConfigured: judge.encryptedKey !== null,
+  environment,
 });
 
 /** The Instance's Judge: its API key only exists in clear long enough to encrypt it. */
@@ -32,10 +34,11 @@ export class InstanceJudgeService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
+    @Inject(ENVIRONMENT_JUDGE) private readonly environment: EnvironmentJudgeView | null,
   ) {}
 
   async read(): Promise<InstanceJudgeView> {
-    return view(await readInstanceJudge(this.db));
+    return view(await readInstanceJudge(this.db), this.environment);
   }
 
   async choose(choice: JudgeChoice): Promise<InstanceJudgeView> {
@@ -57,7 +60,7 @@ export class InstanceJudgeService {
       throw new BadRequestException(refusal);
     }
     await writeInstanceJudge(this.db, judge);
-    return view(judge);
+    return view(judge, this.environment);
   }
 
   /**

@@ -457,6 +457,9 @@ function Judge({ judge }: { judge: InstanceJudgeView }) {
   const choice = useChooseJudge();
   // The saved key is valid only for its provider.
   const keyKept = judge.keyConfigured && provider === judge.provider;
+  // The `NUDGE_JUDGE_*` Judge triages as long as the Instance chooses none.
+  const environment = judge.environment;
+  const environmentLabel = environment && t.labels.judgeProvider[environment.provider];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -485,12 +488,25 @@ function Judge({ judge }: { judge: InstanceJudgeView }) {
         status={
           judge.provider ? (
             <Pill tone="success">{t.labels.judgeProvider[judge.provider]}</Pill>
+          ) : environmentLabel ? (
+            <Pill tone="success">{j.status.environment(environmentLabel)}</Pill>
           ) : (
             <Pill tone="held">{j.status.degraded}</Pill>
           )
         }
       />
       <p className="help">{j.help}</p>
+      {environment && environmentLabel ? (
+        <p className="help">
+          {judge.provider
+            ? j.environmentOverridden(environmentLabel)
+            : j.environmentActive(
+                environmentLabel,
+                environment.model ?? DEFAULT_JUDGE_MODELS[environment.provider],
+                environment.baseUrl,
+              )}
+        </p>
+      ) : null}
       <div className="field">
         <label htmlFor="judge-provider">{j.provider}</label>
         <select
@@ -498,7 +514,9 @@ function Judge({ judge }: { judge: InstanceJudgeView }) {
           value={provider}
           onChange={(e) => setProvider(e.target.value as JudgeProvider | '')}
         >
-          <option value="">{j.none}</option>
+          <option value="">
+            {environmentLabel ? j.noneEnvironment(environmentLabel) : j.none}
+          </option>
           {JUDGE_PROVIDERS.map((value) => (
             <option key={value} value={value}>
               {t.labels.judgeProvider[value]}

@@ -5,7 +5,13 @@ import {
   type NestModule,
 } from '@nestjs/common';
 import type { DestinationAdapterResolver, Mailer } from '@nudge/core';
-import { DESTINATION_ADAPTER_RESOLVER, MAILER, SESSION_COOKIE_OPTIONS } from '../infra/tokens.js';
+import type { EnvironmentJudgeView } from '@nudge/shared';
+import {
+  DESTINATION_ADAPTER_RESOLVER,
+  ENVIRONMENT_JUDGE,
+  MAILER,
+  SESSION_COOKIE_OPTIONS,
+} from '../infra/tokens.js';
 import { AlertsController } from './alerts/alerts.controller.js';
 import { AlertsService } from './alerts/alerts.service.js';
 import { AccountController } from './auth/account.controller.js';
@@ -51,6 +57,8 @@ export interface DashboardOptions {
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
   /** The Instance's SMTP server, for the "send a test email" button. */
   readonly mailer: Mailer;
+  /** The `NUDGE_JUDGE_*` Judge, shown in the Settings; absent: none. */
+  readonly environmentJudge?: EnvironmentJudgeView | null;
 }
 
 /** Controllers of the dashboard API: all go through `ClientHeaderMiddleware`. */
@@ -85,6 +93,7 @@ export class DashboardModule implements NestModule {
         { provide: SETUP_TOKEN_CONFIG, useValue: options.setupToken },
         { provide: DESTINATION_ADAPTER_RESOLVER, useValue: options.resolveDestinationAdapter },
         { provide: MAILER, useValue: options.mailer },
+        { provide: ENVIRONMENT_JUDGE, useValue: options.environmentJudge ?? null },
         MembersService,
         SessionsService,
         SetupTokenService,

@@ -9,9 +9,10 @@ import {
   type Env,
 } from '@nudge/core';
 import { outboundPolicyFromEnv, type OutboundPolicy } from '@nudge/destinations';
+import { judgeConfigFromEnv } from '@nudge/judge';
 import { storageConfigFromEnv, type StorageConfig } from '@nudge/storage';
 import type { ApiOptions, TrustProxy } from './api.js';
-import { OPENING_CAP_BOUNDS } from '@nudge/shared';
+import { OPENING_CAP_BOUNDS, type EnvironmentJudgeView } from '@nudge/shared';
 import { DEFAULT_OPENING_CAP_OPTIONS } from './ingestion/incidents-ingestion.service.js';
 import { DEFAULT_WIDGET_LIMITS } from './ingestion/widget-access.js';
 
@@ -27,6 +28,7 @@ export type ApiConfig = Required<
     | 'trustProxy'
     | 'widgetLimits'
     | 'openingCap'
+    | 'environmentJudge'
   >
 > & {
   readonly port: number;
@@ -96,6 +98,12 @@ function setupTokenFromEnv(env: Env): string | null {
   return value;
 }
 
+/** The `NUDGE_JUDGE_*` Judge without its key; `null`: the variables set none. */
+function environmentJudgeFromEnv(env: Env): EnvironmentJudgeView | null {
+  const judge = judgeConfigFromEnv(env);
+  return judge && { provider: judge.provider, model: judge.model, baseUrl: judge.baseUrl };
+}
+
 /**
  * The api configuration, read from the environment (see `.env.example`). An invalid
  * value throws, to fail at startup rather than on the first request; a dangerous one
@@ -115,6 +123,8 @@ export function apiConfigFromEnv(
     storage: storageConfigFromEnv(env),
     // Internal hosts a Member-configured URL may reach (test buttons of the Destinations).
     outbound: outboundPolicyFromEnv(env),
+    // The worker's fallback Judge, shown in the Settings: its key stays out of the api.
+    environmentJudge: environmentJudgeFromEnv(env),
     sessionCookieSecure: sessionCookieSecureFromEnv(env, warn),
     setupToken: setupTokenFromEnv(env),
     trustProxy: trustProxyFromEnv(env),

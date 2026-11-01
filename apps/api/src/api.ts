@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { LogLevel } from '@nestjs/common';
 import type { DestinationAdapterResolver, Mailer } from '@nudge/core';
-import { CAPTURE_MAX_BASE64_LENGTH } from '@nudge/shared';
+import { CAPTURE_MAX_BASE64_LENGTH, type EnvironmentJudgeView } from '@nudge/shared';
 import { json } from 'express';
 import { ApiModule, type IngestionOptions } from './api.module.js';
 import { setupTokenConfig } from './dashboard/auth/setup-token.js';
@@ -39,6 +39,11 @@ export interface ApiOptions extends InfraOptions, IngestionOptions {
   readonly resolveDestinationAdapter: DestinationAdapterResolver;
   /** The Instance's SMTP server (`smtpMailer` in production): the "send a test email" button. */
   readonly mailer: Mailer;
+  /**
+   * The Judge the `NUDGE_JUDGE_*` variables set, without its key: the Settings show it,
+   * since it triages as long as the Instance chooses none. Absent: none.
+   */
+  readonly environmentJudge?: EnvironmentJudgeView | null;
 }
 
 /** A Feedback and its base64-encoded Capture, plus the rest of the body. */

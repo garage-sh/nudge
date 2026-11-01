@@ -10,6 +10,7 @@ const NO_JUDGE: InstanceJudgeView = {
   model: null,
   baseUrl: null,
   keyConfigured: false,
+  environment: null,
 };
 
 const NO_ALERT_DESTINATION = { status: 200, body: { destination: null } };
@@ -37,6 +38,45 @@ describe('Instance settings: Judge', () => {
       screen.getByRole('option', { name: 'None (degraded mode)', selected: true }),
     ).toBeTruthy();
     expect(screen.queryByLabelText('API key')).toBeNull();
+  });
+
+  it('shows the Judge the NUDGE_JUDGE_* variables set while none is chosen', async () => {
+    fakeApi(
+      instanceRoutes({
+        ...NO_JUDGE,
+        environment: { provider: 'openrouter', model: null, baseUrl: 'https://proxy.example' },
+      }),
+    );
+    renderDashboard('/settings');
+
+    expect(await screen.findByText('OpenRouter (environment)')).toBeTruthy();
+    expect(screen.queryByText('Degraded mode')).toBeNull();
+    expect(
+      screen.getByText(
+        'The server’s NUDGE_JUDGE_* variables set OpenRouter (perplexity/pplx-decider-v1.2): it triages Feedback as long as no Judge is chosen here. Base URL: https://proxy.example.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: 'None (the server’s Judge: OpenRouter)', selected: true }),
+    ).toBeTruthy();
+  });
+
+  it('says a chosen Judge replaces the NUDGE_JUDGE_* one', async () => {
+    fakeApi(
+      instanceRoutes({
+        ...NO_JUDGE,
+        provider: 'typesafe',
+        keyConfigured: true,
+        environment: { provider: 'openrouter', model: null, baseUrl: null },
+      }),
+    );
+    renderDashboard('/settings');
+
+    expect(
+      await screen.findByText(
+        'The Judge chosen here replaces the one the server’s NUDGE_JUDGE_* variables set (OpenRouter).',
+      ),
+    ).toBeTruthy();
   });
 
   it('offers providers, not a model: the model is picked at each one', async () => {

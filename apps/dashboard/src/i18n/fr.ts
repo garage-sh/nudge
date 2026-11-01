@@ -800,10 +800,19 @@ export const fr: Messages = {
     judge: {
       title: 'Juge',
       save: 'Enregistrer le Juge',
-      status: { degraded: 'Mode dégradé' },
+      status: {
+        degraded: 'Mode dégradé',
+        environment: (provider) => `${provider} (environnement)`,
+      },
       help: 'Le modèle de décision qui trie les Retours : il répond aux questions du Triage par des probabilités, là où un modèle de chat rédigerait du texte. Choisissez où il tourne, puis lequel. Sans Juge, nudge tourne en mode dégradé : le Type déclaré est retenu, sans Gravité ni détection d’Indésirable.',
       provider: 'Fournisseur',
       none: 'Aucun (mode dégradé)',
+      noneEnvironment: (provider) => `Aucun (le Juge du serveur : ${provider})`,
+      environmentActive: (provider, model, baseUrl) =>
+        `Les variables NUDGE_JUDGE_* du serveur définissent ${provider} (${model}) : il trie les Retours tant qu’aucun Juge n’est choisi ici.` +
+        (baseUrl ? ` URL de base : ${baseUrl}.` : ''),
+      environmentOverridden: (provider) =>
+        `Le Juge choisi ici remplace celui que définissent les variables NUDGE_JUDGE_* du serveur (${provider}).`,
       model: 'Modèle',
       modelHelp: (fallback) => `Le nom du modèle chez ce fournisseur. Vide : ${fallback}.`,
       serverUrl: 'URL du serveur',

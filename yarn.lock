@@ -1310,6 +1310,7 @@ __metadata:
     "@nudge/core": "workspace:*"
     "@nudge/database": "workspace:*"
     "@nudge/destinations": "workspace:*"
+    "@nudge/judge": "workspace:*"
     "@nudge/shared": "workspace:*"
     "@nudge/storage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"

@@ -42,6 +42,7 @@ describe('Judge chosen for the Instance', () => {
       model: null,
       baseUrl: null,
       keyConfigured: false,
+      environment: null,
     } satisfies InstanceJudgeView);
 
     const feedback = await triage('No Judge');
@@ -61,6 +62,7 @@ describe('Judge chosen for the Instance', () => {
       model: null,
       baseUrl: provider.url,
       keyConfigured: true,
+      environment: null,
     } satisfies InstanceJudgeView);
 
     const row = await pipeline.instanceSettings();
@@ -185,6 +187,16 @@ describe('Judge from environment variables', () => {
   afterAll(async () => {
     await pipeline?.stop();
     await provider?.stop();
+  });
+
+  it('are shown to the dashboard, without the key', async () => {
+    const dashboard = await pipeline.signIn();
+    const read = await dashboard.get('/api/instance/judge');
+    expect(read.body).toMatchObject({
+      provider: null,
+      environment: { provider: 'openrouter', model: null, baseUrl: provider.url },
+    });
+    expect(JSON.stringify(read.body)).not.toContain('sk-or-env');
   });
 
   it('serve as fallback until the Instance chooses a Judge, then give way', async () => {

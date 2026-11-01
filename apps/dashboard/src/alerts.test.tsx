@@ -17,6 +17,7 @@ const NO_JUDGE: InstanceJudgeView = {
   model: null,
   baseUrl: null,
   keyConfigured: false,
+  environment: null,
 };
 
 describe('Alert badges', () => {

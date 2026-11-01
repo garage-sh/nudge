@@ -816,10 +816,19 @@ export const en = {
     judge: {
       title: 'Judge',
       save: 'Save Judge',
-      status: { degraded: 'Degraded mode' },
+      status: {
+        degraded: 'Degraded mode',
+        environment: (provider: string) => `${provider} (environment)`,
+      },
       help: 'The decision model that triages Feedback: it answers Triage’s questions with probabilities, where a chat model would write text. Choose where it runs, then which one. Without a Judge, nudge runs in degraded mode: the declared type is kept, with no Severity and no Junk detection.',
       provider: 'Provider',
       none: 'None (degraded mode)',
+      noneEnvironment: (provider: string) => `None (the server’s Judge: ${provider})`,
+      environmentActive: (provider: string, model: string, baseUrl: string | null) =>
+        `The server’s NUDGE_JUDGE_* variables set ${provider} (${model}): it triages Feedback as long as no Judge is chosen here.` +
+        (baseUrl ? ` Base URL: ${baseUrl}.` : ''),
+      environmentOverridden: (provider: string) =>
+        `The Judge chosen here replaces the one the server’s NUDGE_JUDGE_* variables set (${provider}).`,
       model: 'Model',
       modelHelp: (fallback: string) => `The model’s name at this provider. Empty: ${fallback}.`,
       serverUrl: 'Server URL',

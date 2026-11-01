@@ -24,7 +24,23 @@ describe('Api configuration from environment variables', () => {
         perProject: { limit: 600, windowMs: 60_000 },
       },
       openingCap: { limit: 20, windowMs: 60_000 },
+      environmentJudge: null,
     });
+  });
+
+  it('reads the NUDGE_JUDGE_* Judge for the dashboard, without its key', () => {
+    const config = apiConfigFromEnv({
+      ...MINIMAL,
+      NUDGE_JUDGE_PROVIDER: 'openrouter',
+      NUDGE_JUDGE_API_KEY: 'sk-or-env',
+      NUDGE_JUDGE_BASE_URL: 'https://proxy.example',
+    });
+    expect(config.environmentJudge).toEqual({
+      provider: 'openrouter',
+      model: null,
+      baseUrl: 'https://proxy.example',
+    });
+    expect(JSON.stringify(config)).not.toContain('sk-or-env');
   });
 
   it('reads the Instance Opening cap of the Incidents, per minute', () => {

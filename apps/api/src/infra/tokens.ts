@@ -11,6 +11,8 @@ export const ALERTS_QUEUE_TOKEN = Symbol('ALERTS_QUEUE');
 export const OPENING_CAP = Symbol('OPENING_CAP');
 /** The dashboard's `SessionCookieOptions`. */
 export const SESSION_COOKIE_OPTIONS = Symbol('SESSION_COOKIE_OPTIONS');
+/** `EnvironmentJudgeView | null`: the `NUDGE_JUDGE_*` Judge, shown in the dashboard. */
+export const ENVIRONMENT_JUDGE = Symbol('ENVIRONMENT_JUDGE');
 /** `SecretCipher` for the secrets stored in the database, using the Instance key. */
 export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
 /** `DestinationAdapterResolver`: a Destination's "test" button goes through its adapter. */

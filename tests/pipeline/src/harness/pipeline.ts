@@ -364,6 +364,15 @@ export async function startPipeline(options: PipelineOptions = {}): Promise<Pipe
     ...(options.openingCap ? { openingCap: options.openingCap } : {}),
     ...(options.trustProxy !== undefined ? { trustProxy: options.trustProxy } : {}),
     ...(options.setupToken ? { setupToken: options.setupToken } : {}),
+    ...(judge === 'instance' && options.defaultJudge
+      ? {
+          environmentJudge: {
+            provider: options.defaultJudge.provider,
+            model: options.defaultJudge.model,
+            baseUrl: options.defaultJudge.baseUrl,
+          },
+        }
+      : {}),
   });
   await api.listen(0, '127.0.0.1');
   const url = await api.getUrl();

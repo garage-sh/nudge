@@ -30,7 +30,7 @@ All configuration goes through environment variables. [`.env.example`](../.env.e
 
 ## Judge
 
-The Judge is chosen in the dashboard (**Settings**), and its key is stored there encrypted. The `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL` and `NUDGE_JUDGE_BASE_URL` variables are only a fallback as long as no Judge is chosen; `NUDGE_JUDGE_TIMEOUT_MS` always applies. Three providers are available:
+The Judge is chosen in the dashboard (**Settings**), and its key is stored there encrypted. The `NUDGE_JUDGE_PROVIDER`, `NUDGE_JUDGE_API_KEY`, `NUDGE_JUDGE_MODEL` and `NUDGE_JUDGE_BASE_URL` variables are only a fallback as long as no Judge is chosen, and **Settings** shows the Judge they set (never its key); `NUDGE_JUDGE_TIMEOUT_MS` always applies. `NUDGE_JUDGE_BASE_URL` is the host, not the endpoint: nudge appends the provider's path to it, and only `self_hosted` needs it. Three providers are available:
 
 - `typesafe`: TypeSafe System One (Jev, `jev-latest` by default). It requires `NUDGE_JUDGE_API_KEY`;
 - `openrouter`: pplx-decider through OpenRouter's Decisions API (`perplexity/pplx-decider-v1.2` by default). It requires `NUDGE_JUDGE_API_KEY`;
