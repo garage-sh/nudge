@@ -1317,7 +1317,7 @@ __metadata:
     "@nudge/worker": "workspace:*"
     "@types/express": "npm:^5.0.0"
     "@types/node": "npm:^24.10.0"
-    bullmq: "npm:^5.60.0"
+    bullmq: "npm:^6.5.1"
     cookie: "npm:^1"
     drizzle-orm: "npm:^0.45.2"
     eslint: "npm:^10.13.0"
@@ -1463,7 +1463,7 @@ __metadata:
     "@testcontainers/redis": "npm:^12.2.1"
     "@types/node": "npm:^24.10.0"
     "@types/pg": "npm:^8.15.0"
-    bullmq: "npm:^5.60.0"
+    bullmq: "npm:^6.5.1"
     drizzle-orm: "npm:^0.45.2"
     eslint: "npm:^10.13.0"
     ioredis: "npm:^5.8.0"
@@ -1574,7 +1574,7 @@ __metadata:
     "@nudge/storage": "workspace:*"
     "@nudge/typescript-config": "workspace:*"
     "@types/node": "npm:^24.10.0"
-    bullmq: "npm:^5.60.0"
+    bullmq: "npm:^6.5.1"
     drizzle-orm: "npm:^0.45.2"
     eslint: "npm:^10.13.0"
     ioredis: "npm:^5.8.0"
@@ -3139,22 +3139,30 @@ __metadata:
   languageName: node
   linkType: hard
 
-"bullmq@npm:^5.60.0":
-  version: 5.81.5
-  resolution: "bullmq@npm:5.81.5"
+"bullmq@npm:^6.5.1":
+  version: 6.5.1
+  resolution: "bullmq@npm:6.5.1"
   dependencies:
-    cron-parser: "npm:4.9.0"
-    ioredis: "npm:5.11.1"
-    msgpackr: "npm:2.0.5"
+    cron-parser: "npm:5.10.2"
+    msgpackr: "npm:2.1.2"
     node-abort-controller: "npm:3.1.1"
     semver: "npm:7.8.5"
     tslib: "npm:2.8.1"
   peerDependencies:
+    bullmq-otel: ">=2.0.0"
+    ioredis: ">=5.0.0"
+    pg: ">=8.0.0"
     redis: ">=5.0.0"
   peerDependenciesMeta:
+    bullmq-otel:
+      optional: true
+    ioredis:
+      optional: true
+    pg:
+      optional: true
     redis:
       optional: true
-  checksum: 10c0/13b33748e8e0ef3c76156c1a235578eacec9a93a841680b1fba7372eb3e92830537fcc0be8d7b108676a6d09477986ed69624a03b5e6198b627a678aa4457288
+  checksum: 10c0/aa5495faa9339f9999e0791a2ed74141db667552e79aa7d060ab45c012ad2b88334dee0be4c2049069f65f013c0f0f3197d9abc877db6cfdfa80a0038197b0c8
   languageName: node
   linkType: hard
 
@@ -3419,12 +3427,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cron-parser@npm:4.9.0":
-  version: 4.9.0
-  resolution: "cron-parser@npm:4.9.0"
+"cron-parser@npm:5.10.2":
+  version: 5.10.2
+  resolution: "cron-parser@npm:5.10.2"
   dependencies:
-    luxon: "npm:^3.2.1"
-  checksum: 10c0/348622bdcd1a15695b61fc33af8a60133e5913a85cf99f6344367579e7002896514ba3b0a9d6bb569b02667d6b06836722bf2295fcd101b3de378f71d37bed0b
+    luxon: "npm:^3.7.2"
+  checksum: 10c0/b1aefe64a0fcea39f36e1bcf06b8f4c97780fc982524a67389e4a6268163e863bebaca096e6c7b0536a5f14d1b977d820523170ddfa8c322455b786b5e5fe5cc
   languageName: node
   linkType: hard
 
@@ -4763,7 +4771,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ioredis@npm:5.11.1, ioredis@npm:^5.8.0":
+"ioredis@npm:^5.8.0":
   version: 5.11.1
   resolution: "ioredis@npm:5.11.1"
   dependencies:
@@ -5173,7 +5181,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"luxon@npm:^3.2.1":
+"luxon@npm:^3.7.2":
   version: 3.7.2
   resolution: "luxon@npm:3.7.2"
   checksum: 10c0/ed8f0f637826c08c343a29dd478b00628be93bba6f068417b1d8896b61cb61c6deacbe1df1e057dbd9298334044afa150f9aaabbeb3181418ac8520acfdc2ae2
@@ -5406,15 +5414,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"msgpackr@npm:2.0.5":
-  version: 2.0.5
-  resolution: "msgpackr@npm:2.0.5"
+"msgpackr@npm:2.1.2":
+  version: 2.1.2
+  resolution: "msgpackr@npm:2.1.2"
   dependencies:
     msgpackr-extract: "npm:^3.0.4"
   dependenciesMeta:
     msgpackr-extract:
       optional: true
-  checksum: 10c0/7ac9820cecd44d24d2ef07994405a277509f004d4fb0a77d04e10e9071d0599e86ad53a9daf673e801518230774bdaca72b1fdcff2b516584ab58bd19362e6ad
+  checksum: 10c0/63c2378288ccc76b5958fba6a38e335271934b90599971eb9ac9b81a12ab6031588496c1a4402215e3672add6a8caf40e44bccda88f8c6bb47046795e41f3463
   languageName: node
   linkType: hard
 
