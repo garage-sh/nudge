@@ -48,15 +48,11 @@ import {
 /** Items handled per run (or per page): the next run picks up the rest. */
 const BATCH = 100;
 
-/** States of a job that will eventually process its Delivery: neither finished nor failed. */
-const LIVE_JOBS: JobType[] = [
-  'active',
-  'waiting',
-  'delayed',
-  'prioritized',
-  'paused',
-  'waiting-children',
-];
+/**
+ * States of a job that will eventually process its Delivery: neither finished nor failed.
+ * A paused queue keeps its jobs in `waiting`.
+ */
+const LIVE_JOBS: JobType[] = ['active', 'waiting', 'delayed', 'prioritized', 'waiting-children'];
 
 const afterMs = (ms: number) => sql`now() + ${ms} * interval '1 millisecond'`;
 
