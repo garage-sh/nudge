@@ -24,9 +24,9 @@
   "devDependencies": {
     "@nudge/tsup-config": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
-    "@types/node": "^24.10.0",
+    "@types/node": "^26.6.6",
     "eslint": "^10.13.0",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typescript": "~5.9.3",
     "vitest": "^5.0.5"
   }
