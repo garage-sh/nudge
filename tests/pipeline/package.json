@@ -30,7 +30,7 @@
     "bullmq": "^5.60.0",
     "drizzle-orm": "^0.45.2",
     "eslint": "^10.13.0",
-    "ioredis": "^5.8.0",
+    "ioredis": "^6.0.0",
     "pg": "^8.16.0",
     "testcontainers": "^12.2.1",
     "typescript": "~5.9.3",
