@@ -34,7 +34,7 @@
   "devDependencies": {
     "@nudge/tsup-config": "workspace:*",
     "@nudge/typescript-config": "workspace:*",
-    "@types/node": "^24.10.0",
+    "@types/node": "^26.6.6",
     "drizzle-kit": "^0.31.5",
     "eslint": "^10.13.0",
     "tsup": "^8.5.1",
