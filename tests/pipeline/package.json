@@ -27,7 +27,7 @@
     "@testcontainers/redis": "^12.2.1",
     "@types/node": "^24.10.0",
     "@types/pg": "^8.15.0",
-    "bullmq": "^5.60.0",
+    "bullmq": "^6.5.1",
     "drizzle-orm": "^0.45.2",
     "eslint": "^10.13.0",
     "ioredis": "^5.8.0",
