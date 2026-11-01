@@ -31,7 +31,7 @@
     "@nudge/storage": "workspace:*",
     "@nudge/worker": "workspace:*",
     "bullmq": "^5.60.0",
-    "cookie": "^1",
+    "cookie": "^2",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "ioredis": "^5.8.0",
