@@ -1,4 +1,4 @@
-import { parse } from 'cookie';
+import { parseCookie } from 'cookie';
 import type { Request, Response } from 'express';
 
 export const SESSION_COOKIE = 'nudge_session';
@@ -14,7 +14,7 @@ export interface SessionCookieOptions {
 export function readSessionCookie(request: Request): string | null {
   const header = request.headers.cookie;
   if (!header) return null;
-  return parse(header)[SESSION_COOKIE] || null;
+  return parseCookie(header)[SESSION_COOKIE] || null;
 }
 
 /**
