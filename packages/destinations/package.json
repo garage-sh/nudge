@@ -24,8 +24,8 @@
   "dependencies": {
     "@nudge/core": "workspace:*",
     "@nudge/shared": "workspace:*",
-    "nodemailer": "^10.0.16",
-    "undici": "^8.12.1"
+    "nodemailer": "^10.5.0",
+    "undici": "^8.12.4"
   },
   "devDependencies": {
     "@nudge/tsup-config": "workspace:*",
